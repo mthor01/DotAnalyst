@@ -71,6 +71,14 @@ def test_incomplete_output_is_rejected(session, tmp_path):
     assert session.get(Match, MATCH_ID).replay_state == "failed"
 
 
+def test_complete_output_without_a_match_id_is_accepted(session, tmp_path):
+    # seen live: match 9080876802 parsed completely, but its epilogue said match id 0
+    no_id = LOG.replace(b'matchId_\\":%d' % MATCH_ID, b'matchId_\\":0')
+    assert epilogue_match_id(no_id) == 0
+    parse_replay(session, dem(tmp_path), parser_returning(no_id), tmp_path / "raw")
+    assert session.get(Match, MATCH_ID).replay_state == "parsed"
+
+
 def test_unknown_match_is_refused(session, tmp_path):
     with pytest.raises(ReplayError, match="not stored"):
         parse_replay(session, dem(tmp_path, 123), parser_returning(LOG), tmp_path / "raw")

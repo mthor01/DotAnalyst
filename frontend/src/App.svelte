@@ -2,17 +2,15 @@
   import { GAME_MODES, LOBBY_TYPES, get, type Account } from './lib/api'
   import { loadConstants } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
+  import Match from './Match.svelte'
   import Matches from './Matches.svelte'
   import Teammates from './Teammates.svelte'
 
   const PAGES = { matches: 'Matches', heroes: 'Heroes', teammates: 'Teammates & matchups' }
   type Page = keyof typeof PAGES
-  const pageFromHash = (): Page => {
-    const hash = location.hash.slice(1)
-    return hash in PAGES ? (hash as Page) : 'matches'
-  }
-
-  let page = $state(pageFromHash())
+  let hash = $state(location.hash.slice(1))
+  const page = $derived<Page>(hash in PAGES ? (hash as Page) : 'matches')
+  const matchId = $derived(/^match\/(\d+)$/.exec(hash)?.[1]) // #match/123 is one match, outside the three pages
   let accounts = $state<Account[]>([])
   let error = $state('')
   let filters = $state({ account_id: '', lobby_type: '', game_mode: '', date_from: '', date_to: '' })
@@ -35,19 +33,19 @@
   })
 </script>
 
-<svelte:window onhashchange={() => (page = pageFromHash())} />
+<svelte:window onhashchange={() => (hash = location.hash.slice(1))} />
 
 <main>
   <header>
     <h1>DotAnalyst</h1>
     <nav aria-label="Pages">
       {#each Object.entries(PAGES) as [id, title]}
-        <a href="#{id}" aria-current={page === id ? 'page' : undefined}>{title}</a>
+        <a href="#{id}" aria-current={!matchId && page === id ? 'page' : undefined}>{title}</a>
       {/each}
     </nav>
   </header>
 
-  <div class="filters">
+  <div class="filters" hidden={!!matchId}>
     <label>
       Account
       <select bind:value={filters.account_id}>
@@ -78,6 +76,8 @@
 
   {#if error}
     <p class="error" role="alert">Could not reach the API: {error}</p>
+  {:else if matchId}
+    <Match id={matchId} />
   {:else if !filters.account_id}
     <p class="muted">No tracked accounts yet. Add one with <code>dotanalyst add-account</code>.</p>
   {:else if page === 'matches'}

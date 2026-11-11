@@ -51,7 +51,8 @@ def parse_replay(
     # shortcut: whole replay held in memory (up to ~250 MB), stream it if that ever hurts
     response = client.post(PARSER_URL, content=dem.read_bytes(), timeout=600)
     # the parser answers 200 even when it crashed, so only the epilogue proves completeness
-    if epilogue_match_id(response.content) != match_id:
+    # Valve leaves the id at 0 in some replays, so 0 passes; another real id means the wrong file
+    if epilogue_match_id(response.content) not in (0, match_id):
         match.replay_state = "failed"
         session.commit()
         raise ReplayError(f"match {match_id}: parser output is incomplete or for another match")

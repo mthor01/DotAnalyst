@@ -50,9 +50,14 @@ Checked live on 2026-11-11:
 - All six replays inspected were Zstandard files under the `.dem.bz2` name, 40–67 MB each. Python 3.14 reads them with the standard library (`compression.zstd`).
 - One match takes about 15 seconds to download and parse, and its raw output is about 2.5 MB.
 
-Not verified — each is the first task of the milestone that needs it:
+Checked on 2026-11-12 against 69 parsed replays:
 
-- How `x`/`y` map onto a minimap image, and where to get one (M4).
+- **Map position**: `x`/`y` are map cells. The 7.40 map image from `odota/web` covers cells 64–191, so a point sits at `(x − 64) / 127` from the left and `(191 − y) / 127` from the top. Laying the hero positions of 30 replays over the image puts the lanes on the lane paths. A few positions lie up to 4 cells outside the image and are drawn on its edge.
+- **Deaths**: `death_tick` events equal the Web API scoreboard for all 690 players. The combat log reports up to 18 extra deaths per match (Aegis, reincarnation, clones), so it is used only to find the killer.
+- **Wards**: `obs_left`/`sen_left` always name an attacker. One from the owner's team means the ward ran out (360 s observer, 420 s sentry); anyone else destroyed it.
+- **Purchases**: `DOTA_COMBATLOG_PURCHASE` names the buying hero; only purchases before the horn carry a `slot`.
+- **Epilogue match id**: one complete, correct replay carried match id 0. Output is rejected only when it has no `epilogue` line or names a different match.
+- **Lanes**: the rule below gives a 2-1-2 split for 136 of 140 teams.
 
 ## Prerequisites
 
@@ -72,7 +77,7 @@ Raw data is fetched once and never refetched:
 - `data/opendota/{match_id}.json.gz` — the OpenDota response that supplied the replay salt.
 - `heroes`, `items` — id-to-name lookups.
 
-Derived tables are rebuilt from raw data by `dotanalyst recompute`: `player_minute`, `purchases`, `deaths`, `teamfights`, `wards`, `lanes`, `metrics`.
+Derived tables are rebuilt from raw data by `dotanalyst recompute`: `player_minute`, `purchases`, `deaths`, `teamfights`, `teamfight_players`, `wards`, `lanes`, and from Milestone 5 `metrics`.
 
 ## Milestone 1 — Match data and one parsed replay
 
@@ -127,22 +132,24 @@ This comes before the replay stats because replays expire: raw output collected 
 
 ## Milestone 4 — Replay stats and the match page
 
-- `recompute` builds the derived tables from raw output:
-  - `player_minute` — gold, XP, net worth, last hits, denies per player per minute.
+- `recompute` drops the derived tables and rebuilds them from raw output (about 1 second per match). The poller computes the same rows for each newly parsed match, so `recompute` is only needed after a derivation changes.
+  - `player_minute` — total gold earned, XP, net worth, last hits, denies per player per minute.
   - `purchases` — item and time.
-  - `deaths` — time, position, killer, whether inside a teamfight.
-  - `teamfights` — a window opens 15 s before a hero death and closes after 15 s with no death; it counts as a teamfight when 3 or more heroes died. Per player: took part or not, damage, deaths.
-  - `wards` — type, owner, position, placed time, removed time, whether killed.
-  - `lanes` — each player's lane from positions between 0:00 and 10:00, and the lane opponent: the enemy in the same lane with the most last hits at 10:00.
-- `GET /api/matches/{match_id}` returns the timeline, purchases, deaths, teamfights and wards.
-- **Match page** charts:
-  - Net worth per player over time (line).
-  - Team gold and XP advantage (area).
-  - Item purchase timeline.
+  - `deaths` — time, position, killing hero if any, whether inside a teamfight.
+  - `teamfights` — a window opens 15 s before a hero death and closes 15 s after the last one; deaths less than 15 s apart belong to the same window. It counts as a teamfight when 3 or more heroes died.
+  - `teamfight_players` — per fight and player: damage dealt to enemy heroes, deaths, and took part or not. A player took part by dealing hero damage, taking hero damage, or dying.
+  - `wards` — type, owner, position, placed time, removed time, whether destroyed and by which hero.
+  - `lanes` — the zone (top, mid, bot, jungle) where the player spent most of 0:00–10:00, time in a base not counted; and the lane opponent: the enemy in the same lane with the most last hits at 10:00.
+- `GET /api/matches/{match_id}` returns the scoreboard and one list per derived table; the lists are empty without a parsed replay. An unknown match is a 404.
+- **Match page** (`#match/<id>`, linked from the date in the Matches table):
+  - Scoreboard.
+  - Net worth per player over time (lines, one panel per team on a shared scale).
+  - Team lead in net worth and in XP (area, blue where Radiant leads, red where Dire leads).
   - Laning table: last hits, denies, net worth, XP at 5:00 and 10:00 next to the lane opponent's.
-  - Ward map and death map (scatter on the minimap).
-  - Teamfight list.
-- Matches without a parsed replay show the basic scoreboard and say that no replay is available.
+  - Items bought per player in order with the game time; consumables, wards and recipes left out.
+  - Ward map and death map on the minimap image (`frontend/public/minimap.webp`, Valve's artwork as redrawn by the OpenDota project).
+  - Teamfight list: time, deaths and damage per team, who took part.
+- Matches without a parsed replay show the scoreboard and say that no replay is available.
 
 **Done when**
 

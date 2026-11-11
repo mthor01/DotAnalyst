@@ -16,6 +16,9 @@ export function heroIcon(id: number): string | undefined {
   return name && `${CDN}/heroes/icons/${name}.png`
 }
 
+/** Icon for an item name as replays give it, without the item_ prefix. */
+export const itemIconByName = (name: string) => `${CDN}/items/${name}.png`
+
 export function itemIcon(id: number): string | undefined {
   const name = constants.items[id]
   return name && `${CDN}/items/${name}.png`

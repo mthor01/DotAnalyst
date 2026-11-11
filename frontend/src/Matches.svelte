@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GAME_MODES, LOBBY_TYPES, get, type MatchRow } from './lib/api'
+  import { GAME_MODES, LOBBY_TYPES, clock, get, type MatchRow } from './lib/api'
   import { constants, itemIcon } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
 
@@ -17,7 +17,6 @@
   })
 
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
-  const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
   const wins = $derived(rows.filter((r) => r.win).length)
 </script>
 
@@ -47,7 +46,7 @@
       <tbody>
         {#each rows as r (r.match_id)}
           <tr>
-            <td>{date(r.start_time)}</td>
+            <td><a href="#match/{r.match_id}">{date(r.start_time)}</a></td>
             <td><Hero id={r.hero_id} /></td>
             <td><span class="dot {r.win ? 'won' : 'lost'}"></span>{r.win ? 'Won' : 'Lost'}</td>
             <td class="num">{r.kills} / {r.deaths} / {r.assists}</td>

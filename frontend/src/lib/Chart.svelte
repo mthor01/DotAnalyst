@@ -1,14 +1,32 @@
 <script lang="ts" module>
-  import { BarChart } from 'echarts/charts'
-  import { GridComponent, MarkLineComponent, TitleComponent, TooltipComponent } from 'echarts/components'
+  import { BarChart, LineChart } from 'echarts/charts'
+  import {
+    GridComponent,
+    MarkLineComponent,
+    TitleComponent,
+    TooltipComponent,
+  } from 'echarts/components'
   import * as echarts from 'echarts/core'
+  import { LabelLayout } from 'echarts/features'
   import { CanvasRenderer } from 'echarts/renderers'
 
-  echarts.use([BarChart, GridComponent, MarkLineComponent, TitleComponent, TooltipComponent, CanvasRenderer])
+  echarts.use([
+    BarChart,
+    LineChart,
+    GridComponent,
+    MarkLineComponent,
+    TitleComponent,
+    TooltipComponent,
+    LabelLayout,
+    CanvasRenderer,
+  ])
 
   /** Colours a chart may use, read from the page's CSS variables so light and dark stay in one place. */
-  export type Ink = Record<'surface' | 'text' | 'text-2' | 'muted' | 'grid' | 'axis' | 'series-1', string>
-  const INK_KEYS = ['surface', 'text', 'text-2', 'muted', 'grid', 'axis', 'series-1'] as const
+  const INK_KEYS = [
+    'surface', 'text', 'text-2', 'muted', 'grid', 'axis',
+    'series-1', 'series-2', 'series-3', 'series-4', 'series-5', 'radiant', 'dire',
+  ] as const // prettier-ignore
+  export type Ink = Record<(typeof INK_KEYS)[number], string>
 </script>
 
 <script lang="ts">
