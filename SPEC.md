@@ -89,7 +89,9 @@ No Game Coordinator and no OpenDota.
 
 ## Milestone 2 — Site for basic stats, with polling
 
-- FastAPI: `GET /api/accounts`, `/api/matches`, `/api/heroes`, `/api/teammates`, `/api/matchups`. All take `account_id`, date range, mode and lobby type filters.
+- Run with `uv run --env-file .env uvicorn dotanalyst.api:app`, then open `http://localhost:8000/`.
+- FastAPI: `GET /api/accounts`, `/api/constants`, `/api/matches`, `/api/heroes`, `/api/teammates`, `/api/matchups`. The last four take `account_id`, `date_from`, `date_to`, `game_mode` and `lobby_type`.
+- `sync-constants` also stores item names, taken from `odota/dotaconstants` because the Web API has no working item list. Hero and item icons load from Valve's CDN.
 - Polling: a background task in the FastAPI process runs `sync` every `POLL_MINUTES` (default 15). It also parses any new `.dem` in the Dota client folder whose match is stored.
 - Svelte pages:
   - **Matches** — filterable table: hero, result, K/D/A, GPM/XPM, duration, items.

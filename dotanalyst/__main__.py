@@ -21,7 +21,7 @@ def main() -> int:
     remove.add_argument("account_id", type=int)
     sub.add_parser("status", help="show what is stored")
     sub.add_parser("sync", help="fetch new matches of all tracked accounts")
-    sub.add_parser("sync-constants", help="fetch hero names")
+    sub.add_parser("sync-constants", help="fetch hero and item names")
     replay = sub.add_parser("parse-replay", help="parse a .dem named <match_id>.dem")
     replay.add_argument("dem", type=Path)
     args = parser.parse_args()
@@ -63,7 +63,8 @@ def main() -> int:
             try:
                 with httpx.Client() as client:
                     if args.command == "sync-constants":
-                        print(f"{sync_constants(session, client, key)} heroes stored")
+                        heroes, items = sync_constants(session, client, key)
+                        print(f"{heroes} heroes and {items} items stored")
                         return 0
                     counts = sync(session, client, key)
             except SteamError as error:

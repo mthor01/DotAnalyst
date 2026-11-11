@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 from dotanalyst import steam
-from dotanalyst.db import Account, Base, Hero, Match, MatchPlayer
+from dotanalyst.db import Account, Base, Hero, Item, Match, MatchPlayer
 
 FIXTURES = Path(__file__).parent / "fixtures"
 ME = 314448639
@@ -22,7 +22,8 @@ def load(name: str) -> dict:
 PAGE1, PAGE2, DETAILS, HEROES = (
     load(n) for n in ("history_page1.json", "history_page2.json", "details_by_seq.json", "heroes.json")
 )
-EMPTY_PAGE = {"result": {"status": 1, "num_results": 0, "results_remaining": 0, "matches": []}}
+ITEM_IDS = load("item_ids.json")
+EMPTY_PAGE ={"result": {"status": 1, "num_results": 0, "results_remaining": 0, "matches": []}}
 NOT_EXPOSED = {"result": {"status": 15, "statusDetail": "Cannot get match history for a user that hasn't allowed it"}}
 HISTORY = PAGE1["result"]["matches"] + PAGE2["result"]["matches"]
 SEQ_TO_MATCH = {m["match_seq_num"]: m["match_id"] for m in HISTORY}
@@ -43,6 +44,9 @@ class FakeSteam:
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         params = request.url.params
+        if request.url.host != "api.steampowered.com":
+            assert "key" not in params  # the key must never go to another host
+            return httpx.Response(200, json=ITEM_IDS)
         assert params["key"] == KEY
         if "GetHeroes" in request.url.path:
             return httpx.Response(200, json=HEROES)
@@ -164,8 +168,9 @@ def test_errors_do_not_leak_the_key():
     assert KEY not in str(error.value)
 
 
-def test_sync_constants_stores_heroes(session):
-    count = steam.sync_constants(session, FakeSteam().client, KEY)
-    assert count == len(HEROES["result"]["heroes"]) > 100
+def test_sync_constants_stores_heroes_and_items(session):
+    counts = steam.sync_constants(session, FakeSteam().client, KEY)
+    assert counts == (len(HEROES["result"]["heroes"]), len(ITEM_IDS))
     assert session.get(Hero, 1).name == "npc_dota_hero_antimage"
-    assert steam.sync_constants(session, FakeSteam().client, KEY) == count  # rerun replaces, no duplicates
+    assert session.get(Item, 1).name == "blink"
+    assert steam.sync_constants(session, FakeSteam().client, KEY) == counts  # rerun replaces, no duplicates

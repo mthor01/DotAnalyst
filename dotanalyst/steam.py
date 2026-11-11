@@ -5,13 +5,14 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import Account, Hero, Match, MatchPlayer
+from .db import Account, Hero, Item, Match, MatchPlayer
 
 BASE = "https://api.steampowered.com"
 HISTORY = "IDOTA2Match_570/GetMatchHistory/V001/"
 # GetMatchDetails is broken on Valve's side; a sequence query for exactly one match replaces it
 DETAILS = "IDOTA2Match_570/GetMatchHistoryBySequenceNum/V001/"
 HEROES = "IEconDOTA2_570/GetHeroes/v1/"
+ITEM_IDS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/item_ids.json"
 PAUSE = 1.0  # seconds before every request
 ANONYMOUS = 4294967295
 HISTORY_NOT_EXPOSED = 15
@@ -101,9 +102,17 @@ def sync(session: Session, client: httpx.Client, key: str) -> dict[int, int | No
     return result
 
 
-def sync_constants(session: Session, client: httpx.Client, key: str) -> int:
+def sync_constants(session: Session, client: httpx.Client, key: str) -> tuple[int, int]:
+    """Store hero and item names. Returns how many of each."""
     heroes = call(client, key, HEROES, language="en")["heroes"]
     for h in heroes:
         session.merge(Hero(id=h["id"], name=h["name"], localized_name=h["localized_name"]))
+    # the Web API has no working item list; this file maps item id to internal name
+    response = client.get(ITEM_IDS, timeout=30)
+    if response.status_code != 200:
+        raise SteamError(f"item names: HTTP {response.status_code}")
+    items = response.json()
+    for item_id, name in items.items():
+        session.merge(Item(id=int(item_id), name=name))
     session.commit()
-    return len(heroes)
+    return len(heroes), len(items)

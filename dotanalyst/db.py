@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import JSON, create_engine
+from sqlalchemy import JSON, Engine, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 DATA = Path("data")
@@ -68,8 +68,19 @@ class Hero(Base):
     localized_name: Mapped[str]
 
 
-def open_session() -> Session:
+class Item(Base):
+    __tablename__ = "items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]  # without the item_ prefix
+
+
+def open_engine() -> Engine:
     DATA.mkdir(exist_ok=True)
     engine = create_engine(f"sqlite:///{DATA / 'dotanalyst.db'}")
     Base.metadata.create_all(engine)
-    return Session(engine)
+    return engine
+
+
+def open_session() -> Session:
+    return Session(open_engine())
