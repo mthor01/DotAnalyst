@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from dotanalyst.db import Base, Match
+from dotanalyst.db import Base, Derived, Match, PlayerMinute
 from dotanalyst.poll import poll_once
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -37,6 +37,7 @@ def add_match(session: Session, match_id: int, age_days: float = 0) -> None:
 def session():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
+    Derived.metadata.create_all(engine)
     with Session(engine) as s:
         yield s
 
@@ -105,6 +106,7 @@ def test_poll_downloads_and_parses_replays(session, tmp_path):
     assert session.get(Match, WRONG_LOG).replay_state == "failed"
     assert [p.name for p in (tmp_path / "raw").iterdir()] == [f"{GOOD}.jsonl.gz"]  # nothing for the failed parse
     assert list((tmp_path / "tmp").iterdir()) == []  # downloaded .dem files are deleted either way
+    assert {row.match_id for row in session.query(PlayerMinute)} == {GOOD}  # stats follow the parse on their own
 
     calls.clear()
     assert poll_once(session, client, "", tmp_path / "nowhere", tmp_path) == (0, 0)

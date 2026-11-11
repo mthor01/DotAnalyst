@@ -8,7 +8,8 @@ import httpx
 from sqlalchemy import Engine, and_, or_, select
 from sqlalchemy.orm import Session
 
-from .db import DATA, Match
+from .db import DATA, Match, PlayerMinute
+from .derive import derive_match
 from .replay import ReplayError, fetch_replay, parse_replay
 from .steam import sync
 
@@ -23,7 +24,8 @@ DOWNLOADS_PER_POLL = 10  # about 40 MB each; also keeps OpenDota calls far below
 def poll_once(
     session: Session, client: httpx.Client, key: str, replay_dir: Path, data: Path = DATA
 ) -> tuple[int, int]:
-    """Sync all accounts, parse replays the Dota client has downloaded, then download missing ones.
+    """Sync all accounts, parse replays the Dota client has downloaded, download missing ones,
+    then compute the stats of every parsed match that has none.
 
     Returns (new matches, replays parsed).
     """
@@ -73,6 +75,16 @@ def poll_once(
             # a server or the disk is in trouble: leave the rest for the next poll
             log.warning("replay download of match %s stopped: %r", match.match_id, error)
             break
+
+    without_stats = select(Match.match_id).where(
+        Match.replay_state == "parsed", Match.match_id.not_in(select(PlayerMinute.match_id))
+    )
+    for match_id in session.scalars(without_stats).all():
+        try:
+            derive_match(session, match_id, data / "raw")
+        except Exception:  # a log one derivation cannot handle must not stop polling
+            session.rollback()
+            log.exception("replay stats of match %s failed", match_id)
     return new, parsed
 
 

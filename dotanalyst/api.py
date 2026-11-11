@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -53,6 +53,14 @@ def constants(session: Db) -> dict:
 @app.get("/api/matches")
 def matches(session: Db, where: Where) -> list[dict]:
     return queries.matches(session, where)
+
+
+@app.get("/api/matches/{match_id}")
+def match(session: Db, match_id: int) -> dict:
+    found = queries.match(session, match_id)
+    if found is None:
+        raise HTTPException(404, f"match {match_id} is not stored")
+    return found
 
 
 @app.get("/api/heroes")

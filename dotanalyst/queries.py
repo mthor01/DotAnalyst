@@ -5,6 +5,7 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session, aliased
 
 from .db import Account, Match, MatchPlayer
+from .derive import TABLES
 
 OTHER = aliased(MatchPlayer)
 IS_RADIANT = MatchPlayer.player_slot < 128
@@ -106,3 +107,34 @@ def matchups(session: Session, where: list) -> list[dict]:
         side = "with" if is_ally else "against"
         entry[f"{side}_games"], entry[f"{side}_wins"] = games, wins
     return sorted(result.values(), key=lambda e: -(e["with_games"] + e["against_games"]))
+
+
+def match(session: Session, match_id: int) -> dict | None:
+    """One match: the scoreboard, plus the replay stats where there are any (empty lists otherwise)."""
+    found = session.get(Match, match_id)
+    if found is None:
+        return None
+    p = MatchPlayer
+    players = _rows(
+        session,
+        select(
+            p.player_slot, p.account_id, Account.label, p.hero_id, p.kills, p.deaths, p.assists, p.last_hits,
+            p.denies, p.gold_per_min, p.xp_per_min, p.net_worth, p.level, p.hero_damage, p.tower_damage,
+            p.hero_healing, p.items,
+        )
+        .outerjoin(Account, and_(Account.account_id == p.account_id, Account.active))
+        .where(p.match_id == match_id)
+        .order_by(p.player_slot),
+    )  # fmt: skip
+    result = {
+        "match_id": match_id, "start_time": found.start_time, "duration": found.duration,
+        "radiant_win": found.radiant_win, "game_mode": found.game_mode, "lobby_type": found.lobby_type,
+        "replay_state": found.replay_state, "players": players,
+    }  # fmt: skip
+    for model in TABLES:
+        table = model.__table__
+        columns = [c for c in table.columns if c.name not in ("id", "match_id")]
+        # primary key order is insertion order for the id tables and (player, minute) order for the rest
+        statement = select(*columns).where(table.c.match_id == match_id).order_by(*table.primary_key.columns)
+        result[table.name] = _rows(session, statement)
+    return result

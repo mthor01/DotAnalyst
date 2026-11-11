@@ -7,6 +7,7 @@ import httpx
 from sqlalchemy import func, select
 
 from .db import Account, Match, open_session
+from .derive import TABLES, recompute
 from .replay import ReplayError, parse_replay
 from .steam import SteamError, sync, sync_constants
 
@@ -24,6 +25,7 @@ def main() -> int:
     sub.add_parser("sync-constants", help="fetch hero and item names")
     replay = sub.add_parser("parse-replay", help="parse a .dem named <match_id>.dem")
     replay.add_argument("dem", type=Path)
+    sub.add_parser("recompute", help="rebuild all replay stats from the stored raw logs")
     args = parser.parse_args()
 
     key = os.environ.get("STEAM_API_KEY", "")
@@ -81,6 +83,13 @@ def main() -> int:
                 print(f"error: {error}", file=sys.stderr)
                 return 1
             print(f"stored {out}")
+        elif args.command == "recompute":
+            done, problems = recompute(session)
+            for problem in problems:
+                print(f"warning: {problem}", file=sys.stderr)
+            print(f"{done} matches recomputed")
+            for model in TABLES:
+                print(f"  {model.__tablename__}: {session.scalar(select(func.count()).select_from(model))} rows")
     return 0
 
 
