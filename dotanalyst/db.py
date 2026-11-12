@@ -160,6 +160,18 @@ class Lane(Derived):
     opponent_slot: Mapped[int | None]
 
 
+class Metric(Derived):
+    __tablename__ = "metrics"
+
+    match_id: Mapped[int] = mapped_column(primary_key=True)
+    player_slot: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(primary_key=True)  # a function in metrics.py
+    value: Mapped[float]  # a metric that does not apply to a player has no row
+
+
+TABLES = (PlayerMinute, Purchase, Death, Teamfight, TeamfightPlayer, Ward, Lane, Metric)
+
+
 def open_engine() -> Engine:
     DATA.mkdir(exist_ok=True)
     engine = create_engine(f"sqlite:///{DATA / 'dotanalyst.db'}")

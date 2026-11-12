@@ -160,22 +160,25 @@ This comes before the replay stats because replays expire: raw output collected 
 
 ## Milestone 5 — Custom metrics, trends and group view
 
-One row per player per parsed match in `metrics`. First definitions, to be tuned:
+The `metrics` table holds one row per player, parsed match and metric: `match_id`, `player_slot`, `name`, `value`. A metric that does not apply to a player in a match (no lane opponent, no observer placed) has no row, so averages only cover matches where the number means something. First definitions, to be tuned:
 
-- **Lane CS differential** — own last hits at 10:00 minus the lane opponent's; the same for net worth.
-- **Vision habits** — observers placed, sentries placed, enemy wards destroyed, mean observer lifetime in seconds.
-- **Fight participation** — share of the match's teamfights the player took part in, kill participation ((kills + assists) / team kills), and deaths outside any teamfight.
+- **Lane CS differential** — `lane_cs_diff`: own last hits at 10:00 minus the lane opponent's; `lane_nw_diff`: the same for net worth.
+- **Vision habits** — `obs_placed`, `sen_placed`, `wards_destroyed` (enemy wards of either kind), `obs_lifetime` (mean seconds an own observer stood; one still standing at the end is left out).
+- **Fight participation** — `fight_participation` (share of the match's teamfights the player took part in), `kill_participation` ((kills + assists) / team kills, from the Web API scoreboard), `deaths_outside_fights`.
 
-Each metric is one Python function from a match's derived rows to a number, so a new metric is one function plus one test.
+Each metric is one Python function in `dotanalyst/metrics.py`. It takes the match as `GET /api/matches/{match_id}` returns it and a player slot, and returns a number or nothing. A new metric is one function, one test, one label in `frontend/src/lib/api.ts`, then `recompute`. The poller computes the metrics together with the other replay stats.
 
-- `GET /api/metrics?metric=<name>&account_id=<id>` returns the per-match values in time order.
-- **Trends page** — pick a metric; line chart of the rolling average over the last 20 parsed matches, per account, with several accounts overlaid.
-- **Group page** — tracked accounts side by side: win rate together by pair, and each metric's average per account.
+- `GET /api/metrics?metric=<name>&account_id=<id>` returns the per-match values, oldest first. It takes the same date, mode and lobby filters as the other views; an unknown metric is a 404.
+- `GET /api/metric-averages?account_id=<id>` returns every metric's average and the number of matches behind it.
+- **Trends page** — pick a metric; one line per tracked account on a time axis. Each point is the average of that match and up to 19 parsed matches before it. A table gives each account's overall and last-20 average.
+- **Group page** — win rate together for each pair of tracked accounts (all stored matches), and each metric's average per account (parsed matches).
+
+Known limit of the first definition: the lane opponent is the enemy in the lane with the most last hits, so a support is compared with the enemy core and its lane differences are always strongly negative. The numbers are meaningful for cores.
 
 **Done when**
 
-- `uv run pytest` passes, with each metric function tested on the fixture replay.
-- `curl "http://localhost:8000/api/metrics?metric=lane_cs_diff&account_id=<id>"` returns one value per parsed match.
+- `uv run pytest` passes, with each metric function tested on the fixture replay against values worked out by hand.
+- `curl "http://localhost:8000/api/metrics?metric=lane_cs_diff&account_id=<id>"` returns one value per parsed match in which the account had a lane opponent.
 - The Trends page renders the rolling line for two accounts at once, and the Group page shows the pair win-rate table.
 
 ## Risks

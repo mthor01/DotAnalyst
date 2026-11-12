@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from . import queries
 from .db import Account, Hero, Item, open_engine
+from .metrics import NAMES
 from .poll import poll_forever
 
 engine = open_engine()
@@ -61,6 +62,18 @@ def match(session: Db, match_id: int) -> dict:
     if found is None:
         raise HTTPException(404, f"match {match_id} is not stored")
     return found
+
+
+@app.get("/api/metrics")
+def metric_values(session: Db, where: Where, metric: str) -> list[dict]:
+    if metric not in NAMES:
+        raise HTTPException(404, f"no metric {metric!r}; there are: {', '.join(NAMES)}")
+    return queries.metric(session, where, metric)
+
+
+@app.get("/api/metric-averages")
+def metric_averages(session: Db, where: Where) -> list[dict]:
+    return queries.metric_averages(session, where)
 
 
 @app.get("/api/heroes")

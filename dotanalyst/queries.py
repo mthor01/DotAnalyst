@@ -4,8 +4,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session, aliased
 
-from .db import Account, Match, MatchPlayer
-from .derive import TABLES
+from .db import TABLES, Account, Match, MatchPlayer, Metric
 
 OTHER = aliased(MatchPlayer)
 IS_RADIANT = MatchPlayer.player_slot < 128
@@ -138,3 +137,29 @@ def match(session: Session, match_id: int) -> dict | None:
         statement = select(*columns).where(table.c.match_id == match_id).order_by(*table.primary_key.columns)
         result[table.name] = _rows(session, statement)
     return result
+
+
+def _my_metrics(*columns):
+    return _mine(*columns).join(
+        Metric, and_(Metric.match_id == MatchPlayer.match_id, Metric.player_slot == MatchPlayer.player_slot)
+    )
+
+
+def metric(session: Session, where: list, name: str) -> list[dict]:
+    """One metric's value in each parsed match of the account, oldest first."""
+    return _rows(
+        session,
+        _my_metrics(Match.match_id, Match.start_time, Metric.value)
+        .where(Metric.name == name, *where)
+        .order_by(Match.start_time),
+    )
+
+
+def metric_averages(session: Session, where: list) -> list[dict]:
+    """Every metric's average for the account, with the number of matches it is taken over."""
+    return _rows(
+        session,
+        _my_metrics(Metric.name, func.avg(Metric.value).label("average"), func.count().label("matches"))
+        .where(*where)
+        .group_by(Metric.name),
+    )

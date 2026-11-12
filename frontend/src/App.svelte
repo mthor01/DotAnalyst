@@ -4,9 +4,12 @@
   import Heroes from './Heroes.svelte'
   import Match from './Match.svelte'
   import Matches from './Matches.svelte'
+  import Group from './Group.svelte'
   import Teammates from './Teammates.svelte'
+  import Trends from './Trends.svelte'
 
-  const PAGES = { matches: 'Matches', heroes: 'Heroes', teammates: 'Teammates & matchups' }
+  const PAGES = { matches: 'Matches', heroes: 'Heroes', teammates: 'Teammates & matchups', trends: 'Trends', group: 'Group' }
+  const ALL_ACCOUNTS: Page[] = ['trends', 'group'] // these pages show every tracked account at once
   type Page = keyof typeof PAGES
   let hash = $state(location.hash.slice(1))
   const page = $derived<Page>(hash in PAGES ? (hash as Page) : 'matches')
@@ -46,7 +49,7 @@
   </header>
 
   <div class="filters" hidden={!!matchId}>
-    <label>
+    <label hidden={ALL_ACCOUNTS.includes(page)}>
       Account
       <select bind:value={filters.account_id}>
         {#each accounts as a}
@@ -84,6 +87,10 @@
     <Matches {query} />
   {:else if page === 'heroes'}
     <Heroes {query} />
+  {:else if page === 'trends'}
+    <Trends {query} {accounts} />
+  {:else if page === 'group'}
+    <Group {query} {accounts} />
   {:else}
     <Teammates {query} />
   {/if}

@@ -78,6 +78,30 @@ export type MatchDetail = {
   lanes: { player_slot: number; lane: string | null; opponent_slot: number | null }[]
 }
 
+export type MetricPoint = { match_id: number; start_time: number; value: number }
+export type MetricAverage = { name: string; average: number; matches: number }
+
+const signed = (digits: number) => (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(digits)}`
+const share = (v: number) => `${Math.round(100 * v)}%`
+const count = (v: number) => v.toFixed(2)
+/** The metrics of dotanalyst/metrics.py, in display order, each with how to print a value or an average. */
+export const METRICS: { name: string; label: string; show: (v: number) => string }[] = [
+  { name: 'lane_cs_diff', label: 'Last hits at 10:00 vs lane opponent', show: signed(1) },
+  { name: 'lane_nw_diff', label: 'Net worth at 10:00 vs lane opponent', show: signed(0) },
+  { name: 'kill_participation', label: 'Kill participation', show: share },
+  { name: 'fight_participation', label: 'Teamfights taken part in', show: share },
+  { name: 'deaths_outside_fights', label: 'Deaths outside teamfights', show: count },
+  { name: 'obs_placed', label: 'Observers placed', show: count },
+  { name: 'sen_placed', label: 'Sentries placed', show: count },
+  { name: 'wards_destroyed', label: 'Enemy wards destroyed', show: count },
+  { name: 'obs_lifetime', label: 'Observer lifetime', show: (v) => `${Math.round(v)} s` },
+]
+
+/** The shared filters, but for another account. */
+export function queryFor(query: string, accountId: number, more: Record<string, string> = {}): string {
+  return new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(query)), ...more, account_id: String(accountId) }).toString()
+}
+
 export type Constants = {
   heroes: Record<number, { name: string; localized_name: string }>
   items: Record<number, string>

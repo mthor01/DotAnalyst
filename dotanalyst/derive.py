@@ -7,9 +7,12 @@ from pathlib import Path
 from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
-from .db import DATA, Death, Derived, Lane, Match, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Ward
+from . import queries
+from .db import (
+    DATA, TABLES, Death, Derived, Lane, Match, Metric, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Ward,
+)  # fmt: skip
+from .metrics import METRICS
 
-TABLES = (PlayerMinute, Purchase, Death, Teamfight, TeamfightPlayer, Ward, Lane)
 USED = {
     "interval", "player_slot", "death_tick", "obs", "sen", "obs_left", "sen_left",
     "DOTA_COMBATLOG_DEATH", "DOTA_COMBATLOG_DAMAGE", "DOTA_COMBATLOG_PURCHASE",
@@ -232,8 +235,18 @@ def derive_match(session: Session, match_id: int, raw_dir: Path = DATA / "raw") 
     rows = derive(read_log(raw_dir / f"{match_id}.jsonl.gz"))
     for model in TABLES:
         session.execute(delete(model).where(model.match_id == match_id))
-        if rows[model]:
+        if rows.get(model):
             session.execute(insert(model), [{"match_id": match_id, **row} for row in rows[model]])
+    # metrics read the rows just written, together with the scoreboard, in the shape the API serves
+    match = queries.match(session, match_id)
+    values = [
+        {"match_id": match_id, "player_slot": lane["player_slot"], "name": metric.__name__, "value": value}
+        for lane in match["lanes"]
+        for metric in METRICS
+        if (value := metric(match, lane["player_slot"])) is not None
+    ]
+    if values:
+        session.execute(insert(Metric), values)
     session.commit()
 
 
