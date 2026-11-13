@@ -78,7 +78,7 @@ export type MatchDetail = {
   purchases: { player_slot: number; time: number; item: string }[]
   deaths: { player_slot: number; time: number; x: number | null; y: number | null; killer_slot: number | null; in_teamfight: boolean }[]
   teamfights: { n: number; start: number; end: number; deaths: number }[]
-  teamfight_players: { n: number; player_slot: number; took_part: boolean; damage: number; deaths: number }[]
+  teamfight_players: { n: number; player_slot: number; took_part: boolean; damage: number; healing: number; deaths: number; net_worth_gain: number; xp_gain: number }[]
   wards: { player_slot: number; type: 'obs' | 'sen'; x: number; y: number; placed: number; removed: number | null; killed: boolean; killed_by: number | null }[]
   lanes: { player_slot: number; lane: string | null }[]
 }

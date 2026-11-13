@@ -137,7 +137,7 @@ This comes before the replay stats because replays expire: raw output collected 
   - `purchases` — item and time.
   - `deaths` — time, position, killing hero if any, whether inside a teamfight.
   - `teamfights` — a window opens 15 s before a hero death and closes 15 s after the last one; deaths less than 15 s apart belong to the same window. It counts as a teamfight when 3 or more heroes died.
-  - `teamfight_players` — per fight and player: damage dealt to enemy heroes, deaths, and took part or not. A player took part by dealing hero damage, taking hero damage, or dying.
+  - `teamfight_players` — per fight and player: damage dealt to enemy heroes, healing of heroes on the own team (the healer included), deaths, net worth and XP gained from the fight's start to its end, and took part or not. A player took part by dealing hero damage, taking hero damage, or dying. Net worth is used for the gain, not gold earned, so that gold lost by dying or spent on a buyback counts.
   - `wards` — type, owner, position, placed time, removed time, whether destroyed and by which hero.
   - `lanes` — the zone (top, mid, bot, jungle) where the player spent most of 0:00–10:00, time in a base not counted.
 - `GET /api/matches/{match_id}` returns the scoreboard and one list per derived table; the lists are empty without a parsed replay. An unknown match is a 404.
@@ -149,7 +149,7 @@ This comes before the replay stats because replays expire: raw output collected 
   - Laning: top, mid and bottom each once, Radiant's heroes against Dire's, with the lane's net worth and XP lead from 0:00 to 10:00 (all lane charts on one scale); then one row per hero at 10:00 with last hits, denies, net worth, XP, camps stacked and lotuses used. A game shorter than 10 minutes uses its last minute.
   - Item timeline: one row per player, each item at the time it was bought, items from before 0:00 in their own column; consumables, wards and recipes left out.
   - Ward map and death map on the minimap image (`frontend/public/minimap.webp`, Valve's artwork as redrawn by the OpenDota project).
-  - Teamfight list: time, deaths and damage per team, who took part.
+  - Teamfight list: time, deaths and damage per team, who took part. A click unfolds a fight: the net worth and XP swing (what Radiant gained minus what Dire gained), a map of the part of the map where heroes died with their icons, and damage, healing, net worth and XP gained per hero.
 - Matches without a parsed replay show the scoreboard and say that no replay is available.
 
 **Done when**

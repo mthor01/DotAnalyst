@@ -66,6 +66,18 @@ def test_teamfights(rows):
     assert not first[DAWNBREAKER]["took_part"] and first[DAWNBREAKER]["damage"] == 0  # was mid, away from it
 
 
+def test_teamfight_healing_and_gains(rows):
+    fight = {(p["n"], p["player_slot"]): p for p in rows[TeamfightPlayer]}
+    # first fight, 6:18 to 6:50: every heal was a hero healing itself; Muerta 593 in all, Luna none
+    assert [fight[0, slot]["healing"] for slot in (MUERTA, 130, 4, 2, DAWNBREAKER, 1)] == [593, 387, 219, 115, 17, 0]
+    # net worth and experience at 6:50 minus at 6:18; Lich (slot 2) died in it, Pangolier (131) was not near
+    assert (fight[0, MUERTA]["net_worth_gain"], fight[0, MUERTA]["xp_gain"]) == (489, 454)
+    assert (fight[0, 2]["net_worth_gain"], fight[0, 131]["xp_gain"]) == (39, 0)
+    # last fight: Dawnbreaker healed itself for 205 and Luna for 135; Phoenix healed only Luna, for 28
+    assert (fight[4, DAWNBREAKER]["healing"], fight[4, PHOENIX]["healing"]) == (340, 28)
+    assert (fight[4, 131]["net_worth_gain"], fight[4, 131]["xp_gain"]) == (930, 1487)
+
+
 def test_wards(rows):
     assert Counter(w["type"] for w in rows[Ward]) == {"obs": 17, "sen": 24}
     expired, dewarded = rows[Ward][0], rows[Ward][1]

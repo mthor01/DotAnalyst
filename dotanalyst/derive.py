@@ -15,7 +15,8 @@ from .metrics import METRICS
 
 USED = {
     "interval", "player_slot", "death_tick", "obs", "sen", "obs_left", "sen_left",
-    "DOTA_COMBATLOG_DEATH", "DOTA_COMBATLOG_DAMAGE", "DOTA_COMBATLOG_PURCHASE", "DOTA_COMBATLOG_ITEM",
+    "DOTA_COMBATLOG_DEATH", "DOTA_COMBATLOG_DAMAGE", "DOTA_COMBATLOG_HEAL", "DOTA_COMBATLOG_PURCHASE",
+    "DOTA_COMBATLOG_ITEM",
 }  # fmt: skip
 # a combined lotus counts as the lotuses it was made from
 LOTUSES = {"item_famango": 1, "item_great_famango": 3, "item_greater_famango": 6}
@@ -63,6 +64,14 @@ class Log:
                 attacker, victim = self.hero_slot.get(e.get("sourcename")), self.hero_slot.get(e.get("targetname"))
                 if attacker is not None and victim is not None and self.radiant(attacker) != self.radiant(victim):
                     yield e["time"], attacker, victim, e["value"]
+
+    def hero_heals(self):
+        """(time, healer slot, amount) for each heal by a hero on a hero of its own team, itself included."""
+        for e in self.events:
+            if e["type"] == "DOTA_COMBATLOG_HEAL" and e.get("targethero") and not e.get("targetillusion"):
+                healer, healed = self.hero_slot.get(e.get("sourcename")), self.hero_slot.get(e.get("targetname"))
+                if healer is not None and healed is not None and self.radiant(healer) == self.radiant(healed):
+                    yield e["time"], healer, e["value"]
 
 
 def minutes(log: Log) -> list[dict]:
@@ -138,21 +147,28 @@ def deaths(log: Log) -> list[dict]:
 
 def teamfights(log: Log, death_rows: list[dict]) -> tuple[list[dict], list[dict]]:
     """Fights, and for each fight one row per player. A player took part by trading damage with an enemy hero or dying."""
-    hits = list(log.hero_hits())
+    hits, heals = list(log.hero_hits()), list(log.hero_heals())
     fight_rows, player_rows = [], []
     for n, (start, end, count) in enumerate(fights([d["time"] for d in death_rows])):
         fight_rows.append({"n": n, "start": start, "end": end, "deaths": count})
-        dealt, involved = Counter(), set()
+        dealt, healed, involved = Counter(), Counter(), set()
         for time, attacker, victim, damage in hits:
             if start <= time <= end:
                 dealt[attacker] += damage
                 involved |= {attacker, victim}
+        for time, healer, amount in heals:
+            if start <= time <= end:
+                healed[healer] += amount
         died = Counter(d["player_slot"] for d in death_rows if start <= d["time"] <= end)
         for slot, player_slot in sorted(log.player_slot.items()):
+            # the window can reach past the last second of the game
+            before, after = log.at.get((start, slot)), log.at.get((min(end, log.end), slot))
             player_rows.append(
                 {
-                    "n": n, "player_slot": player_slot, "damage": dealt[slot], "deaths": died[player_slot],
-                    "took_part": slot in involved or died[player_slot] > 0,
+                    "n": n, "player_slot": player_slot, "damage": dealt[slot], "healing": healed[slot],
+                    "deaths": died[player_slot], "took_part": slot in involved or died[player_slot] > 0,
+                    "net_worth_gain": after["networth"] - before["networth"] if before and after else 0,
+                    "xp_gain": after["xp"] - before["xp"] if before and after else 0,
                 }  # fmt: skip
             )
     return fight_rows, player_rows

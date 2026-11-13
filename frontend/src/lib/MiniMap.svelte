@@ -9,11 +9,12 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
 
-  let { label, children }: { label: string; children: Snippet } = $props()
+  /** `view` shows only a part of the map: an SVG viewBox in map cells. */
+  let { label, view = '0 0 127 127', children }: { label: string; view?: string; children: Snippet } = $props()
 </script>
 
 <!-- one unit of the viewBox is one map cell, so marks are placed with mapX/mapY and sized in cells -->
-<svg viewBox="0 0 127 127" role="img" aria-label={label}>
+<svg viewBox={view} role="img" aria-label={label}>
   <image href="/minimap.webp" width="127" height="127" opacity="0.8" />
   {@render children()}
 </svg>

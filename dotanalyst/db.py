@@ -135,7 +135,10 @@ class TeamfightPlayer(Derived):
     player_slot: Mapped[int] = mapped_column(primary_key=True)
     took_part: Mapped[bool]
     damage: Mapped[int]  # dealt to enemy heroes
+    healing: Mapped[int]  # of heroes on the own team, the healer included
     deaths: Mapped[int]
+    net_worth_gain: Mapped[int]  # from the fight's start to its end; a death or a buyback can make it negative
+    xp_gain: Mapped[int]
 
 
 class Ward(Derived):

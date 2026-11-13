@@ -56,7 +56,7 @@ Source: the odota/parser output, stored in `data/raw/{match_id}.jsonl.gz`.
 | Camps stacked and lotuses used, per minute | `player_minute` | Laning table |
 | Every purchase with its time | `purchases` | Item timeline |
 | Deaths with time, map position, killer, and whether it was in a teamfight | `deaths` | Death map |
-| Teamfights: start, end and deaths; per player whether they took part and damage dealt | `teamfights`, `teamfight_players` | Teamfight table |
+| Teamfights: start, end and deaths; per player whether they took part, damage dealt, healing, and net worth and XP gained | `teamfights`, `teamfight_players` | Teamfight table, unfolded fight |
 | Wards: position, placed, removed, lifetime, who destroyed them | `wards` | Ward map |
 | Lane per player (top, mid, bot or jungle) | `lanes` | Lane cards, profile roles |
 

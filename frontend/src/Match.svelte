@@ -12,6 +12,7 @@
   $effect(() => {
     let current = true
     match = null
+    open = []
     get<MatchDetail>(`matches/${id}`).then(
       (found) => current && ((match = found), (error = '')),
       (e) => current && (error = e.message),
@@ -273,6 +274,35 @@
     (d.in_teamfight ? ' (teamfight)' : '')
   const fightPlayers = (n: number, radiant: boolean) =>
     match!.teamfight_players.filter((p) => p.n === n && isRadiant(p.player_slot) === radiant)
+
+  // ---- an unfolded fight
+  let open = $state<number[]>([])
+  const toggle = (n: number) => (open = open.includes(n) ? open.filter((o) => o !== n) : [...open, n])
+  const signed = (n: number) => (n > 0 ? '+' : n < 0 ? '−' : '') + number(Math.abs(n))
+  const GAINS = [
+    ['net_worth_gain', 'Net worth'],
+    ['xp_gain', 'Experience'],
+  ] as const
+  /** What Radiant gained during the fight minus what Dire gained. */
+  const swing = (n: number, key: (typeof GAINS)[number][0]) =>
+    sum(fightPlayers(n, true).map((p) => p[key])) - sum(fightPlayers(n, false).map((p) => p[key]))
+  /** The largest swing of any fight in the match, per measure: the scale of the swing bars. */
+  const swingBound = $derived(
+    GAINS.map(([key]) => Math.max(1, ...(match?.teamfights ?? []).map((f) => Math.abs(swing(f.n, key))))),
+  )
+  const fallen = (fight: MatchDetail['teamfights'][number]) =>
+    match!.deaths.filter((d) => d.x !== null && d.time >= fight.start && d.time <= fight.end)
+  const FIGHT_VIEW = 48 // cells; a fight is shown on at least this much of the 127-cell map
+  /** The square of the map that holds these deaths, with room around them, kept inside the map. */
+  function viewOf(deaths: MatchDetail['deaths']) {
+    if (!deaths.length) return { x: 0, y: 0, size: 127 }
+    const xs = deaths.map((d) => mapX(d.x!))
+    const ys = deaths.map((d) => mapY(d.y!))
+    const extent = (vs: number[]) => Math.max(...vs) - Math.min(...vs)
+    const size = Math.min(127, Math.max(FIGHT_VIEW, extent(xs) + 16, extent(ys) + 16))
+    const from = (vs: number[]) => Math.min(127 - size, Math.max(0, (Math.min(...vs) + Math.max(...vs) - size) / 2))
+    return { x: from(xs), y: from(ys), size }
+  }
 </script>
 
 {#snippet side(team: MatchPlayer[], won: boolean)}
@@ -525,7 +555,10 @@
     {#if match.teamfights.length === 0}
       <p class="muted">No fight with three or more deaths.</p>
     {:else}
-      <p class="muted">Three or more deaths less than 15 seconds apart. Faded heroes neither dealt nor took hero damage and did not die.</p>
+      <p class="muted">
+        Three or more deaths less than 15 seconds apart. Faded heroes neither dealt nor took hero damage and did not die.
+        Click a fight to see where it happened and what each hero did.
+      </p>
       <div class="card">
         <table class="fights">
           <thead>
@@ -539,15 +572,77 @@
             {#each match.teamfights as fight (fight.n)}
               {@const radiant = fightPlayers(fight.n, true)}
               {@const dire = fightPlayers(fight.n, false)}
-              <tr>
+              {@const unfolded = open.includes(fight.n)}
+              {@const when = `${clock(Math.max(0, fight.start))} – ${clock(fight.end)}`}
+              <!-- the button in the row is the keyboard's way in; its click reaches this handler too -->
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+              <tr class="fight" class:unfolded onclick={() => toggle(fight.n)}>
                 <td class="num party">{@render party(fight.n, true)}</td>
                 <td class="num">{number(sum(radiant.map((p) => p.damage)))}</td>
                 <td class="num">{sum(radiant.map((p) => p.deaths))}</td>
-                <td class="when">{clock(Math.max(0, fight.start))} – {clock(fight.end)}</td>
+                <td class="when"><button aria-expanded={unfolded}>{when}</button></td>
                 <td>{sum(dire.map((p) => p.deaths))}</td>
                 <td>{number(sum(dire.map((p) => p.damage)))}</td>
                 <td class="party">{@render party(fight.n, false)}</td>
               </tr>
+              {#if unfolded}
+                {@const dead = fallen(fight)}
+                {@const view = viewOf(dead)}
+                {@const icon = view.size * 0.12}
+                {@const most = Math.max(1, ...[...radiant, ...dire].flatMap((p) => [p.damage, p.healing]))}
+                <tr class="detail">
+                  <td colspan="7">
+                    <div class="inside">
+                      <section>
+                        <h3>Swing</h3>
+                        {#each GAINS as [key, text], i}
+                          {@const v = swing(fight.n, key)}
+                          <p class="standing">{text}: {ahead(v)}</p>
+                          <span class="tug" aria-hidden="true">
+                            <span><i class="radiant" style:width="{(100 * Math.max(v, 0)) / swingBound[i]}%"></i></span>
+                            <span><i class="dire" style:width="{(100 * Math.max(-v, 0)) / swingBound[i]}%"></i></span>
+                          </span>
+                        {/each}
+                        <p class="muted">How much more one team gained than the other during the fight. A full bar is the largest swing of this match.</p>
+                        <h3>Deaths</h3>
+                        <MiniMap label="Where the {dead.length} heroes died in the fight at {when}" view="{view.x} {view.y} {view.size} {view.size}">
+                          {#each dead as d}
+                            {@const x = mapX(d.x!)}
+                            {@const y = mapY(d.y!)}
+                            <g class="fallen {teamOf(d.player_slot)}">
+                              <title>{deathNote(d)}</title>
+                              <circle cx={x} cy={y} r={icon * 0.62} stroke-width={icon * 0.1} />
+                              <image href={heroIcon(hero.get(d.player_slot) ?? 0)} x={x - icon / 2} y={y - icon / 2} width={icon} height={icon} />
+                            </g>
+                          {/each}
+                        </MiniMap>
+                      </section>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Hero</th><th class="wide">Damage to heroes</th><th class="wide">Healing</th>
+                            <th class="num">Net worth</th><th class="num">Experience</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each [...radiant, ...dire] as p (p.player_slot)}
+                            <tr class={teamOf(p.player_slot)} class:absent={!p.took_part}>
+                              <td><Hero id={hero.get(p.player_slot) ?? 0} /></td>
+                              {#each [p.damage, p.healing] as v}
+                                <td>
+                                  <span class="meter"><span><i style:width="{(100 * v) / most}%"></i></span>{number(v)}</span>
+                                </td>
+                              {/each}
+                              <td class="num">{signed(p.net_worth_gain)}</td>
+                              <td class="num">{signed(p.xp_gain)}</td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              {/if}
             {/each}
           </tbody>
         </table>
@@ -841,5 +936,103 @@
   }
   .party .absent {
     opacity: 0.25;
+  }
+  .fight {
+    cursor: pointer;
+  }
+  .when button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+  /* the mark turns down when the fight is unfolded */
+  .when button::after {
+    content: '';
+    display: inline-block;
+    margin-left: 8px;
+    border: 4px solid transparent;
+    border-left-color: var(--muted);
+    border-right-width: 0;
+    transition: transform 0.15s;
+  }
+  .when button[aria-expanded='true']::after {
+    transform: rotate(90deg);
+  }
+  .fight.unfolded td {
+    border-bottom-color: transparent;
+    background: var(--raised);
+  }
+  /* an unfolded fight is a well in the card; hovering it lights nothing up */
+  .detail td {
+    background: none;
+  }
+  .detail > td {
+    padding: 16px;
+    background: var(--page);
+    white-space: normal;
+  }
+  .inside {
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr);
+    align-items: start;
+    gap: 16px 28px;
+  }
+  .inside .standing {
+    margin: 0 0 4px;
+  }
+  .inside .tug {
+    margin-bottom: 10px;
+  }
+  .inside .muted {
+    margin: 0 0 16px;
+    font-size: 13px;
+  }
+  .inside th.wide {
+    width: 28%;
+  }
+  .inside tr.absent td {
+    color: var(--muted);
+  }
+  .meter {
+    display: grid;
+    grid-template-columns: minmax(40px, 1fr) 6ch;
+    align-items: center;
+    gap: 8px;
+    text-align: right;
+  }
+  .meter span {
+    display: flex;
+    height: 8px;
+  }
+  .meter i {
+    border-radius: 0 2px 2px 0;
+  }
+  tr.radiant .meter i {
+    background: var(--radiant);
+  }
+  tr.dire .meter i {
+    background: var(--dire);
+  }
+  .fallen circle {
+    fill: var(--page);
+  }
+  .fallen.radiant circle {
+    stroke: var(--radiant);
+  }
+  .fallen.dire circle {
+    stroke: var(--dire);
+  }
+  @media (max-width: 760px) {
+    .inside {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .when button::after {
+      transition: none;
+    }
   }
 </style>
