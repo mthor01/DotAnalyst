@@ -75,7 +75,7 @@ export type MatchDetail = {
   teamfights: { n: number; start: number; end: number; deaths: number }[]
   teamfight_players: { n: number; player_slot: number; took_part: boolean; damage: number; deaths: number }[]
   wards: { player_slot: number; type: 'obs' | 'sen'; x: number; y: number; placed: number; removed: number | null; killed: boolean; killed_by: number | null }[]
-  lanes: { player_slot: number; lane: string | null; opponent_slot: number | null }[]
+  lanes: { player_slot: number; lane: string | null }[]
 }
 
 export type MetricPoint = { match_id: number; start_time: number; value: number }
@@ -86,8 +86,8 @@ const share = (v: number) => `${Math.round(100 * v)}%`
 const count = (v: number) => v.toFixed(2)
 /** The metrics of dotanalyst/metrics.py, in display order, each with how to print a value or an average. */
 export const METRICS: { name: string; label: string; show: (v: number) => string }[] = [
-  { name: 'lane_cs_diff', label: 'Last hits at 10:00 vs lane opponent', show: signed(1) },
-  { name: 'lane_nw_diff', label: 'Net worth at 10:00 vs lane opponent', show: signed(0) },
+  { name: 'lane_cs_diff', label: 'Lane last hits at 10:00 vs enemy lane', show: signed(1) },
+  { name: 'lane_nw_diff', label: 'Lane net worth at 10:00 vs enemy lane', show: signed(0) },
   { name: 'kill_participation', label: 'Kill participation', show: share },
   { name: 'fight_participation', label: 'Teamfights taken part in', show: share },
   { name: 'deaths_outside_fights', label: 'Deaths outside teamfights', show: count },

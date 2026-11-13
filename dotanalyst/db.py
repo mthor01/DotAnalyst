@@ -159,7 +159,6 @@ class Lane(Derived):
     match_id: Mapped[int] = mapped_column(primary_key=True)
     player_slot: Mapped[int] = mapped_column(primary_key=True)
     lane: Mapped[str | None]  # top | mid | bot | jungle; None when the player never left the base
-    opponent_slot: Mapped[int | None]
 
 
 class Metric(Derived):

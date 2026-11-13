@@ -7,23 +7,26 @@ fixture replay, give it a label in the frontend, and run `recompute`.
 from statistics import mean
 
 
-def _at_ten(match: dict, slot: int | None) -> dict | None:
-    return next((r for r in match["player_minute"] if r["player_slot"] == slot and r["minute"] == 10), None)
-
-
 def _lane_diff(match: dict, slot: int, stat: str) -> int | None:
-    opponent = next((lane["opponent_slot"] for lane in match["lanes"] if lane["player_slot"] == slot), None)
-    mine, theirs = _at_ten(match, slot), _at_ten(match, opponent)
-    return None if mine is None or theirs is None else mine[stat] - theirs[stat]
+    """The player's side of their lane, summed at 10:00, minus the enemies in that lane. None outside the three lanes,
+    with nobody to compare with, or in a match that ended before 10:00."""
+    lane = next((row["lane"] for row in match["lanes"] if row["player_slot"] == slot), None)
+    if lane not in ("top", "mid", "bot"):
+        return None
+    ten = {r["player_slot"]: r[stat] for r in match["player_minute"] if r["minute"] == 10}
+    there = [row["player_slot"] for row in match["lanes"] if row["lane"] == lane and row["player_slot"] in ten]
+    mine = [ten[s] for s in there if (s < 128) == (slot < 128)]
+    theirs = [ten[s] for s in there if (s < 128) != (slot < 128)]
+    return sum(mine) - sum(theirs) if mine and theirs else None
 
 
 def lane_cs_diff(match: dict, slot: int) -> int | None:
-    """Own last hits at 10:00 minus the lane opponent's."""
+    """Last hits of the player's lane at 10:00 minus the enemy lane's."""
     return _lane_diff(match, slot, "last_hits")
 
 
 def lane_nw_diff(match: dict, slot: int) -> int | None:
-    """Own net worth at 10:00 minus the lane opponent's."""
+    """Net worth of the player's lane at 10:00 minus the enemy lane's."""
     return _lane_diff(match, slot, "net_worth")
 
 

@@ -139,7 +139,7 @@ This comes before the replay stats because replays expire: raw output collected 
   - `teamfights` — a window opens 15 s before a hero death and closes 15 s after the last one; deaths less than 15 s apart belong to the same window. It counts as a teamfight when 3 or more heroes died.
   - `teamfight_players` — per fight and player: damage dealt to enemy heroes, deaths, and took part or not. A player took part by dealing hero damage, taking hero damage, or dying.
   - `wards` — type, owner, position, placed time, removed time, whether destroyed and by which hero.
-  - `lanes` — the zone (top, mid, bot, jungle) where the player spent most of 0:00–10:00, time in a base not counted; and the lane opponent: the enemy in the same lane with the most last hits at 10:00.
+  - `lanes` — the zone (top, mid, bot, jungle) where the player spent most of 0:00–10:00, time in a base not counted.
 - `GET /api/matches/{match_id}` returns the scoreboard and one list per derived table; the lists are empty without a parsed replay. An unknown match is a 404.
 - **Match page** (`#match/<id>`, linked from the date in the Matches table):
   - Scoreboard.
@@ -153,7 +153,7 @@ This comes before the replay stats because replays expire: raw output collected 
 
 **Done when**
 
-- `uv run pytest` passes. Each derivation is tested against the fixture replay with hand-checked expected values: last hits at 10:00 for one player, number of teamfights, number of observer wards, lane and lane opponent for one player.
+- `uv run pytest` passes. Each derivation is tested against the fixture replay with hand-checked expected values: last hits at 10:00 for one player, number of teamfights, number of observer wards, lane for one player.
 - Running `dotanalyst recompute` twice yields identical row counts in every derived table.
 - `curl http://localhost:8000/api/matches/<parsed match_id>` returns per-minute series for 10 players.
 - The match page for a parsed match renders the net worth chart and the ward map.
@@ -162,7 +162,7 @@ This comes before the replay stats because replays expire: raw output collected 
 
 The `metrics` table holds one row per player, parsed match and metric: `match_id`, `player_slot`, `name`, `value`. A metric that does not apply to a player in a match (no lane opponent, no observer placed) has no row, so averages only cover matches where the number means something. First definitions, to be tuned:
 
-- **Lane CS differential** — `lane_cs_diff`: own last hits at 10:00 minus the lane opponent's; `lane_nw_diff`: the same for net worth.
+- **Lane CS differential** — `lane_cs_diff`: last hits at 10:00 of the player's side of their lane, summed, minus the enemies' in that lane; `lane_nw_diff`: the same for net worth. Both players of a lane get the same value; a jungler has none.
 - **Vision habits** — `obs_placed`, `sen_placed`, `wards_destroyed` (enemy wards of either kind), `obs_lifetime` (mean seconds an own observer stood; one still standing at the end is left out).
 - **Fight participation** — `fight_participation` (share of the match's teamfights the player took part in), `kill_participation` ((kills + assists) / team kills, from the Web API scoreboard), `deaths_outside_fights`.
 
@@ -173,7 +173,7 @@ Each metric is one Python function in `dotanalyst/metrics.py`. It takes the matc
 - **Trends page** — pick a metric; one line per tracked account on a time axis. Each point is the average of that match and up to 19 parsed matches before it. A table gives each account's overall and last-20 average.
 - **Group page** — win rate together for each pair of tracked accounts (all stored matches), and each metric's average per account (parsed matches).
 
-Known limit of the first definition: the lane opponent is the enemy in the lane with the most last hits, so a support is compared with the enemy core and its lane differences are always strongly negative. The numbers are meaningful for cores.
+Known limit: the lane differences describe the lane, not the player, and a lane of two against one compares two heroes' totals with one hero's. (Until November 2026 they compared the player with one enemy, the one in the lane with the most last hits, which made every support's numbers strongly negative.)
 
 **Done when**
 

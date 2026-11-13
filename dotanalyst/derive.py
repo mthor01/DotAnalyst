@@ -195,32 +195,15 @@ def zone(x: float, y: float) -> str | None:
 
 
 def lanes(log: Log) -> list[dict]:
-    """Lane = where the player spent most of the first ten minutes. Opponent = the enemy there with most last hits."""
+    """Lane = where the player spent most of the first ten minutes."""
     votes = {slot: Counter() for slot in log.player_slot}
     for (time, slot), e in log.at.items():
         if 0 <= time <= LANING_END and e.get("x") is not None and slot in votes:
             votes[slot][zone(e["x"], e["y"])] += 1
-    lane = {}
-    for slot, count in votes.items():
-        del count[None]
-        lane[slot] = count.most_common(1)[0][0] if count else None
-    at_end = min(LANING_END, log.end)
-    last_hits = {slot: log.at.get((at_end, slot), {}).get("lh", 0) for slot in log.player_slot}
     rows = []
     for slot, player_slot in sorted(log.player_slot.items()):
-        rivals = [
-            other
-            for other in log.player_slot
-            if lane[slot] in ("top", "mid", "bot") and lane[other] == lane[slot] and log.radiant(other) != log.radiant(slot)
-        ]
-        opponent = max(rivals, key=lambda other: (last_hits[other], -other), default=None)
-        rows.append(
-            {
-                "player_slot": player_slot,
-                "lane": lane[slot],
-                "opponent_slot": None if opponent is None else log.player_slot[opponent],
-            }
-        )
+        del votes[slot][None]
+        rows.append({"player_slot": player_slot, "lane": votes[slot].most_common(1)[0][0] if votes[slot] else None})
     return rows
 
 

@@ -83,13 +83,10 @@ def test_zone():
 
 
 def test_lanes(rows):
-    lane = {r["player_slot"]: r for r in rows[Lane]}
-    assert (lane[DAWNBREAKER]["lane"], lane[DAWNBREAKER]["opponent_slot"]) == ("mid", SHADOW_FIEND)
-    assert (lane[SHADOW_FIEND]["lane"], lane[SHADOW_FIEND]["opponent_slot"]) == ("mid", DAWNBREAKER)
+    lane = {r["player_slot"]: r["lane"] for r in rows[Lane]}
+    assert (lane[DAWNBREAKER], lane[SHADOW_FIEND], lane[PHOENIX], lane[MUERTA]) == ("mid", "mid", "top", "top")
     for team in (range(0, 5), range(128, 133)):
-        assert Counter(lane[slot]["lane"] for slot in team) == {"top": 2, "mid": 1, "bot": 2}
-    # two enemies share Phoenix's lane; the opponent is the one with more last hits at 10:00 (69 against 21)
-    assert lane[PHOENIX]["opponent_slot"] == MUERTA
+        assert Counter(lane[slot] for slot in team) == {"top": 2, "mid": 1, "bot": 2}
 
 
 def test_recompute_is_repeatable_and_feeds_the_match_query():

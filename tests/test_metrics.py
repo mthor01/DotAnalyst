@@ -49,11 +49,17 @@ def match(session):
 
 
 def test_lane_differences(match):
-    # at 10:00 Dawnbreaker had 46 last hits and 3188 net worth, her mid opponent Shadow Fiend 93 and 5882
+    # mid is one against one: at 10:00 Dawnbreaker had 46 last hits and 3188 net worth, Shadow Fiend 93 and 5882
     assert metrics.lane_cs_diff(match, DAWNBREAKER) == 46 - 93
     assert metrics.lane_nw_diff(match, DAWNBREAKER) == 3188 - 5882
     assert metrics.lane_cs_diff(match, SHADOW_FIEND) == 93 - 46
-    assert metrics.lane_cs_diff(match, PHOENIX) == 14 - 69  # against Muerta
+    # top: Phoenix 14 and Legion Commander 38 against Muerta 69 and Rubick 21; a lane's players share its number
+    assert metrics.lane_cs_diff(match, PHOENIX) == (14 + 38) - (69 + 21)
+    assert metrics.lane_nw_diff(match, PHOENIX) == (2276 + 3138) - (5312 + 2460)
+    # bottom: Luna 32 and Lich 5 against Pudge 6 and Pangolier 49
+    assert metrics.lane_cs_diff(match, LUNA) == metrics.lane_cs_diff(match, LICH) == (32 + 5) - (6 + 49)
+    jungler = {**match, "lanes": [{"player_slot": DAWNBREAKER, "lane": "jungle"}]}
+    assert metrics.lane_cs_diff(jungler, DAWNBREAKER) is None
 
 
 def test_wards_placed(match):
