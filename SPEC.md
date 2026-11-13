@@ -76,6 +76,7 @@ Raw data is fetched once and never refetched:
 - `data/raw/{match_id}.jsonl.gz` — the parser output.
 - `data/opendota/{match_id}.json.gz` — the OpenDota response that supplied the replay salt.
 - `heroes`, `items` — id-to-name lookups.
+- `recipes` — for each item that is built from others, the names of its components.
 
 Derived tables are rebuilt from raw data by `dotanalyst recompute`: `player_minute`, `purchases`, `deaths`, `teamfights`, `teamfight_players`, `wards`, `lanes`, and from Milestone 5 `metrics`.
 
@@ -134,7 +135,7 @@ This comes before the replay stats because replays expire: raw output collected 
 
 - `recompute` drops the derived tables and rebuilds them from raw output (about 1 second per match). The poller computes the same rows for each newly parsed match, so `recompute` is only needed after a derivation changes.
   - `player_minute` — total gold earned, XP, net worth, last hits, denies, camps stacked and lotuses eaten so far, per player per minute. The parser does not report who picks a lotus up, only who eats one (`DOTA_COMBATLOG_ITEM` with `item_famango`); a combined lotus counts as the lotuses it was made from.
-  - `purchases` — item and time.
+  - `purchases` — item, time, and `built_at`: when the item became part of a bigger one. The log reports a finished item as a purchase of its own at the moment its parts come together; the `recipes` table (item → components, from dotaconstants' `items.json`, filled by `sync-constants`) tells which earlier purchases it used up. Power Treads take a Band of Elvenskin or a Robe in the place of the listed Belt of Strength. A part an ally bought is not found, and stays an item of its own.
   - `deaths` — time, position, killing hero if any, whether inside a teamfight.
   - `teamfights` — a window opens 15 s before a hero death and closes 15 s after the last one; deaths less than 15 s apart belong to the same window. It counts as a teamfight when 3 or more heroes died.
   - `teamfight_players` — per fight and player: damage dealt to enemy heroes, healing of heroes on the own team (the healer included), deaths, net worth and XP gained from the fight's start to its end, and took part or not. A player took part by dealing hero damage, taking hero damage, or dying. Net worth is used for the gain, not gold earned, so that gold lost by dying or spent on a buyback counts.
@@ -145,11 +146,11 @@ This comes before the replay stats because replays expire: raw output collected 
   - Header in the layout of the game's top bar: Radiant portraits, kill score and duration, Dire portraits; the losing side dimmed.
   - Scoreboard.
   - Team lead in net worth and in XP (area, green where Radiant leads, red where Dire leads).
-  - Net worth per player over time (lines, one panel per team on a shared scale).
+  - Net worth per hero over time, all ten in one chart: the colour is the hero's place in its team and Dire's lines are dashed. The hero icons above the chart are its legend; a click takes a hero's line out or puts it back, and the scale follows the heroes shown.
   - Laning: top, mid and bottom each once, Radiant's heroes against Dire's, with the lane's net worth and XP lead from 0:00 to 10:00 (all lane charts on one scale); then one row per hero at 10:00 with last hits, denies, net worth, XP, camps stacked and lotuses used. A game shorter than 10 minutes uses its last minute.
-  - Item timeline: one row per player, each item at the time it was bought, items from before 0:00 in their own column; consumables, wards and recipes left out.
-  - Ward map and death map on the minimap image (`frontend/public/minimap.webp`, Valve's artwork as redrawn by the OpenDota project).
-  - Teamfight list: time, deaths and damage per team, who took part. A click unfolds a fight: the net worth and XP swing (what Radiant gained minus what Dire gained), a map of the part of the map where heroes died with their icons, and damage, healing, net worth and XP gained per hero.
+  - Item timeline: one row per player, each item at the time it was bought, items from before 0:00 in their own column; consumables, wards and recipes left out. A part bought after 0:00 that was built into a bigger item within five minutes is left out too, so a finished item does not sit on a pile of its parts (two minutes still left piles under most items).
+  - Ward map and death map on the minimap image (`frontend/public/minimap.webp`, Valve's artwork as redrawn by the OpenDota project). A death is the hero's icon with an edge in its team's colour. Both maps show the whole game, or one ten-minute part of it (0–10, 10–20, …); a ward belongs to the part it was placed in, and what happened before 0:00 to the first.
+  - Teamfight list: time, deaths and damage per team, who took part. Only fights that start at 10:00 or later are listed; the `teamfights` table and the fight metrics still hold the earlier ones. A click unfolds a fight: the net worth and XP swing (what Radiant gained minus what Dire gained), a map of the part of the map where heroes died with their icons, and damage, healing, net worth and XP gained per hero. That map also shows the wards: a light mark for a ward standing when the fight started, a dark mark for one standing when it ended, so a ward that lasted through the fight is a dark mark on a light one.
 - Matches without a parsed replay show the scoreboard and say that no replay is available.
 
 **Done when**

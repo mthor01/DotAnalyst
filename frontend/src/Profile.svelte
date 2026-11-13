@@ -95,7 +95,7 @@
   <header class="title">
     <h2>{account?.label ?? account?.account_id}</h2>
     <p class="muted">The last {recent.length} of {rows.length} matches for these filters</p>
-    <div class="sizes" role="group" aria-label="How many matches">
+    <div class="choice sizes" role="group" aria-label="How many matches">
       {#each SIZES as n}
         <button aria-pressed={size === n} onclick={() => (size = n)}>{n} matches</button>
       {/each}
@@ -229,24 +229,6 @@
   }
   .sizes {
     margin-left: auto;
-    display: flex;
-    background: var(--surface);
-    border-radius: 4px;
-    padding: 2px;
-  }
-  .sizes button {
-    font: inherit;
-    font-weight: 600;
-    color: var(--muted);
-    background: none;
-    border: 0;
-    border-radius: 3px;
-    padding: 4px 12px;
-    cursor: pointer;
-  }
-  .sizes button[aria-pressed='true'] {
-    background: var(--raised);
-    color: var(--text);
   }
 
   .overview {

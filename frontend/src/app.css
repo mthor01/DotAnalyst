@@ -141,6 +141,29 @@ input {
   accent-color: var(--text-2);
 }
 
+/* a row of buttons of which one is chosen */
+.choice {
+  display: inline-flex;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 2px;
+}
+.choice button {
+  font: inherit;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.choice button[aria-pressed='true'] {
+  background: var(--raised);
+  color: var(--text);
+}
+
 /* a panel is a step lighter than the page; no outline, no shadow */
 .card {
   background: var(--surface);

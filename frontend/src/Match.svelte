@@ -13,6 +13,8 @@
     let current = true
     match = null
     open = []
+    hidden = []
+    period = null
     get<MatchDetail>(`matches/${id}`).then(
       (found) => current && ((match = found), (error = '')),
       (e) => current && (error = e.message),
@@ -35,72 +37,62 @@
   const lastMinute = $derived(Math.max(0, ...(match?.player_minute ?? []).map((r) => r.minute)))
   const minuteRow = $derived(new Map((match?.player_minute ?? []).map((r) => [`${r.player_slot}:${r.minute}`, r])))
 
-  // ---- net worth: one panel per team, so five lines and five colours each, on one shared scale
+  // ---- net worth: every hero in one chart. Ten lines need two signs each: the colour is the hero's place in its
+  // team, and Dire's lines are dashed. The heroes above the chart are its legend and switch lines off and on.
+  let hidden = $state<number[]>([]) // player slots taken out of the chart
+  const pick = (slot: number) => (hidden = hidden.includes(slot) ? hidden.filter((s) => s !== slot) : [...hidden, slot])
   function netWorth(ink: Ink) {
     const rows = match!.player_minute
-    const top = Math.ceil(Math.max(...rows.map((r) => r.net_worth)) / 5000) * 5000
-    const axisLabel = { color: ink.muted }
-    const splitLine = { lineStyle: { color: ink.grid } }
-    const series = teams.flatMap((team, panel) =>
-      team.map((p, i) => ({
-        type: 'line',
-        name: heroName(p.hero_id),
-        xAxisIndex: panel,
-        yAxisIndex: panel,
-        data: rows.filter((r) => r.player_slot === p.player_slot).map((r) => [r.minute, r.net_worth]),
-        showSymbol: false,
-        lineStyle: { width: 2 },
-        itemStyle: { color: ink[`series-${i + 1}` as keyof Ink] },
-        endLabel: { show: true, formatter: '{a}', color: ink['text-2'], distance: 6 },
-        labelLayout: { moveOverlap: 'shiftY' },
-        emphasis: { focus: 'series' },
-      })),
+    const radiant = new Set(teams[0].map((p) => heroName(p.hero_id)))
+    const series = teams.flatMap((team, t) =>
+      team
+        .map((p, i) => ({ p, color: ink[`series-${i + 1}` as keyof Ink] })) // before the filter: a hero keeps its colour
+        .filter(({ p }) => !hidden.includes(p.player_slot))
+        .map(({ p, color }) => ({
+          type: 'line',
+          name: heroName(p.hero_id),
+          data: rows.filter((r) => r.player_slot === p.player_slot).map((r) => [r.minute, r.net_worth]),
+          showSymbol: false,
+          lineStyle: { width: 2, type: t ? 'dashed' : 'solid' },
+          itemStyle: { color },
+          endLabel: { show: true, formatter: '{a}', color: ink['text-2'], distance: 6 },
+          labelLayout: { moveOverlap: 'shiftY' },
+          emphasis: { focus: 'series' },
+        })),
     )
     return {
-      title: TEAMS.map((text, panel) => ({
-        text,
-        left: panel ? '55%' : '5%',
-        top: 0,
-        textStyle: { color: ink['text-2'], fontSize: 12, fontWeight: 600 },
-      })),
-      grid: [
-        { left: '5%', right: '60%', top: 30, bottom: 28 },
-        { left: '55%', right: '10%', top: 30, bottom: 28 },
-      ],
-      xAxis: [0, 1].map((gridIndex) => ({
+      animationDuration: 300,
+      grid: { left: 48, right: 132, top: 12, bottom: 28 },
+      xAxis: {
         type: 'value',
-        gridIndex,
         min: 0,
         max: lastMinute,
         minInterval: 5,
-        axisLabel: { ...axisLabel, formatter: '{value}:00' },
+        axisLabel: { color: ink.muted, formatter: '{value}:00' },
         axisLine: { lineStyle: { color: ink.axis } },
         splitLine: { show: false },
-      })),
-      yAxis: [0, 1].map((gridIndex) => ({
+      },
+      // no fixed top: the scale follows the heroes that are shown
+      yAxis: {
         type: 'value',
-        gridIndex,
         min: 0,
-        max: top,
-        axisLabel: { ...axisLabel, formatter: (v: number) => thousands(v) },
-        splitLine,
-      })),
-      axisPointer: { link: [{ xAxisIndex: 'all' }] },
+        axisLabel: { color: ink.muted, formatter: (v: number) => thousands(v) },
+        splitLine: { lineStyle: { color: ink.grid } },
+      },
       tooltip: {
         trigger: 'axis',
-        formatter: (params: { axisIndex: number; seriesName: string; marker: string; value: [number, number] }[]) =>
+        formatter: (params: { seriesName: string; marker: string; value: [number, number] }[]) =>
           `<b>${params[0].value[0]}:00</b>` +
-          [0, 1]
-            .map(
-              (panel) =>
-                `<br><span style="color:${ink['text-2']}">${TEAMS[panel]}</span>` +
-                params
-                  .filter((p) => p.axisIndex === panel)
-                  .sort((a, b) => b.value[1] - a.value[1])
-                  .map((p) => `<br>${p.marker}${p.seriesName} <b style="float:right;margin-left:16px">${number(p.value[1])}</b>`)
-                  .join(''),
-            )
-            .join(''),
+          TEAMS.map((team, t) => {
+            const lines = params.filter((p) => radiant.has(p.seriesName) === (t === 0))
+            return lines.length === 0
+              ? ''
+              : `<br><span style="color:${ink['text-2']}">${team}</span>` +
+                  lines
+                    .sort((a, b) => b.value[1] - a.value[1])
+                    .map((p) => `<br>${p.marker}${p.seriesName} <b style="float:right;margin-left:16px">${number(p.value[1])}</b>`)
+                    .join('')
+          }).join(''),
       },
       series,
     }
@@ -234,6 +226,9 @@
     'ward_observer', 'ward_sentry', 'ward_dispenser', 'smoke_of_deceit', 'dust', 'blood_grenade', 'tome_of_knowledge',
   ]) // prettier-ignore
   const itemName = (item: string) => item.replaceAll('_', ' ')
+  // seconds; a part that went into a bigger item this soon after it was bought is not shown. Two minutes still left
+  // piles of parts under most finished items; the starting items are always shown
+  const BUILT_SOON = 300
   const ICON = 29 // px one item takes on the timeline, gap included
   const ROW = 23
   let trackWidth = $state(0)
@@ -243,7 +238,13 @@
   /** A player's build: what was bought before the horn, and everything after placed by time. Items bought too close
    *  together to sit side by side move down a row. */
   function timeline(slot: number) {
-    const build = match!.purchases.filter((b) => b.player_slot === slot && !UNLISTED.has(b.item) && !b.item.startsWith('recipe'))
+    const build = match!.purchases.filter(
+      (b) =>
+        b.player_slot === slot &&
+        !UNLISTED.has(b.item) &&
+        !b.item.startsWith('recipe') &&
+        !(b.time >= 0 && b.built_at !== null && b.built_at - b.time <= BUILT_SOON),
+    )
     const rowEnds: number[] = []
     const placed = build
       .filter((b) => b.time >= 0)
@@ -257,9 +258,19 @@
     return { start: build.filter((b) => b.time < 0), placed, rows: Math.max(1, rowEnds.length) }
   }
 
-  // ---- maps and fights
+  // ---- the two maps: the whole game, or ten minutes of it
+  type Ward = MatchDetail['wards'][number]
+  type Death = MatchDetail['deaths'][number]
+  let period = $state<number | null>(null) // first minute of the ten shown; null is the whole game
+  const periods = $derived(Array.from({ length: Math.max(1, Math.ceil((match?.duration ?? 0) / 600)) }, (_, i) => i * 10))
+  /** What happened before the horn belongs to the first ten minutes. */
+  const inPeriod = (time: number) => period === null || (Math.max(time, 0) >= period * 60 && time < (period + 10) * 60)
+  const wardsShown = $derived((match?.wards ?? []).filter((w) => inPeriod(w.placed)))
+  const deathsShown = $derived((match?.deaths ?? []).filter((d) => d.x !== null && inPeriod(d.time)))
+  const standing = (w: Ward, time: number) => w.placed <= time && (w.removed === null || w.removed > time)
+
   const WARD = { obs: 'Observer', sen: 'Sentry' }
-  function wardNote(w: MatchDetail['wards'][number]) {
+  function wardNote(w: Ward) {
     const fate =
       w.removed === null
         ? 'still up at the end'
@@ -268,14 +279,16 @@
           : `destroyed ${clock(w.removed)}${w.killed_by === null ? '' : ` by ${name(w.killed_by)}`}`
     return `${WARD[w.type]} by ${name(w.player_slot)}, placed ${clock(w.placed)}, ${fate}`
   }
-  const deathNote = (d: MatchDetail['deaths'][number]) =>
+  const deathNote = (d: Death) =>
     `${name(d.player_slot)} died at ${clock(d.time)}` +
     (d.killer_slot === null ? '' : `, killed by ${name(d.killer_slot)}`) +
     (d.in_teamfight ? ' (teamfight)' : '')
   const fightPlayers = (n: number, radiant: boolean) =>
     match!.teamfight_players.filter((p) => p.n === n && isRadiant(p.player_slot) === radiant)
 
-  // ---- an unfolded fight
+  // ---- fights: the first ten minutes are laning, and three deaths there are a skirmish in a lane
+  const FIGHTS_FROM = 600
+  const fights = $derived((match?.teamfights ?? []).filter((f) => f.start >= FIGHTS_FROM))
   let open = $state<number[]>([])
   const toggle = (n: number) => (open = open.includes(n) ? open.filter((o) => o !== n) : [...open, n])
   const signed = (n: number) => (n > 0 ? '+' : n < 0 ? '−' : '') + number(Math.abs(n))
@@ -286,15 +299,13 @@
   /** What Radiant gained during the fight minus what Dire gained. */
   const swing = (n: number, key: (typeof GAINS)[number][0]) =>
     sum(fightPlayers(n, true).map((p) => p[key])) - sum(fightPlayers(n, false).map((p) => p[key]))
-  /** The largest swing of any fight in the match, per measure: the scale of the swing bars. */
-  const swingBound = $derived(
-    GAINS.map(([key]) => Math.max(1, ...(match?.teamfights ?? []).map((f) => Math.abs(swing(f.n, key))))),
-  )
+  /** The largest swing of any fight shown, per measure: the scale of the swing bars. */
+  const swingBound = $derived(GAINS.map(([key]) => Math.max(1, ...fights.map((f) => Math.abs(swing(f.n, key))))))
   const fallen = (fight: MatchDetail['teamfights'][number]) =>
     match!.deaths.filter((d) => d.x !== null && d.time >= fight.start && d.time <= fight.end)
   const FIGHT_VIEW = 48 // cells; a fight is shown on at least this much of the 127-cell map
   /** The square of the map that holds these deaths, with room around them, kept inside the map. */
-  function viewOf(deaths: MatchDetail['deaths']) {
+  function viewOf(deaths: Death[]) {
     if (!deaths.length) return { x: 0, y: 0, size: 127 }
     const xs = deaths.map((d) => mapX(d.x!))
     const ys = deaths.map((d) => mapY(d.y!))
@@ -320,6 +331,37 @@
   {#each team as p (p.player_slot)}
     <img src={heroIcon(p.hero_id)} alt={heroName(p.hero_id)} title={heroName(p.hero_id)} width="28" height="28" loading="lazy" />
   {/each}
+{/snippet}
+
+{#snippet wardMark(w: Ward, r: number, tone: string)}
+  {@const x = mapX(w.x)}
+  {@const y = mapY(w.y)}
+  <g>
+    <title>{wardNote(w)}</title>
+    {#if w.type === 'obs'}
+      <circle class="mark {teamOf(w.player_slot)} {tone}" cx={x} cy={y} {r} stroke-width={r * 0.26} />
+    {:else}
+      <rect
+        class="mark {teamOf(w.player_slot)} {tone}"
+        x={x - r * 0.82}
+        y={y - r * 0.82}
+        width={r * 1.64}
+        height={r * 1.64}
+        stroke-width={r * 0.26}
+        transform="rotate(45 {x} {y})"
+      />
+    {/if}
+  </g>
+{/snippet}
+
+{#snippet fallenMark(d: Death, icon: number)}
+  {@const x = mapX(d.x!)}
+  {@const y = mapY(d.y!)}
+  <g class="fallen {teamOf(d.player_slot)}">
+    <title>{deathNote(d)}</title>
+    <circle cx={x} cy={y} r={icon * 0.62} stroke-width={icon * 0.1} />
+    <image href={heroIcon(hero.get(d.player_slot) ?? 0)} x={x - icon / 2} y={y - icon / 2} width={icon} height={icon} />
+  </g>
 {/snippet}
 
 {#snippet party(n: number, radiant: boolean)}
@@ -411,9 +453,23 @@
       <Chart option={leadChart(leadOf(players, lastMinute))} height={320} label="Radiant's lead over Dire in net worth and in experience over time; above zero Radiant is ahead, below zero Dire" />
     </div>
 
-    <h2>Net worth by player</h2>
+    <h2>Net worth by hero</h2>
+    <p class="muted">Click a hero to take its line out of the chart, and again to put it back. Dire's lines are dashed.</p>
+    <div class="pick">
+      {#each teams as team, t}
+        <div class={t ? 'dire' : 'radiant'} role="group" aria-label="{TEAMS[t]} heroes in the chart">
+          <span>{TEAMS[t]}</span>
+          {#each team as p, i (p.player_slot)}
+            <button aria-pressed={!hidden.includes(p.player_slot)} onclick={() => pick(p.player_slot)} title={heroName(p.hero_id)}>
+              <img src={heroIcon(p.hero_id)} alt={heroName(p.hero_id)} width="28" height="28" />
+              <i class:dashed={t === 1} style:border-color="var(--series-{i + 1})"></i>
+            </button>
+          {/each}
+        </div>
+      {/each}
+    </div>
     <div class="card chart">
-      <Chart option={netWorth} height={340} label="Net worth of each player over time, one panel per team; the laning table below has the numbers at 10 minutes" />
+      <Chart option={netWorth} height={380} label="Net worth over time of the heroes chosen above; the laning table below has the numbers at 10 minutes" />
     </div>
 
     <h2>Laning, first {laneMinute} minutes</h2>
@@ -474,7 +530,10 @@
     </div>
 
     <h2>Item timeline</h2>
-    <p class="muted">Each item sits at the time it was bought; hover one for its name and time. Consumables, wards and recipes are left out.</p>
+    <p class="muted">
+      Each item sits at the time it was bought; hover one for its name and time. A part that went into a bigger item
+      within five minutes is left out, so only the finished item shows. Consumables, wards and recipes are left out too.
+    </p>
     <div class="card timeline" style:--step="{Math.max(timeX(300), 1)}px">
       <span></span>
       <span class="head">Before 0:00</span>
@@ -506,58 +565,48 @@
       {/each}
     </div>
 
+    <h2>Wards and deaths</h2>
+    <p class="filters">
+      <span class="choice" role="group" aria-label="Part of the game shown on both maps">
+        <button aria-pressed={period === null} onclick={() => (period = null)}>Whole game</button>
+        {#each periods as from}
+          <button aria-pressed={period === from} onclick={() => (period = from)}>{from}–{from + 10} min</button>
+        {/each}
+      </span>
+      <span class="muted">A ward belongs to the ten minutes it was placed in. Hover a mark for details.</span>
+    </p>
     <div class="maps">
       <section>
-        <h2>Wards</h2>
+        <h3>Wards placed</h3>
         <p class="legend">
           <span><i class="swatch radiant"></i>Radiant</span>
           <span><i class="swatch dire"></i>Dire</span>
           <span>● Observer</span>
           <span>◆ Sentry</span>
-          <span class="muted">hover a mark for details</span>
         </p>
-        <MiniMap label="Map of the {match.wards.length} wards placed in this match">
-          {#each match.wards as w}
-            {@const x = mapX(w.x)}
-            {@const y = mapY(w.y)}
-            {#if w.type === 'obs'}
-              <circle class="mark {teamOf(w.player_slot)}" cx={x} cy={y} r="1.7"><title>{wardNote(w)}</title></circle>
-            {:else}
-              <rect class="mark {teamOf(w.player_slot)}" x={x - 1.4} y={y - 1.4} width="2.8" height="2.8" transform="rotate(45 {x} {y})">
-                <title>{wardNote(w)}</title>
-              </rect>
-            {/if}
-          {/each}
+        <MiniMap label="Map of the {wardsShown.length} wards placed {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}">
+          {#each wardsShown as w}{@render wardMark(w, 1.7, '')}{/each}
         </MiniMap>
       </section>
       <section>
-        <h2>Deaths</h2>
+        <h3>Deaths</h3>
         <p class="legend">
-          <span><i class="swatch radiant"></i>a Radiant hero died</span>
-          <span><i class="swatch dire"></i>a Dire hero died</span>
+          <span><i class="swatch radiant"></i>green edge: a Radiant hero died</span>
+          <span><i class="swatch dire"></i>red edge: a Dire hero died</span>
         </p>
-        <MiniMap label="Map of the {match.deaths.length} hero deaths in this match">
-          {#each match.deaths.filter((d) => d.x !== null) as d}
-            {@const x = mapX(d.x!)}
-            {@const y = mapY(d.y!)}
-            <g class="cross {teamOf(d.player_slot)}">
-              <title>{deathNote(d)}</title>
-              <circle cx={x} cy={y} r="2.4" fill="transparent" stroke="none" />
-              <path class="halo" d="M{x - 1.5} {y - 1.5}L{x + 1.5} {y + 1.5}M{x - 1.5} {y + 1.5}L{x + 1.5} {y - 1.5}" />
-              <path d="M{x - 1.5} {y - 1.5}L{x + 1.5} {y + 1.5}M{x - 1.5} {y + 1.5}L{x + 1.5} {y - 1.5}" />
-            </g>
-          {/each}
+        <MiniMap label="Map of the {deathsShown.length} hero deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}">
+          {#each deathsShown as d}{@render fallenMark(d, 5.5)}{/each}
         </MiniMap>
       </section>
     </div>
 
     <h2>Teamfights</h2>
-    {#if match.teamfights.length === 0}
-      <p class="muted">No fight with three or more deaths.</p>
+    {#if fights.length === 0}
+      <p class="muted">No fight with three or more deaths after 10:00.</p>
     {:else}
       <p class="muted">
-        Three or more deaths less than 15 seconds apart. Faded heroes neither dealt nor took hero damage and did not die.
-        Click a fight to see where it happened and what each hero did.
+        Three or more deaths less than 15 seconds apart, from 10:00 on. Faded heroes neither dealt nor took hero damage
+        and did not die. Click a fight to see where it happened and what each hero did.
       </p>
       <div class="card">
         <table class="fights">
@@ -569,11 +618,11 @@
             </tr>
           </thead>
           <tbody>
-            {#each match.teamfights as fight (fight.n)}
+            {#each fights as fight (fight.n)}
               {@const radiant = fightPlayers(fight.n, true)}
               {@const dire = fightPlayers(fight.n, false)}
               {@const unfolded = open.includes(fight.n)}
-              {@const when = `${clock(Math.max(0, fight.start))} – ${clock(fight.end)}`}
+              {@const when = `${clock(fight.start)} – ${clock(fight.end)}`}
               <!-- the button in the row is the keyboard's way in; its click reaches this handler too -->
               <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
               <tr class="fight" class:unfolded onclick={() => toggle(fight.n)}>
@@ -604,18 +653,17 @@
                           </span>
                         {/each}
                         <p class="muted">How much more one team gained than the other during the fight. A full bar is the largest swing of this match.</p>
-                        <h3>Deaths</h3>
-                        <MiniMap label="Where the {dead.length} heroes died in the fight at {when}" view="{view.x} {view.y} {view.size} {view.size}">
-                          {#each dead as d}
-                            {@const x = mapX(d.x!)}
-                            {@const y = mapY(d.y!)}
-                            <g class="fallen {teamOf(d.player_slot)}">
-                              <title>{deathNote(d)}</title>
-                              <circle cx={x} cy={y} r={icon * 0.62} stroke-width={icon * 0.1} />
-                              <image href={heroIcon(hero.get(d.player_slot) ?? 0)} x={x - icon / 2} y={y - icon / 2} width={icon} height={icon} />
-                            </g>
-                          {/each}
+                        <h3>Deaths and wards</h3>
+                        <MiniMap label="Where the {dead.length} heroes died in the fight at {when}, and the wards standing there" view="{view.x} {view.y} {view.size} {view.size}">
+                          <!-- a ward that stood through the fight is a dark mark on a light one -->
+                          {#each match.wards.filter((w) => standing(w, fight.start)) as w}{@render wardMark(w, view.size * 0.04, 'light')}{/each}
+                          {#each match.wards.filter((w) => standing(w, fight.end)) as w}{@render wardMark(w, view.size * 0.022, 'dark')}{/each}
+                          {#each dead as d}{@render fallenMark(d, icon)}{/each}
                         </MiniMap>
+                        <p class="legend wardkey">
+                          <span><i class="swatch radiant light"></i><i class="swatch dire light"></i>ward up at {clock(fight.start)}</span>
+                          <span><i class="swatch radiant dark"></i><i class="swatch dire dark"></i>ward up at {clock(fight.end)}</span>
+                        </p>
                       </section>
                       <table>
                         <thead>
@@ -900,30 +948,90 @@
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 0 24px;
   }
+  .maps h3 {
+    font-size: 15px;
+  }
+  .mark.radiant,
+  .swatch.radiant {
+    --team: var(--radiant);
+  }
+  .mark.dire,
+  .swatch.dire {
+    --team: var(--dire);
+  }
   .mark {
     stroke: #fff;
-    stroke-width: 0.45;
+    fill: var(--team);
   }
-  .mark.radiant {
-    fill: var(--radiant);
+  /* in a fight: light for a ward up at its start, dark for one up at its end */
+  .mark.light {
+    fill: color-mix(in srgb, var(--team) 40%, #fff);
+    stroke: var(--team);
   }
-  .mark.dire {
-    fill: var(--dire);
+  .mark.dark {
+    fill: color-mix(in srgb, var(--team) 45%, #000);
   }
-  .cross path {
-    fill: none;
-    stroke-width: 0.8;
-    stroke-linecap: round;
+  .swatch.light {
+    background: color-mix(in srgb, var(--team) 40%, #fff);
   }
-  .cross .halo {
-    stroke: #fff;
-    stroke-width: 1.6;
+  .swatch.dark {
+    background: color-mix(in srgb, var(--team) 45%, #000);
   }
-  .cross.radiant path:not(.halo) {
-    stroke: var(--radiant);
+  .wardkey {
+    margin: 8px 0 0;
+    font-size: 13px;
   }
-  .cross.dire path:not(.halo) {
-    stroke: var(--dire);
+  .wardkey .swatch.radiant {
+    margin-right: 2px;
+  }
+
+  /* the heroes above the net worth chart: its legend, and the switches for its lines */
+  .pick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    margin-bottom: 10px;
+  }
+  .pick div {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .pick span {
+    margin-right: 6px;
+    padding-left: 9px;
+    color: var(--text-2);
+    font-weight: 600;
+  }
+  .pick .radiant span {
+    box-shadow: inset 3px 0 0 var(--radiant);
+  }
+  .pick .dire span {
+    box-shadow: inset 3px 0 0 var(--dire);
+  }
+  .pick button {
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    padding: 4px 6px 6px;
+    background: var(--surface);
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .pick i {
+    width: 28px;
+    border-top: 3px solid;
+  }
+  .pick i.dashed {
+    border-top-style: dashed;
+  }
+  .pick button[aria-pressed='false'] {
+    background: none;
+  }
+  .pick button[aria-pressed='false'] > * {
+    opacity: 0.3;
+    filter: grayscale(1);
   }
 
   .fights .when {
