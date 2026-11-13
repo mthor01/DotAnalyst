@@ -67,7 +67,7 @@
         axisPointer: { type: 'shadow' },
         formatter: (params: { dataIndex: number }[]) => {
           const r = top[params[0].dataIndex]
-          return `<b>${heroName(r.hero_id)}</b><br>${r.games} games · ${r.wins} won, ${r.games - r.wins} lost<br>Win rate ${percent(r.wins, r.games)}%`
+          return `<b>${heroName(r.hero_id)}</b><br>${r.games} games: ${r.wins} won, ${r.games - r.wins} lost<br>Win rate ${percent(r.wins, r.games)}%`
         },
       },
       axisPointer: { link: [{ yAxisIndex: 'all' }] },

@@ -142,11 +142,12 @@ This comes before the replay stats because replays expire: raw output collected 
   - `lanes` — the zone (top, mid, bot, jungle) where the player spent most of 0:00–10:00, time in a base not counted.
 - `GET /api/matches/{match_id}` returns the scoreboard and one list per derived table; the lists are empty without a parsed replay. An unknown match is a 404.
 - **Match page** (`#match/<id>`, linked from the date in the Matches table):
+  - Header in the layout of the game's top bar: Radiant portraits, kill score and duration, Dire portraits; the losing side dimmed.
   - Scoreboard.
+  - Team lead in net worth and in XP (area, green where Radiant leads, red where Dire leads).
   - Net worth per player over time (lines, one panel per team on a shared scale).
-  - Team lead in net worth and in XP (area, blue where Radiant leads, red where Dire leads).
-  - Laning table: last hits, denies, net worth, XP at 5:00 and 10:00 next to the lane opponent's.
-  - Items bought per player in order with the game time; consumables, wards and recipes left out.
+  - Laning: top, mid and bottom each once, Radiant's heroes against Dire's, with the lane's net worth and XP lead from 0:00 to 10:00 (all lane charts on one scale); then one row per hero at 10:00 with last hits, denies, net worth, XP, camps stacked and lotuses used. A game shorter than 10 minutes uses its last minute.
+  - Item timeline: one row per player, each item at the time it was bought, items from before 0:00 in their own column; consumables, wards and recipes left out.
   - Ward map and death map on the minimap image (`frontend/public/minimap.webp`, Valve's artwork as redrawn by the OpenDota project).
   - Teamfight list: time, deaths and damage per team, who took part.
 - Matches without a parsed replay show the scoreboard and say that no replay is available.
@@ -180,6 +181,17 @@ Known limit: the lane differences describe the lane, not the player, and a lane 
 - `uv run pytest` passes, with each metric function tested on the fixture replay against values worked out by hand.
 - `curl "http://localhost:8000/api/metrics?metric=lane_cs_diff&account_id=<id>"` returns one value per parsed match in which the account had a lane opponent.
 - The Trends page renders the rolling line for two accounts at once, and the Group page shows the pair win-rate table.
+
+## Design and profile page (November 2026)
+
+- **Look**: dark only. The page is slate; the two strong colours are the teams, Radiant green (`--radiant`) and Dire red (`--dire`), and wins and losses use the same green and red. Colour blindness is deliberately not considered. All colours are CSS variables in `frontend/src/app.css`; charts read them through `Chart.svelte`.
+- **Font**: Archivo, one variable file in `frontend/public/fonts/` (SIL Open Font License, licence text beside it). No request leaves the machine for it.
+- **Profile page** (first tab, for the selected account, after the shared filters): the last 25 or 100 matches.
+  - A wheel: inner ring the role, outer ring the heroes played in it, tinted by win rate. The role is the lane seen from the player's side (Radiant's safe lane is bottom, Dire's is top), so it exists only for matches with a parsed replay.
+  - The most played heroes with win rate and average K / D / A.
+  - One column per match: the lane's net worth lead at 10:00 (`lane_nw_diff`) as a bar, and the result.
+  - Win rate; lanes won, even (within 500 net worth) and lost; share of ranked matches; share of matches with another tracked account on the team. Steam's match data does not say who queued together, so there is no party share.
+- `GET /api/matches` carries what the profile needs per match: `radiant`, `lane`, `lane_nw_diff`, `with_tracked`.
 
 ## Risks
 

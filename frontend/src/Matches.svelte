@@ -69,7 +69,7 @@
               {/each}
             </td>
             <td class="muted">
-              {LOBBY_TYPES[r.lobby_type] ?? `Lobby ${r.lobby_type}`} · {GAME_MODES[r.game_mode] ?? `Mode ${r.game_mode}`}
+              {LOBBY_TYPES[r.lobby_type] ?? `Lobby ${r.lobby_type}`} {GAME_MODES[r.game_mode] ?? `Mode ${r.game_mode}`}
             </td>
             <td class="muted">{r.replay_state === 'parsed' ? 'Parsed' : '–'}</td>
           </tr>

@@ -566,7 +566,7 @@
   /* the game's own top bar: Radiant on the left, Dire on the right, the score between them */
   .faceoff {
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     gap: 12px 28px;
     margin-bottom: 20px;
@@ -648,7 +648,7 @@
   }
   @media (max-width: 860px) {
     .faceoff {
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
     .score {
       grid-row: 1;

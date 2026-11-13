@@ -66,7 +66,7 @@
   <h2>Heroes on my team and against me</h2>
   <p class="filters">
     <label>At least <input type="number" min="1" bind:value={minGames} style="width: 4em" /> games in total</label>
-    <span class="muted">{shown.length} of {matchups.length} heroes · win rates are always mine</span>
+    <span class="muted">{shown.length} of {matchups.length} heroes; win rates are always mine</span>
   </p>
   <div class="card">
     <table>
