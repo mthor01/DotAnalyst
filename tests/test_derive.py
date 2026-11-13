@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from dotanalyst import queries
 from dotanalyst.db import Base, Death, Derived, Lane, Match, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Ward
-from dotanalyst.derive import TABLES, derive, fights, read_log, recompute, zone
+from dotanalyst.derive import TABLES, derive, fights, positions, read_log, recompute, zone
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MATCH_ID = 8810606282
@@ -104,6 +104,16 @@ def test_wards(rows):
     assert (expired["player_slot"], expired["placed"], expired["removed"], expired["killed"]) == (0, -60, 300, False)
     assert (dewarded["player_slot"], dewarded["placed"], dewarded["removed"]) == (SHADOW_FIEND, -56, -43)
     assert (dewarded["killed"], dewarded["killed_by"]) == (True, PHOENIX)
+
+
+def test_positions():
+    """The 20 seconds before Phoenix's first death at 1:40."""
+    found = positions(FIXTURES / "8810606282.jsonl.gz", 80, 100)
+    assert len(found) == 210  # ten heroes, 21 seconds
+    at = {(p["time"], p["player_slot"]): p for p in found}
+    assert at[80, PHOENIX] == {"time": 80, "player_slot": PHOENIX, "x": 88.228516, "y": 163.85059, "alive": True}
+    assert (at[100, PHOENIX]["x"], at[100, PHOENIX]["y"]) == (83.84253, 164.08154)
+    assert (at[100, SHADOW_FIEND]["x"], at[100, SHADOW_FIEND]["y"]) == (126.23926, 129.03516)
 
 
 def test_zone():

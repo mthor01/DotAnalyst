@@ -32,6 +32,26 @@ def read_log(path: Path) -> list[dict]:
         return [event for event in map(json.loads, lines) if event["type"] in USED]
 
 
+def positions(path: Path, start: int, end: int) -> list[dict]:
+    """Where each hero was at every second from `start` to `end`. Not a derived table: ten rows a second for every
+    match is too much to store for a view that is rarely opened, so this reads the raw log when asked."""
+    player_slot, found = {}, []
+    with gzip.open(path, "rt", encoding="utf-8") as lines:
+        for line in lines:
+            if '"interval"' not in line and '"player_slot"' not in line:
+                continue  # parsing only these lines is what keeps this fast
+            e = json.loads(line)
+            if e["type"] == "player_slot":
+                player_slot[int(e["key"])] = e["value"]
+            elif e["type"] == "interval" and start <= e["time"] <= end and e.get("x") is not None:
+                found.append(e)
+    return [
+        {"time": e["time"], "player_slot": player_slot[e["slot"]], "x": e["x"], "y": e["y"], "alive": e.get("life_state") == 0}
+        for e in found
+        if e["slot"] in player_slot
+    ]  # fmt: skip
+
+
 class Log:
     """The events of one match plus the lookups every derivation needs. `slot` is the replay's 0-9 player index."""
 

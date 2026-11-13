@@ -9,8 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import queries
-from .db import Account, Hero, Item, open_engine
+from . import derive, queries
+from .db import DATA, Account, Hero, Item, open_engine
 from .metrics import NAMES
 from .poll import poll_forever
 
@@ -62,6 +62,14 @@ def match(session: Db, match_id: int) -> dict:
     if found is None:
         raise HTTPException(404, f"match {match_id} is not stored")
     return found
+
+
+@app.get("/api/matches/{match_id}/positions")
+def positions(match_id: int, start: int, end: int) -> list[dict]:
+    log = DATA / "raw" / f"{match_id}.jsonl.gz"
+    if not log.is_file():
+        raise HTTPException(404, f"no replay log for match {match_id}")
+    return derive.positions(log, start, end)
 
 
 @app.get("/api/metrics")
