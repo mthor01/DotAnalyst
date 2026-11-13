@@ -163,6 +163,17 @@ input {
   background: var(--raised);
   color: var(--text);
 }
+/* a button that does something right away */
+.action {
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--raised);
+  border: 0;
+  border-radius: 4px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
 
 /* a panel is a step lighter than the page; no outline, no shadow */
 .card {

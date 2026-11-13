@@ -3,7 +3,8 @@
   import Chart, { type Ink } from './lib/Chart.svelte'
   import { constants, heroIcon, heroName, heroPortrait, itemIcon, itemIconByName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
-  import MiniMap, { mapX, mapY } from './lib/MiniMap.svelte'
+  import MiniMap, { mapX, mapY, viewOf } from './lib/MiniMap.svelte'
+  import Playback from './lib/Playback.svelte'
 
   let { id }: { id: string } = $props()
   let match = $state<MatchDetail | null>(null)
@@ -16,7 +17,7 @@
     hidden = []
     period = null
     watching = null
-    playing = false
+    played = []
     get<MatchDetail>(`matches/${id}`).then(
       (found) => current && ((match = found), (error = '')),
       (e) => current && (error = e.message),
@@ -42,7 +43,9 @@
   // ---- net worth: every hero in one chart. Ten lines need two signs each: the colour is the hero's place in its
   // team, and Dire's lines are dashed. The heroes above the chart are its legend and switch lines off and on.
   let hidden = $state<number[]>([]) // player slots taken out of the chart
-  const pick = (slot: number) => (hidden = hidden.includes(slot) ? hidden.filter((s) => s !== slot) : [...hidden, slot])
+  /** The list without `n` if it is in it, with `n` if not. */
+  const flip = (list: number[], n: number) => (list.includes(n) ? list.filter((o) => o !== n) : [...list, n])
+  const pick = (slot: number) => (hidden = flip(hidden, slot))
   function netWorth(ink: Ink) {
     const rows = match!.player_minute
     const radiant = new Set(teams[0].map((p) => heroName(p.hero_id)))
@@ -292,7 +295,7 @@
   const FIGHTS_FROM = 600
   const fights = $derived((match?.teamfights ?? []).filter((f) => f.start >= FIGHTS_FROM))
   let open = $state<number[]>([])
-  const toggle = (n: number) => (open = open.includes(n) ? open.filter((o) => o !== n) : [...open, n])
+  const toggle = (n: number) => (open = flip(open, n))
   const signed = (n: number) => (n > 0 ? '+' : n < 0 ? '−' : '') + number(Math.abs(n))
   const GAINS = [
     ['net_worth_gain', 'Net worth'],
@@ -305,45 +308,11 @@
   const swingBound = $derived(GAINS.map(([key]) => Math.max(1, ...fights.map((f) => Math.abs(swing(f.n, key))))))
   const fallen = (fight: MatchDetail['teamfights'][number]) =>
     match!.deaths.filter((d) => d.x !== null && d.time >= fight.start && d.time <= fight.end)
-  const FIGHT_VIEW = 48 // cells; a fight is shown on at least this much of the 127-cell map
-  /** The square of the map that holds these deaths, with room around them, kept inside the map. */
-  function viewOf(deaths: { x: number | null; y: number | null }[]) {
-    if (!deaths.length) return { x: 0, y: 0, size: 127 }
-    const xs = deaths.map((d) => mapX(d.x!))
-    const ys = deaths.map((d) => mapY(d.y!))
-    const extent = (vs: number[]) => Math.max(...vs) - Math.min(...vs)
-    const size = Math.min(127, Math.max(FIGHT_VIEW, extent(xs) + 16, extent(ys) + 16))
-    const from = (vs: number[]) => Math.min(127 - size, Math.max(0, (Math.min(...vs) + Math.max(...vs) - size) / 2))
-    return { x: from(xs), y: from(ys), size }
-  }
 
-  // ---- a death, played back: where every hero stood in the 20 seconds before it. The positions are not part of the
-  // match; they are fetched for the one death that is watched
-  type Spot = { time: number; player_slot: number; x: number; y: number; alive: boolean }
+  // ---- playback (lib/Playback.svelte): the 20 seconds before a death, or a whole fight
   const REPLAY = 20 // seconds shown before a death
-  const TICK = 500 // ms one game second takes: double speed. The same time is in the CSS of .mover
   let watching = $state.raw<Death | null>(null)
-  let spots = $state.raw<Spot[] | null>(null) // null until they arrive
-  let replayError = $state('')
-  let frame = $state(0) // seconds into the playback
-  let playing = $state(false)
-  function watch(d: Death) {
-    ;[watching, spots, replayError, frame, playing] = [d, null, '', 0, false]
-    get<Spot[]>(`matches/${id}/positions`, `start=${d.time - REPLAY}&end=${d.time}`).then(
-      (rows) => watching === d && ((spots = rows), (playing = true)),
-      (e) => watching === d && (replayError = e.message),
-    )
-  }
-  $effect(() => {
-    if (!playing) return
-    const timer = setInterval(() => (frame >= REPLAY ? (playing = false) : (frame += 1)), TICK)
-    return () => clearInterval(timer)
-  })
-  const spotAt = $derived(new Map((spots ?? []).map((s) => [`${s.player_slot}:${s.time}`, s])))
-  /** The part of the map the dying hero crossed. */
-  const replayView = $derived(viewOf((spots ?? []).filter((s) => s.player_slot === watching?.player_slot)))
-  /** The dying hero last, so it is drawn on top. */
-  const cast = $derived([...players].sort((a, b) => +(a.player_slot === watching?.player_slot) - +(b.player_slot === watching?.player_slot)))
+  let played = $state<number[]>([]) // fights whose playback is shown
 </script>
 
 {#snippet side(team: MatchPlayer[], won: boolean)}
@@ -382,6 +351,10 @@
       />
     {/if}
   </g>
+{/snippet}
+
+{#snippet wardsAt(time: number, size: number)}
+  {#each (match?.wards ?? []).filter((w) => standing(w, time)) as w}{@render wardMark(w, size * 0.025, '')}{/each}
 {/snippet}
 
 {#snippet fallenMark(d: Death, icon: number)}
@@ -636,7 +609,7 @@
         <ul aria-label="Deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}">
           {#each deathsShown as d}
             <li>
-              <button aria-pressed={watching === d} onclick={() => watch(d)}>
+              <button aria-pressed={watching === d} onclick={() => (watching = d)}>
                 <span class="num">{clock(d.time)}</span>
                 <img src={heroIcon(hero.get(d.player_slot) ?? 0)} alt="" width="22" height="22" loading="lazy" />
                 {name(d.player_slot)}
@@ -653,45 +626,21 @@
               Choose a death to see the {REPLAY} seconds before it: every hero's position second by second, and the
               wards standing at that moment. The list follows the part of the game chosen above.
             </p>
-          {:else if replayError}
-            <p class="error" role="alert">{replayError}</p>
-          {:else if !spots}
-            <p class="muted">Loading…</p>
           {:else}
-            {@const now = watching.time - REPLAY + frame}
-            {@const icon = replayView.size * 0.085}
             <h3>{deathNote(watching)}</h3>
-            <div class:playing>
-              <MiniMap label="Positions of the heroes at {clock(now)}, {REPLAY - frame} seconds before {name(watching.player_slot)} died" view="{replayView.x} {replayView.y} {replayView.size} {replayView.size}">
-                {#each match.wards.filter((w) => standing(w, now)) as w}{@render wardMark(w, replayView.size * 0.025, '')}{/each}
-                {#each cast as p (p.player_slot)}
-                  {@const at = spotAt.get(`${p.player_slot}:${now}`)}
-                  {@const dies = p.player_slot === watching.player_slot}
-                  {#if at}
-                    <g
-                      class="fallen mover {teamOf(p.player_slot)}"
-                      class:down={!at.alive || (dies && frame === REPLAY)}
-                      style:transform="translate({mapX(at.x)}px, {mapY(at.y)}px)"
-                    >
-                      <title>{heroName(p.hero_id)}</title>
-                      {#if dies}<circle class="halo" r={icon * 0.82} stroke-width={icon * 0.1} />{/if}
-                      <circle r={icon * 0.62} stroke-width={icon * 0.1} />
-                      <image href={heroIcon(p.hero_id)} x={-icon / 2} y={-icon / 2} width={icon} height={icon} />
-                    </g>
-                  {/if}
-                {/each}
-              </MiniMap>
-            </div>
-            <p class="controls">
-              <button onclick={() => (frame >= REPLAY && (frame = 0), (playing = !playing))}>
-                {playing ? 'Pause' : frame >= REPLAY ? 'Play again' : 'Play'}
-              </button>
-              <input type="range" min="0" max={REPLAY} bind:value={frame} oninput={() => (playing = false)} aria-label="Second of the playback" />
-              <span>{clock(now)}</span>
-            </p>
+            <Playback
+              matchId={id}
+              start={watching.time - REPLAY}
+              end={watching.time}
+              {players}
+              points={[watching]}
+              follow={watching.player_slot}
+              wards={wardsAt}
+              label="the {REPLAY} seconds before {name(watching.player_slot)} died"
+            />
             <p class="muted">
-              Double speed. The hero with the white ring is the one that dies; a faded hero is dead. Wards as on the
-              map above: ● observer, ◆ sentry.
+              Double speed. The hero with the white ring is the one that dies; a faded hero is dead, and one that
+              teleports or blinks jumps. Wards as on the map above: ● observer, ◆ sentry.
             </p>
           {/if}
         </section>
@@ -771,6 +720,9 @@
                           <span><i class="swatch radiant light"></i><i class="swatch dire light"></i>ward up at {clock(fight.start)}</span>
                           <span><i class="swatch radiant dark"></i><i class="swatch dire dark"></i>ward up at {clock(fight.end)}</span>
                         </p>
+                        <button class="action" aria-expanded={played.includes(fight.n)} onclick={() => (played = flip(played, fight.n))}>
+                          {played.includes(fight.n) ? 'Close the playback' : 'Play back the fight'}
+                        </button>
                       </section>
                       <table>
                         <thead>
@@ -794,6 +746,24 @@
                           {/each}
                         </tbody>
                       </table>
+                      {#if played.includes(fight.n)}
+                        <section class="played">
+                          <h3>Playback, {when}</h3>
+                          <Playback
+                            matchId={id}
+                            start={fight.start}
+                            end={Math.min(fight.end, match.duration)}
+                            {players}
+                            points={dead}
+                            wards={wardsAt}
+                            label="during the fight at {when}"
+                          />
+                          <p class="muted">
+                            Double speed. A faded hero is dead, and one that teleports or blinks jumps. The wards are those
+                            standing at each moment: ● observer, ◆ sentry.
+                          </p>
+                        </section>
+                      {/if}
                     </div>
                   </td>
                 </tr>
@@ -1214,6 +1184,16 @@
     margin: 0 0 16px;
     font-size: 13px;
   }
+  .inside .action {
+    margin-top: 12px;
+  }
+  .played {
+    grid-column: 1 / -1;
+  }
+  .played .muted {
+    max-width: 520px;
+    margin: 0;
+  }
   .inside th.wide {
     width: 28%;
   }
@@ -1305,42 +1285,6 @@
     max-width: 520px;
     font-size: 13px;
   }
-  /* a hero slides to its next position in the time one second of the game takes: TICK in the script */
-  .playing .mover {
-    transition: transform 0.5s linear;
-  }
-  .mover.down {
-    opacity: 0.3;
-  }
-  .mover circle.halo {
-    fill: none;
-    stroke: #fff;
-  }
-  .controls {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    max-width: 520px;
-    margin: 10px 0 8px;
-    color: var(--text-2);
-    font-variant-numeric: tabular-nums;
-  }
-  .controls button {
-    min-width: 9ch;
-    padding: 4px 12px;
-    font: inherit;
-    font-weight: 600;
-    color: var(--text);
-    background: var(--raised);
-    border: 0;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  .controls input {
-    flex: 1;
-    margin: 0;
-    padding: 0;
-  }
   @media (max-width: 760px) {
     .inside,
     .playback {
@@ -1351,8 +1295,7 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .when button::after,
-    .playing .mover {
+    .when button::after {
       transition: none;
     }
   }

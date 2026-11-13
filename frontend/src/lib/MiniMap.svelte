@@ -4,6 +4,18 @@
   const clamp = (v: number) => Math.min(127, Math.max(0, v))
   export const mapX = (x: number) => clamp(x - 64)
   export const mapY = (y: number) => clamp(191 - y)
+
+  const CLOSE_UP = 48 // cells; a close-up shows at least this much of the 127-cell map
+  /** The square of the map that holds these places, with room around them, kept inside the map. */
+  export function viewOf(places: { x: number | null; y: number | null }[]) {
+    if (!places.length) return { x: 0, y: 0, size: 127 }
+    const xs = places.map((d) => mapX(d.x!))
+    const ys = places.map((d) => mapY(d.y!))
+    const extent = (vs: number[]) => Math.max(...vs) - Math.min(...vs)
+    const size = Math.min(127, Math.max(CLOSE_UP, extent(xs) + 16, extent(ys) + 16))
+    const from = (vs: number[]) => Math.min(127 - size, Math.max(0, (Math.min(...vs) + Math.max(...vs) - size) / 2))
+    return { x: from(xs), y: from(ys), size }
+  }
 </script>
 
 <script lang="ts">
