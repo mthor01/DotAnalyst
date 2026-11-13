@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session, aliased
 
-from .db import TABLES, Account, Match, MatchPlayer, Metric
+from .db import TABLES, Account, Lane, Match, MatchPlayer, Metric
 
 OTHER = aliased(MatchPlayer)
 IS_RADIANT = MatchPlayer.player_slot < 128
@@ -42,13 +42,27 @@ def _rows(session: Session, statement) -> list[dict]:
 
 
 def matches(session: Session, where: list) -> list[dict]:
+    """The account's matches, newest first. `lane` and `lane_nw_diff` are None without a parsed replay."""
     p = MatchPlayer
+    with_tracked = (
+        select(OTHER.match_id)
+        .join(Account, and_(Account.account_id == OTHER.account_id, Account.active))
+        .where(OTHER.match_id == p.match_id, OTHER.account_id != p.account_id, SAME_TEAM)
+        .exists()
+    )
     return _rows(
         session,
         _mine(
             Match.match_id, Match.start_time, Match.duration, Match.game_mode, Match.lobby_type,
             Match.replay_state, WON.label("win"), p.hero_id, p.kills, p.deaths, p.assists,
             p.last_hits, p.denies, p.gold_per_min, p.xp_per_min, p.net_worth, p.items,
+            IS_RADIANT.label("radiant"), Lane.lane, Metric.value.label("lane_nw_diff"),
+            with_tracked.label("with_tracked"),
+        )
+        .outerjoin(Lane, and_(Lane.match_id == p.match_id, Lane.player_slot == p.player_slot))
+        .outerjoin(
+            Metric,
+            and_(Metric.match_id == p.match_id, Metric.player_slot == p.player_slot, Metric.name == "lane_nw_diff"),
         )
         .where(*where)
         .order_by(Match.start_time.desc()),

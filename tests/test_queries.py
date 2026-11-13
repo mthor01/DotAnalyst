@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from dotanalyst import queries
-from dotanalyst.db import Account, Base
+from dotanalyst.db import Account, Base, Derived, Lane, Metric
 from dotanalyst.steam import ANONYMOUS, store_match
 
 TEMPLATE = json.loads((Path(__file__).parent / "fixtures" / "details_by_seq.json").read_text(encoding="utf-8"))[
@@ -41,6 +41,7 @@ MATCHES = [
 def session():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
+    Derived.metadata.create_all(engine)
     with Session(engine) as s:
         s.add_all([Account(account_id=ME), Account(account_id=FRIEND, label="friend")])
         s.add(Account(account_id=STRANGER, active=False))
@@ -62,6 +63,25 @@ def test_matches_newest_first_with_result(session):
     mine = MATCHES[0]["players"][0]
     assert (rows[2]["kills"], rows[2]["gold_per_min"]) == (mine["kills"], mine["gold_per_min"])
     assert rows[2]["items"][:6] == [mine[f"item_{i}"] for i in range(6)]
+
+
+def test_matches_carry_side_lane_and_company(session):
+    session.add_all(
+        [
+            Lane(match_id=1, player_slot=0, lane="mid"),
+            Metric(match_id=1, player_slot=0, name="lane_nw_diff", value=-250),
+            Metric(match_id=1, player_slot=0, name="obs_placed", value=2),  # another metric must not double the row
+        ]
+    )
+    rows = {r["match_id"]: r for r in queries.matches(session, queries.conditions(ME))}
+    assert len(rows) == 3
+
+    def extras(match_id):
+        return tuple(rows[match_id][key] for key in ("radiant", "lane", "lane_nw_diff", "with_tracked"))
+
+    assert extras(1) == (True, "mid", -250, True)
+    assert extras(2) == (False, None, None, False)  # no replay stats; the friend was on the other team
+    assert extras(3) == (True, None, None, True)
 
 
 def test_filters(session):
