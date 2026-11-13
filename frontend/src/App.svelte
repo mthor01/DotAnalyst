@@ -5,15 +5,16 @@
   import Match from './Match.svelte'
   import Matches from './Matches.svelte'
   import Group from './Group.svelte'
+  import Profile from './Profile.svelte'
   import Teammates from './Teammates.svelte'
   import Trends from './Trends.svelte'
 
-  const PAGES = { matches: 'Matches', heroes: 'Heroes', teammates: 'Teammates & matchups', trends: 'Trends', group: 'Group' }
+  const PAGES = { profile: 'Profile', matches: 'Matches', heroes: 'Heroes', teammates: 'Teammates & matchups', trends: 'Trends', group: 'Group' }
   const ALL_ACCOUNTS: Page[] = ['trends', 'group'] // these pages show every tracked account at once
   type Page = keyof typeof PAGES
   let hash = $state(location.hash.slice(1))
-  const page = $derived<Page>(hash in PAGES ? (hash as Page) : 'matches')
-  const matchId = $derived(/^match\/(\d+)$/.exec(hash)?.[1]) // #match/123 is one match, outside the three pages
+  const page = $derived<Page>(hash in PAGES ? (hash as Page) : 'profile')
+  const matchId = $derived(/^match\/(\d+)$/.exec(hash)?.[1]) // #match/123 is one match, outside the pages above
   let accounts = $state<Account[]>([])
   let error = $state('')
   let filters = $state({ account_id: '', lobby_type: '', game_mode: '', date_from: '', date_to: '' })
@@ -83,6 +84,8 @@
     <Match id={matchId} />
   {:else if !filters.account_id}
     <p class="muted">No tracked accounts yet. Add one with <code>dotanalyst add-account</code>.</p>
+  {:else if page === 'profile'}
+    <Profile {query} account={accounts.find((a) => String(a.account_id) === filters.account_id)} />
   {:else if page === 'matches'}
     <Matches {query} />
   {:else if page === 'heroes'}

@@ -18,6 +18,11 @@ export type MatchRow = {
   xp_per_min: number
   net_worth: number
   items: number[]
+  radiant: boolean
+  /** The next three come from the replay: null without one. `lane_nw_diff` is also null outside the three lanes. */
+  lane: 'top' | 'mid' | 'bot' | 'jungle' | null
+  lane_nw_diff: number | null
+  with_tracked: boolean
 }
 
 export type HeroRow = {
