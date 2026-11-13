@@ -1,86 +1,133 @@
-:root {
-  color-scheme: light dark;
-  --page: #f9f9f7;
-  --surface: #fcfcfb;
-  --text: #0b0b0b;
-  --text-2: #52514e;
-  --muted: #898781;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.1);
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-4: #eda100;
-  --series-5: #e87ba4;
-  --radiant: #2a78d6;
-  --dire: #e34948;
-  --good: #0ca30c;
-  --critical: #d03b3b;
+/* Archivo, SIL Open Font License (public/fonts/OFL.txt). One file holds every weight and width. */
+@font-face {
+  font-family: Archivo;
+  src: url('/fonts/archivo.woff2') format('woff2');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --text: #f0efec;
-    --text-2: #c3c2b7;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --border: rgba(255, 255, 255, 0.1);
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --series-4: #c98500;
-    --series-5: #d55181;
-    --radiant: #3987e5;
-    --dire: #e66767;
-  }
+
+/* Colour means side: the page is slate, and the two strong colours are the two teams. */
+:root {
+  color-scheme: dark;
+  --page: #151a21;
+  --surface: #1e252e;
+  --raised: #29323d;
+  --text: #e4e7ea;
+  --text-2: #b6bec8;
+  --muted: #8b95a3;
+  --grid: #2b343f;
+  --axis: #3d4855;
+  --border: rgba(228, 231, 234, 0.1);
+  --series-1: #4d95ea;
+  --series-2: #e0703f;
+  --series-3: #2bb3a3;
+  --series-4: #d9a520;
+  --series-5: #d867a0;
+  --radiant: #8fc24a;
+  --dire: #e2553f;
+  --good: var(--radiant);
+  --critical: var(--dire);
+  --narrow: 84%;
+  --wide: 118%;
 }
 
 body {
   margin: 0;
   background: var(--page);
   color: var(--text);
-  font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 14px/1.45 Archivo, system-ui, 'Segoe UI', sans-serif;
 }
 main {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 0 24px 64px;
 }
 h1 {
-  font-size: 18px;
+  font-size: 16px;
   margin: 0;
 }
 h2 {
-  font-size: 15px;
-  margin: 24px 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+  font-stretch: var(--wide);
+  margin: 36px 0 10px;
 }
-header,
+h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+p {
+  max-width: 78ch;
+}
+a {
+  color: inherit;
+  text-decoration-color: var(--axis);
+  text-underline-offset: 3px;
+}
+a:hover {
+  text-decoration-color: currentColor;
+}
+:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 28px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-stretch: 125%;
+  text-decoration: none;
+}
+/* the map in one square: Radiant's corner bottom left, Dire's top right */
+.brand::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  background: linear-gradient(45deg, var(--radiant) 50%, var(--dire) 50%);
+}
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 22px;
+}
+nav a {
+  padding: 17px 0 15px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-weight: 500;
+  text-decoration: none;
+}
+nav a:hover {
+  color: var(--text);
+}
+nav a[aria-current='page'] {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}
+.who {
+  margin-left: auto;
+}
 .filters {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
-  margin-bottom: 12px;
-}
-nav {
-  display: flex;
-  gap: 4px;
-}
-nav a {
-  padding: 4px 10px;
-  border-radius: 6px;
-  color: var(--text-2);
-  text-decoration: none;
-}
-nav a[aria-current='page'] {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 0 0 1px var(--border);
+  gap: 8px 18px;
+  margin-bottom: 16px;
 }
 label {
-  color: var(--text-2);
+  color: var(--muted);
 }
 select,
 input {
@@ -88,14 +135,19 @@ input {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 3px 6px;
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-left: 4px;
 }
+
+/* a panel is a step lighter than the page; no outline, no shadow */
 .card {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   overflow-x: auto;
+}
+.card.chart {
+  padding: 14px;
 }
 table {
   width: 100%;
@@ -104,7 +156,7 @@ table {
 }
 th,
 td {
-  padding: 5px 10px;
+  padding: 7px 12px;
   text-align: left;
   white-space: nowrap;
   border-bottom: 1px solid var(--grid);
@@ -112,21 +164,28 @@ td {
 tbody tr:last-child td {
   border-bottom: 0;
 }
+tbody tr:hover td {
+  background: var(--raised);
+}
 th {
-  color: var(--text-2);
+  color: var(--muted);
+  font-size: 13px;
   font-weight: 600;
+  font-stretch: var(--narrow);
 }
 .num {
   text-align: right;
 }
 th button {
   font: inherit;
-  font-weight: 600;
   color: inherit;
   background: none;
   border: 0;
   padding: 0;
   cursor: pointer;
+}
+th[aria-sort] {
+  color: var(--text);
 }
 .muted {
   color: var(--muted);
@@ -139,7 +198,7 @@ th button {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  margin-right: 6px;
+  margin-right: 7px;
 }
 .dot.won {
   background: var(--good);
@@ -147,9 +206,38 @@ th button {
 .dot.lost {
   background: var(--critical);
 }
+/* a block that belongs to one team carries that team's colour on its edge */
+.radiant-edge {
+  box-shadow: inset 3px 0 0 var(--radiant);
+}
+.dire-edge {
+  box-shadow: inset 3px 0 0 var(--dire);
+}
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+}
+.swatch.radiant {
+  background: var(--radiant);
+}
+.swatch.dire {
+  background: var(--dire);
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 8px;
+  color: var(--text-2);
+}
+.items img {
+  vertical-align: middle;
+  border-radius: 2px;
+  margin-right: 2px;
+}
 [hidden] {
   display: none !important;
-}
-a {
-  color: inherit;
 }

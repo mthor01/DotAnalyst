@@ -39,17 +39,14 @@
 <svelte:window onhashchange={() => (hash = location.hash.slice(1))} />
 
 <main>
-  <header>
-    <h1>DotAnalyst</h1>
+  <header class="top">
+    <h1><a class="brand" href="#{Object.keys(PAGES)[0]}">DotAnalyst</a></h1>
     <nav aria-label="Pages">
       {#each Object.entries(PAGES) as [id, title]}
         <a href="#{id}" aria-current={!matchId && page === id ? 'page' : undefined}>{title}</a>
       {/each}
     </nav>
-  </header>
-
-  <div class="filters" hidden={!!matchId}>
-    <label hidden={ALL_ACCOUNTS.includes(page)}>
+    <label class="who" hidden={!!matchId || ALL_ACCOUNTS.includes(page)}>
       Account
       <select bind:value={filters.account_id}>
         {#each accounts as a}
@@ -57,6 +54,9 @@
         {/each}
       </select>
     </label>
+  </header>
+
+  <div class="filters" hidden={!!matchId}>
     <label>
       Lobby
       <select bind:value={filters.lobby_type}>

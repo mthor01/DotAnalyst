@@ -46,7 +46,6 @@
     const heroes = { type: 'category', inverse: true, data: top.map((r) => heroName(r.hero_id)) }
     const hidden = { axisLabel: { show: false }, axisTick: { show: false }, axisLine: { show: false } }
     return {
-      textStyle: { fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif' },
       title: [
         { text: 'Games', left: 130, top: 0, textStyle: { color: ink['text-2'], fontSize: 12, fontWeight: 600 } },
         { text: 'Win rate', left: '58%', top: 0, textStyle: { color: ink['text-2'], fontSize: 12, fontWeight: 600 } },
@@ -66,9 +65,6 @@
       tooltip: {
         trigger: 'axis',
         axisPointer: { type: 'shadow' },
-        backgroundColor: ink.surface,
-        borderColor: ink.grid,
-        textStyle: { color: ink.text },
         formatter: (params: { dataIndex: number }[]) => {
           const r = top[params[0].dataIndex]
           return `<b>${heroName(r.hero_id)}</b><br>${r.games} games · ${r.wins} won, ${r.games - r.wins} lost<br>Win rate ${percent(r.wins, r.games)}%`
@@ -131,9 +127,3 @@
     </table>
   </div>
 {/if}
-
-<style>
-  .chart {
-    padding: 12px;
-  }
-</style>

@@ -39,7 +39,6 @@
   function option(ink: Ink) {
     const date = (ms: number) => new Date(ms).toLocaleDateString(undefined, { dateStyle: 'medium' })
     return {
-      textStyle: { fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif' },
       grid: { left: 64, right: 110, top: 16, bottom: 28 },
       xAxis: {
         type: 'time',
@@ -56,9 +55,6 @@
       },
       tooltip: {
         trigger: 'axis',
-        backgroundColor: ink.surface,
-        borderColor: ink.grid,
-        textStyle: { color: ink.text },
         formatter: (params: { marker: string; seriesName: string; value: [number, number] }[]) =>
           params
             .map((p) => `${p.marker}${p.seriesName}, ${date(p.value[0])} <b style="float:right;margin-left:16px">${metric.show(p.value[1])}</b>`)
@@ -126,14 +122,9 @@
 
 <style>
   .chart {
-    padding: 12px;
     margin-bottom: 16px;
   }
   .swatch {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-    margin: 0 6px 0 2px;
+    margin-left: 2px;
   }
 </style>

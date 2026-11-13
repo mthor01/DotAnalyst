@@ -78,11 +78,3 @@
     </table>
   </div>
 {/if}
-
-<style>
-  .items img {
-    vertical-align: middle;
-    border-radius: 3px;
-    margin-right: 2px;
-  }
-</style>
