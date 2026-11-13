@@ -90,6 +90,8 @@ class PlayerMinute(Derived):
     net_worth: Mapped[int]
     last_hits: Mapped[int]
     denies: Mapped[int]
+    camps_stacked: Mapped[int]  # so far, like every column here
+    lotuses: Mapped[int]  # eaten; the replay does not say who picked one up
 
 
 class Purchase(Derived):

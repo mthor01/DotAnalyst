@@ -69,7 +69,7 @@ export type MatchDetail = {
   lobby_type: number
   replay_state: string
   players: MatchPlayer[]
-  player_minute: { player_slot: number; minute: number; gold: number; xp: number; net_worth: number; last_hits: number; denies: number }[]
+  player_minute: { player_slot: number; minute: number; gold: number; xp: number; net_worth: number; last_hits: number; denies: number; camps_stacked: number; lotuses: number }[]
   purchases: { player_slot: number; time: number; item: string }[]
   deaths: { player_slot: number; time: number; x: number | null; y: number | null; killer_slot: number | null; in_teamfight: boolean }[]
   teamfights: { n: number; start: number; end: number; deaths: number }[]

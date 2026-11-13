@@ -133,7 +133,7 @@ This comes before the replay stats because replays expire: raw output collected 
 ## Milestone 4 — Replay stats and the match page
 
 - `recompute` drops the derived tables and rebuilds them from raw output (about 1 second per match). The poller computes the same rows for each newly parsed match, so `recompute` is only needed after a derivation changes.
-  - `player_minute` — total gold earned, XP, net worth, last hits, denies per player per minute.
+  - `player_minute` — total gold earned, XP, net worth, last hits, denies, camps stacked and lotuses eaten so far, per player per minute. The parser does not report who picks a lotus up, only who eats one (`DOTA_COMBATLOG_ITEM` with `item_famango`); a combined lotus counts as the lotuses it was made from.
   - `purchases` — item and time.
   - `deaths` — time, position, killing hero if any, whether inside a teamfight.
   - `teamfights` — a window opens 15 s before a hero death and closes 15 s after the last one; deaths less than 15 s apart belong to the same window. It counts as a teamfight when 3 or more heroes died.

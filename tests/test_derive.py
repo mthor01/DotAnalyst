@@ -27,6 +27,14 @@ def test_per_minute_numbers(rows):
     assert max(r["minute"] for r in rows[PlayerMinute]) == 15  # the game ended at 15:11
 
 
+def test_stacks_and_lotuses(rows):
+    at = {(r["player_slot"], r["minute"]): r for r in rows[PlayerMinute]}
+    assert [at[slot, 10]["camps_stacked"] for slot in (DAWNBREAKER, 1, PHOENIX)] == [0, 1, 6]  # the replay's own count
+    # Legion Commander (slot 4) ate a lotus at 3:02, 11:53 and 12:54, Luna (slot 1) one at 5:56, Dawnbreaker none
+    assert [at[4, minute]["lotuses"] for minute in (3, 4, 10, 12, 13, 15)] == [0, 1, 1, 2, 3, 3]
+    assert (at[1, 5]["lotuses"], at[1, 10]["lotuses"], at[DAWNBREAKER, 15]["lotuses"]) == (0, 1, 0)
+
+
 def test_purchases(rows):
     luna = [(r["time"], r["item"]) for r in rows[Purchase] if r["player_slot"] == 1]
     assert luna[:2] == [(-89, "magic_stick"), (-89, "tango")]

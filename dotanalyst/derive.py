@@ -15,8 +15,10 @@ from .metrics import METRICS
 
 USED = {
     "interval", "player_slot", "death_tick", "obs", "sen", "obs_left", "sen_left",
-    "DOTA_COMBATLOG_DEATH", "DOTA_COMBATLOG_DAMAGE", "DOTA_COMBATLOG_PURCHASE",
+    "DOTA_COMBATLOG_DEATH", "DOTA_COMBATLOG_DAMAGE", "DOTA_COMBATLOG_PURCHASE", "DOTA_COMBATLOG_ITEM",
 }  # fmt: skip
+# a combined lotus counts as the lotuses it was made from
+LOTUSES = {"item_famango": 1, "item_great_famango": 3, "item_greater_famango": 6}
 FIGHT_GAP = 15  # seconds without a death that end a fight; also how long before the first death it starts
 FIGHT_DEATHS = 3
 LANING_END = 600
@@ -64,6 +66,11 @@ class Log:
 
 
 def minutes(log: Log) -> list[dict]:
+    eaten = [
+        (e["time"], log.hero_slot[e["attackername"]], LOTUSES[e["inflictor"]])
+        for e in log.events
+        if e["type"] == "DOTA_COMBATLOG_ITEM" and e.get("inflictor") in LOTUSES and e.get("attackername") in log.hero_slot
+    ]
     rows = []
     for slot, player_slot in sorted(log.player_slot.items()):
         for minute in range(log.end // 60 + 1):
@@ -73,6 +80,8 @@ def minutes(log: Log) -> list[dict]:
                     {
                         "player_slot": player_slot, "minute": minute, "gold": e["gold"], "xp": e["xp"],
                         "net_worth": e["networth"], "last_hits": e["lh"], "denies": e["denies"],
+                        "camps_stacked": e.get("camps_stacked", 0),
+                        "lotuses": sum(n for time, who, n in eaten if who == slot and time <= minute * 60),
                     }  # fmt: skip
                 )
     return rows
