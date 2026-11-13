@@ -580,21 +580,31 @@
     justify-content: flex-end;
   }
   .side figure {
-    flex: 0 1 104px;
+    flex: 1 1 0;
+    max-width: 104px;
     margin: 0;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
   }
   .side img {
-    display: block;
     width: 100%;
     height: auto;
-    border-bottom: 3px solid;
   }
-  figure.radiant img {
-    border-color: var(--radiant);
+  /* the team's bar sits between portrait and name, and is not dimmed with a losing portrait */
+  .side figure::before {
+    content: '';
+    order: 1;
+    height: 3px;
   }
-  figure.dire img {
-    border-color: var(--dire);
+  figure.radiant::before {
+    background: var(--radiant);
+  }
+  figure.dire::before {
+    background: var(--dire);
+  }
+  figcaption {
+    order: 2;
   }
   .side.lost img {
     filter: saturate(0.35) brightness(0.75);
