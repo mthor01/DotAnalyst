@@ -1,7 +1,7 @@
 <script lang="ts">
   import { GAME_MODES, LOBBY_TYPES, clock, get, type MatchDetail, type MatchPlayer } from './lib/api'
   import Chart, { type Ink } from './lib/Chart.svelte'
-  import { constants, heroIcon, heroName, itemIcon, itemIconByName } from './lib/constants.svelte'
+  import { constants, heroIcon, heroName, heroPortrait, itemIcon, itemIconByName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import MiniMap, { mapX, mapY } from './lib/MiniMap.svelte'
 
@@ -22,9 +22,9 @@
   const TEAMS = ['Radiant', 'Dire'] as const
   const isRadiant = (slot: number) => slot < 128
   const teamOf = (slot: number) => (isRadiant(slot) ? 'radiant' : 'dire')
-  const number = (n: number | null) => (n === null ? '–' : n.toLocaleString()) // Steam omits some stats for older matches
+  const number = (n: number | null | undefined) => (n == null ? '–' : n.toLocaleString()) // Steam omits some stats for older matches
   const thousands = (n: number) => (n === 0 ? '0' : `${Math.round(n / 100) / 10}k`)
-  const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
+  const sum = (values: number[]) => values.reduce((a, b) => a + b, 0)
 
   const players = $derived(match?.players ?? [])
   const teams = $derived([players.filter((p) => isRadiant(p.player_slot)), players.filter((p) => !isRadiant(p.player_slot))])
@@ -32,6 +32,7 @@
   const name = (slot: number | null) => (slot === null ? '' : heroName(hero.get(slot) ?? 0))
   const hasReplay = $derived(!!match?.player_minute.length)
   const lastMinute = $derived(Math.max(0, ...(match?.player_minute ?? []).map((r) => r.minute)))
+  const minuteRow = $derived(new Map((match?.player_minute ?? []).map((r) => [`${r.player_slot}:${r.minute}`, r])))
 
   // ---- net worth: one panel per team, so five lines and five colours each, on one shared scale
   function netWorth(ink: Ink) {
@@ -55,7 +56,6 @@
       })),
     )
     return {
-      textStyle: { fontFamily: FONT },
       title: TEAMS.map((text, panel) => ({
         text,
         left: panel ? '55%' : '5%',
@@ -87,9 +87,6 @@
       axisPointer: { link: [{ xAxisIndex: 'all' }] },
       tooltip: {
         trigger: 'axis',
-        backgroundColor: ink.surface,
-        borderColor: ink.grid,
-        textStyle: { color: ink.text },
         formatter: (params: { axisIndex: number; seriesName: string; marker: string; value: [number, number] }[]) =>
           `<b>${params[0].value[0]}:00</b>` +
           [0, 1]
@@ -108,16 +105,25 @@
     }
   }
 
-  // ---- team lead: Radiant total minus Dire total, net worth and XP in their own panels (different units)
-  const lead = $derived.by(() => {
-    const sums = Array.from({ length: lastMinute + 1 }, () => ({ net_worth: 0, xp: 0 }))
-    for (const r of match?.player_minute ?? []) {
-      const sign = isRadiant(r.player_slot) ? 1 : -1
-      sums[r.minute].net_worth += sign * r.net_worth
-      sums[r.minute].xp += sign * r.xp
-    }
-    return sums
-  })
+  // ---- leads: Radiant's total minus Dire's, for the whole teams and for each lane
+  type Lead = { net_worth: number; xp: number }
+  const MEASURES = [
+    ['net_worth', 'Net worth'],
+    ['xp', 'Experience'],
+  ] as const
+  const ahead = (v: number) => (v === 0 ? 'even' : `${v > 0 ? 'Radiant' : 'Dire'} +${number(Math.abs(v))}`)
+  /** Radiant's lead among these players at each minute from 0 to `minutes`. */
+  function leadOf(group: MatchPlayer[], minutes: number): Lead[] {
+    return Array.from({ length: minutes + 1 }, (_, minute) => {
+      const lead = { net_worth: 0, xp: 0 }
+      for (const p of group) {
+        const row = minuteRow.get(`${p.player_slot}:${minute}`)
+        const sign = isRadiant(p.player_slot) ? 1 : -1
+        if (row) (lead.net_worth += sign * row.net_worth), (lead.xp += sign * row.xp)
+      }
+      return lead
+    })
+  }
   /** Adds the point where a series crosses zero, so a fill clipped at zero ends exactly on the line. */
   function withCrossings(points: number[][]): number[][] {
     return points.flatMap(([x, v], i) => {
@@ -125,30 +131,27 @@
       return next && v * next[1] < 0 ? [[x, v], [x + (next[0] - x) * (v / (v - next[1])), 0]] : [[x, v]]
     })
   }
-  function teamLead(ink: Ink) {
-    const MEASURES = [
-      ['net_worth', 'Net worth'],
-      ['xp', 'Experience'],
-    ] as const
-    const ahead = (v: number) => (v === 0 ? 'even' : `${v > 0 ? 'Radiant' : 'Dire'} +${number(Math.abs(v))}`)
-    return {
-      textStyle: { fontFamily: FONT },
+  /** A lead over time: net worth and experience in their own panels (different units). `bound` fixes both scales,
+   *  so charts drawn side by side can be compared. */
+  function leadChart(lead: Lead[], bound?: number) {
+    const last = lead.length - 1
+    return (ink: Ink) => ({
       title: MEASURES.map(([, text], i) => ({
         text,
-        left: 56,
+        left: 48,
         top: i ? '52%' : 0,
         textStyle: { color: ink['text-2'], fontSize: 12, fontWeight: 600 },
       })),
       grid: [
-        { left: 56, right: 24, top: 26, bottom: '54%' },
-        { left: 56, right: 24, top: '58%', bottom: 28 },
+        { left: 48, right: 16, top: 26, bottom: '54%' },
+        { left: 48, right: 16, top: '58%', bottom: 28 },
       ],
       xAxis: [0, 1].map((gridIndex) => ({
         type: 'value',
         gridIndex,
         min: 0,
-        max: lastMinute,
-        minInterval: 5,
+        max: last,
+        minInterval: last > 15 ? 5 : 2,
         axisLabel: { show: gridIndex === 1, color: ink.muted, formatter: '{value}:00' },
         axisLine: { show: false },
         axisTick: { show: false },
@@ -157,31 +160,29 @@
       yAxis: [0, 1].map((gridIndex) => ({
         type: 'value',
         gridIndex,
+        min: bound && -bound,
+        max: bound,
         axisLabel: { color: ink.muted, formatter: (v: number) => thousands(Math.abs(v)) },
         splitLine: { lineStyle: { color: ink.grid } },
       })),
       axisPointer: { link: [{ xAxisIndex: 'all' }] },
       tooltip: {
         trigger: 'axis',
-        backgroundColor: ink.surface,
-        borderColor: ink.grid,
-        textStyle: { color: ink.text },
         formatter: (params: { axisValue: number }[]) => {
-          const minute = Math.min(lastMinute, Math.round(params[0].axisValue)) // a fill may add a point between minutes
-          const at = lead[minute]
-          return `<b>${minute}:00</b><br>Net worth: ${ahead(at.net_worth)}<br>Experience: ${ahead(at.xp)}`
+          const minute = Math.min(last, Math.round(params[0].axisValue)) // a fill may add a point between minutes
+          return `<b>${minute}:00</b><br>Net worth: ${ahead(lead[minute].net_worth)}<br>Experience: ${ahead(lead[minute].xp)}`
         },
       },
       // the sign carries the meaning, so the fill colour follows it; the line itself stays neutral
       series: MEASURES.flatMap(([key, text], i) => {
-        const points = withCrossings(lead.map((sum, minute) => [minute, sum[key]]))
+        const points = withCrossings(lead.map((at, minute) => [minute, at[key]]))
         const panel = { type: 'line', xAxisIndex: i, yAxisIndex: i, showSymbol: false }
         const fill = (name: string, color: string, part: (v: number) => number) => ({
           ...panel,
           name,
           data: points.map(([x, v]) => [x, part(v)]),
           lineStyle: { width: 0 },
-          areaStyle: { color, opacity: 0.3 },
+          areaStyle: { color, opacity: 0.4 },
           silent: true,
         })
         return [
@@ -203,28 +204,57 @@
           fill('Dire ahead', ink.dire, (v) => Math.min(v, 0)),
         ]
       }),
-    }
+    })
   }
 
-  // ---- laning: my numbers next to my lane opponent's
-  const LANING_MINUTES = [5, 10]
-  const LANING_STATS = [
-    ['last_hits', 'LH'],
-    ['denies', 'DN'],
-    ['net_worth', 'NW'],
-    ['xp', 'XP'],
-  ] as const
-  const minuteRow = $derived(new Map((match?.player_minute ?? []).map((r) => [`${r.player_slot}:${r.minute}`, r])))
-  const lane = $derived(new Map((match?.lanes ?? []).map((l) => [l.player_slot, l])))
+  // ---- laning: each lane once, Radiant's heroes against Dire's, up to 10:00 (or the end of a shorter game)
+  const LANES = { top: 'Top', mid: 'Mid', bot: 'Bottom', jungle: 'Jungle' } as const
+  const LANE_ORDER = Object.keys(LANES)
+  const laneMinute = $derived(Math.min(10, lastMinute))
+  const laneOf = $derived(new Map((match?.lanes ?? []).map((l) => [l.player_slot, l.lane])))
+  const lanes = $derived(
+    (['top', 'mid', 'bot'] as const).map((lane) => {
+      const there = players.filter((p) => laneOf.get(p.player_slot) === lane)
+      const sides = [there.filter((p) => isRadiant(p.player_slot)), there.filter((p) => !isRadiant(p.player_slot))]
+      // a lead needs both sides in the lane
+      return { lane, sides, lead: sides[0].length && sides[1].length ? leadOf(there, laneMinute) : null }
+    }),
+  )
+  /** One scale for every lane chart: the largest lead in any lane, rounded up to a full thousand. */
+  const laneBound = $derived(
+    Math.max(1000, Math.ceil(Math.max(...lanes.flatMap((l) => (l.lead ?? []).flatMap((at) => [Math.abs(at.net_worth), Math.abs(at.xp)]))) / 1000) * 1000),
+  )
+  const laneRank = (p: MatchPlayer) => (LANE_ORDER.indexOf(laneOf.get(p.player_slot) ?? '') + 9) % 9 // no lane sorts last
+  const byLane = (team: MatchPlayer[]) => [...team].sort((a, b) => laneRank(a) - laneRank(b))
 
-  // ---- purchases: the build, without what is bought over and over
+  // ---- purchases on a timeline, without what is bought over and over
   const UNLISTED = new Set([
     'tango', 'tango_single', 'clarity', 'flask', 'enchanted_mango', 'famango', 'faerie_fire', 'tpscroll',
     'ward_observer', 'ward_sentry', 'ward_dispenser', 'smoke_of_deceit', 'dust', 'blood_grenade', 'tome_of_knowledge',
   ]) // prettier-ignore
-  const build = (slot: number) =>
-    match!.purchases.filter((b) => b.player_slot === slot && !UNLISTED.has(b.item) && !b.item.startsWith('recipe'))
   const itemName = (item: string) => item.replaceAll('_', ' ')
+  const ICON = 29 // px one item takes on the timeline, gap included
+  const ROW = 23
+  let trackWidth = $state(0)
+  const span = $derived(Math.max(match?.duration ?? 0, ...(match?.purchases ?? []).map((b) => b.time), 1))
+  const timeX = (seconds: number) => (seconds / span) * Math.max(trackWidth - ICON, 0)
+  const ticks = $derived(Array.from({ length: Math.floor(span / 600) + 1 }, (_, i) => i * 600))
+  /** A player's build: what was bought before the horn, and everything after placed by time. Items bought too close
+   *  together to sit side by side move down a row. */
+  function timeline(slot: number) {
+    const build = match!.purchases.filter((b) => b.player_slot === slot && !UNLISTED.has(b.item) && !b.item.startsWith('recipe'))
+    const rowEnds: number[] = []
+    const placed = build
+      .filter((b) => b.time >= 0)
+      .map((b) => {
+        const x = timeX(b.time)
+        let row = rowEnds.findIndex((end) => end <= x)
+        if (row < 0) row = rowEnds.length
+        rowEnds[row] = x + ICON
+        return { ...b, x, row }
+      })
+    return { start: build.filter((b) => b.time < 0), placed, rows: Math.max(1, rowEnds.length) }
+  }
 
   // ---- maps and fights
   const WARD = { obs: 'Observer', sen: 'Sentry' }
@@ -243,52 +273,61 @@
     (d.in_teamfight ? ' (teamfight)' : '')
   const fightPlayers = (n: number, radiant: boolean) =>
     match!.teamfight_players.filter((p) => p.n === n && isRadiant(p.player_slot) === radiant)
-  const sum = (values: number[]) => values.reduce((a, b) => a + b, 0)
 </script>
 
-{#snippet scoreRows(team: MatchPlayer[])}
+{#snippet side(team: MatchPlayer[], won: boolean)}
+  <div class="side" class:lost={!won}>
+    {#each team as p (p.player_slot)}
+      <figure class={teamOf(p.player_slot)}>
+        <img src={heroPortrait(p.hero_id)} alt={heroName(p.hero_id)} title={heroName(p.hero_id)} width="256" height="144" />
+        {#if p.label}<figcaption>{p.label}</figcaption>{/if}
+      </figure>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet icons(team: MatchPlayer[])}
   {#each team as p (p.player_slot)}
-    <tr>
-      <td><Hero id={p.hero_id} />{#if p.label}<span class="tag">{p.label}</span>{/if}</td>
-      <td class="num">{p.level}</td>
-      <td class="num">{p.kills} / {p.deaths} / {p.assists}</td>
-      <td class="num">{p.last_hits} / {p.denies}</td>
-      <td class="num">{p.gold_per_min}</td>
-      <td class="num">{p.xp_per_min}</td>
-      <td class="num">{number(p.net_worth)}</td>
-      <td class="num">{number(p.hero_damage)}</td>
-      <td class="items">
-        {#each p.items.filter((item) => item) as item}
-          {#if itemIcon(item)}
-            <img src={itemIcon(item)} alt={itemName(constants.items[item])} title={itemName(constants.items[item])} width="30" height="22" loading="lazy" />
-          {/if}
-        {/each}
-      </td>
-    </tr>
+    <img src={heroIcon(p.hero_id)} alt={heroName(p.hero_id)} title={heroName(p.hero_id)} width="28" height="28" loading="lazy" />
   {/each}
 {/snippet}
 
-{#snippet legend()}
-  <p class="legend">
-    <span><i class="swatch radiant"></i>Radiant</span>
-    <span><i class="swatch dire"></i>Dire</span>
-  </p>
+{#snippet party(n: number, radiant: boolean)}
+  {#each fightPlayers(n, radiant) as p (p.player_slot)}
+    <img
+      src={heroIcon(hero.get(p.player_slot) ?? 0)}
+      alt="{name(p.player_slot)}{p.took_part ? '' : ' (not in the fight)'}"
+      title="{name(p.player_slot)}: {number(p.damage)} damage, {p.deaths} deaths{p.took_part ? '' : ', not in the fight'}"
+      class:absent={!p.took_part}
+      width="24"
+      height="24"
+      loading="lazy"
+    />
+  {/each}
 {/snippet}
 
-<p><a href="#matches">← Matches</a></p>
+<p class="back"><a href="#matches">← Matches</a></p>
 {#if error}
   <p class="error" role="alert">{error}</p>
 {:else if match}
-  <h2 class="title">
-    {match.radiant_win ? 'Radiant' : 'Dire'} victory
-    <span class="muted">
-      · {new Date(match.start_time * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-      · {clock(match.duration)}
-      · {LOBBY_TYPES[match.lobby_type] ?? `Lobby ${match.lobby_type}`}
-      {GAME_MODES[match.game_mode] ?? `Mode ${match.game_mode}`}
-      · match {match.match_id}
-    </span>
-  </h2>
+  <header class="faceoff">
+    {@render side(teams[0], match.radiant_win)}
+    <div class="score">
+      <p class="kills">
+        <b class="radiant">{sum(teams[0].map((p) => p.kills))}</b>
+        <span>{clock(match.duration)}</span>
+        <b class="dire">{sum(teams[1].map((p) => p.kills))}</b>
+      </p>
+      <p class="result">{match.radiant_win ? 'Radiant' : 'Dire'} victory</p>
+      <p class="muted">
+        {LOBBY_TYPES[match.lobby_type] ?? `Lobby ${match.lobby_type}`}
+        {GAME_MODES[match.game_mode] ?? `Mode ${match.game_mode}`},
+        {new Date(match.start_time * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+        <br />match {match.match_id}
+      </p>
+    </div>
+    {@render side(teams[1], !match.radiant_win)}
+  </header>
 
   <div class="card">
     <table>
@@ -300,8 +339,28 @@
       </thead>
       <tbody>
         {#each teams as team, i}
-          <tr class="team"><th colspan="9">{TEAMS[i]}{match.radiant_win === (i === 0) ? ' · won' : ''}</th></tr>
-          {@render scoreRows(team)}
+          <tr class="team {i ? 'dire' : 'radiant'}">
+            <th colspan="9">{TEAMS[i]}{#if match.radiant_win === (i === 0)}<span class="tag">Winner</span>{/if}</th>
+          </tr>
+          {#each team as p (p.player_slot)}
+            <tr class={teamOf(p.player_slot)}>
+              <td><Hero id={p.hero_id} />{#if p.label}<span class="tag">{p.label}</span>{/if}</td>
+              <td class="num">{p.level}</td>
+              <td class="num">{p.kills} / {p.deaths} / {p.assists}</td>
+              <td class="num">{p.last_hits} / {p.denies}</td>
+              <td class="num">{p.gold_per_min}</td>
+              <td class="num">{p.xp_per_min}</td>
+              <td class="num">{number(p.net_worth)}</td>
+              <td class="num">{number(p.hero_damage)}</td>
+              <td class="items">
+                {#each p.items.filter((item) => item) as item}
+                  {#if itemIcon(item)}
+                    <img src={itemIcon(item)} alt={itemName(constants.items[item])} title={itemName(constants.items[item])} width="30" height="22" loading="lazy" />
+                  {/if}
+                {/each}
+              </td>
+            </tr>
+          {/each}
         {/each}
       </tbody>
     </table>
@@ -313,69 +372,108 @@
       until one is parsed, only the scoreboard above is known.
     </p>
   {:else}
-    <h2>Net worth</h2>
-    <div class="card chart">
-      <Chart option={netWorth} height={340} label="Net worth of each player over time, one panel per team; the laning table below has the numbers at 5 and 10 minutes" />
-    </div>
-
     <h2>Team lead</h2>
-    {@render legend()}
+    <p class="legend">
+      <span><i class="swatch radiant"></i>Radiant ahead</span>
+      <span><i class="swatch dire"></i>Dire ahead</span>
+    </p>
     <div class="card chart">
-      <Chart option={teamLead} height={320} label="Radiant's lead over Dire in net worth and in experience over time; above zero Radiant is ahead, below zero Dire" />
+      <Chart option={leadChart(leadOf(players, lastMinute))} height={320} label="Radiant's lead over Dire in net worth and in experience over time; above zero Radiant is ahead, below zero Dire" />
     </div>
 
-    <h2>Laning</h2>
-    <p class="muted">Each player's numbers, then the lane opponent's: the enemy in the same lane with the most last hits at 10:00.</p>
+    <h2>Net worth by player</h2>
+    <div class="card chart">
+      <Chart option={netWorth} height={340} label="Net worth of each player over time, one panel per team; the laning table below has the numbers at 10 minutes" />
+    </div>
+
+    <h2>Laning, first {laneMinute} minutes</h2>
+    <p class="muted">
+      A hero's lane is where it spent most of that time. Each chart is the lane's Radiant heroes together against its Dire
+      heroes, all three on one scale.
+    </p>
+    <div class="lanes">
+      {#each lanes as { lane, sides, lead } (lane)}
+        {@const now = lead?.[laneMinute]}
+        <section class="card lane">
+          <h3>{LANES[lane]}</h3>
+          <div class="versus">
+            <span class="heroes">{@render icons(sides[0])}</span>
+            <span class="tug" aria-hidden="true">
+              <span><i class="radiant" style:width="{now ? (100 * Math.max(now.net_worth, 0)) / laneBound : 0}%"></i></span>
+              <span><i class="dire" style:width="{now ? (100 * Math.max(-now.net_worth, 0)) / laneBound : 0}%"></i></span>
+            </span>
+            <span class="heroes">{@render icons(sides[1])}</span>
+          </div>
+          {#if lead && now}
+            <p class="standing">{ahead(now.net_worth)} net worth, {ahead(now.xp)} experience at {laneMinute}:00</p>
+            <Chart option={leadChart(lead, laneBound)} height={230} label="{LANES[lane]} lane: Radiant's lead over Dire in net worth and experience, minute by minute" />
+          {:else}
+            <p class="standing muted">{sides[0].length || sides[1].length ? 'Only one team had heroes in this lane.' : 'No hero spent the laning stage here.'}</p>
+          {/if}
+        </section>
+      {/each}
+    </div>
+
     <div class="card">
       <table>
         <thead>
           <tr>
-            <th rowspan="2">Hero</th><th rowspan="2">Lane</th><th rowspan="2">Against</th>
-            {#each LANING_MINUTES as minute}<th colspan={LANING_STATS.length} class="group">at {minute}:00</th>{/each}
-          </tr>
-          <tr>
-            {#each LANING_MINUTES as _}{#each LANING_STATS as [, short]}<th class="num">{short}</th>{/each}{/each}
+            <th>Hero at {laneMinute}:00</th><th>Lane</th><th class="num">Last hits</th><th class="num">Denies</th>
+            <th class="num">Net worth</th><th class="num">Experience</th><th class="num">Camps stacked</th><th class="num">Lotuses used</th>
           </tr>
         </thead>
         <tbody>
-          {#each players as p (p.player_slot)}
-            {@const mine = lane.get(p.player_slot)}
-            <tr>
-              <td><Hero id={p.hero_id} /></td>
-              <td>{mine?.lane ?? '–'}</td>
-              <td>{#if mine?.opponent_slot != null}<Hero id={hero.get(mine.opponent_slot) ?? 0} />{:else}–{/if}</td>
-              {#each LANING_MINUTES as minute}
-                {@const me = minuteRow.get(`${p.player_slot}:${minute}`)}
-                {@const them = minuteRow.get(`${mine?.opponent_slot}:${minute}`)}
-                {#each LANING_STATS as [key]}
-                  <td class="num">{me ? number(me[key]) : '–'}{#if me && them}<span class="versus">{number(them[key])}</span>{/if}</td>
-                {/each}
-              {/each}
-            </tr>
+          {#each teams as team}
+            {#each byLane(team) as p (p.player_slot)}
+              {@const at = minuteRow.get(`${p.player_slot}:${laneMinute}`)}
+              {@const lane = laneOf.get(p.player_slot)}
+              <tr class={teamOf(p.player_slot)}>
+                <td><Hero id={p.hero_id} /></td>
+                <td>{lane ? LANES[lane as keyof typeof LANES] : '–'}</td>
+                <td class="num">{number(at?.last_hits)}</td>
+                <td class="num">{number(at?.denies)}</td>
+                <td class="num">{number(at?.net_worth)}</td>
+                <td class="num">{number(at?.xp)}</td>
+                <td class="num">{number(at?.camps_stacked)}</td>
+                <td class="num">{number(at?.lotuses)}</td>
+              </tr>
+            {/each}
           {/each}
         </tbody>
       </table>
     </div>
 
-    <h2>Items bought</h2>
-    <p class="muted">In buying order with the game time. Consumables, wards and recipes are left out.</p>
-    <div class="card">
-      <table>
-        <tbody>
-          {#each players as p (p.player_slot)}
-            <tr>
-              <td><Hero id={p.hero_id} /></td>
-              <td class="build">
-                {#each build(p.player_slot) as b}
-                  <span class="buy" title="{itemName(b.item)} at {clock(b.time)}">
-                    <img src={itemIconByName(b.item)} alt={itemName(b.item)} width="30" height="22" loading="lazy" />{clock(b.time)}
-                  </span>
-                {/each}
-              </td>
-            </tr>
+    <h2>Item timeline</h2>
+    <p class="muted">Each item sits at the time it was bought; hover one for its name and time. Consumables, wards and recipes are left out.</p>
+    <div class="card timeline" style:--step="{Math.max(timeX(300), 1)}px">
+      <span></span>
+      <span class="head">Before 0:00</span>
+      <span class="head axis" bind:clientWidth={trackWidth}>
+        {#each ticks as t}<span style:left="{timeX(t)}px">{clock(t)}</span>{/each}
+      </span>
+      {#each players as p (p.player_slot)}
+        {@const line = timeline(p.player_slot)}
+        <span class="owner {teamOf(p.player_slot)}"><Hero id={p.hero_id} /></span>
+        <span class="start">
+          {#each line.start as b}
+            <img src={itemIconByName(b.item)} alt={itemName(b.item)} title="{itemName(b.item)} at {clock(b.time)}" width="27" height="20" loading="lazy" />
           {/each}
-        </tbody>
-      </table>
+        </span>
+        <span class="track" style:height="{line.rows * ROW}px">
+          {#each line.placed as b}
+            <img
+              src={itemIconByName(b.item)}
+              alt="{itemName(b.item)} at {clock(b.time)}"
+              title="{itemName(b.item)} at {clock(b.time)}"
+              style:left="{b.x}px"
+              style:top="{b.row * ROW}px"
+              width="27"
+              height="20"
+              loading="lazy"
+            />
+          {/each}
+        </span>
+      {/each}
     </div>
 
     <div class="maps">
@@ -429,35 +527,26 @@
     {:else}
       <p class="muted">Three or more deaths less than 15 seconds apart. Faded heroes neither dealt nor took hero damage and did not die.</p>
       <div class="card">
-        <table>
+        <table class="fights">
           <thead>
             <tr>
-              <th>Time</th>
-              {#each TEAMS as team}<th class="num">{team} deaths</th><th class="num">damage</th><th>took part</th>{/each}
+              <th class="num">Radiant took part</th><th class="num">Damage</th><th class="num">Deaths</th>
+              <th class="when">Time</th>
+              <th>Deaths</th><th>Damage</th><th>Dire took part</th>
             </tr>
           </thead>
           <tbody>
             {#each match.teamfights as fight (fight.n)}
+              {@const radiant = fightPlayers(fight.n, true)}
+              {@const dire = fightPlayers(fight.n, false)}
               <tr>
-                <td>{clock(Math.max(0, fight.start))} – {clock(fight.end)}</td>
-                {#each [true, false] as radiant}
-                  {@const side = fightPlayers(fight.n, radiant)}
-                  <td class="num">{sum(side.map((p) => p.deaths))}</td>
-                  <td class="num">{number(sum(side.map((p) => p.damage)))}</td>
-                  <td class="party">
-                    {#each side as p (p.player_slot)}
-                      <img
-                        src={heroIcon(hero.get(p.player_slot) ?? 0)}
-                        alt="{name(p.player_slot)}{p.took_part ? '' : ' (not in the fight)'}"
-                        title="{name(p.player_slot)}: {number(p.damage)} damage, {p.deaths} deaths{p.took_part ? '' : ', not in the fight'}"
-                        class:absent={!p.took_part}
-                        width="22"
-                        height="22"
-                        loading="lazy"
-                      />
-                    {/each}
-                  </td>
-                {/each}
+                <td class="num party">{@render party(fight.n, true)}</td>
+                <td class="num">{number(sum(radiant.map((p) => p.damage)))}</td>
+                <td class="num">{sum(radiant.map((p) => p.deaths))}</td>
+                <td class="when">{clock(Math.max(0, fight.start))} – {clock(fight.end)}</td>
+                <td>{sum(dire.map((p) => p.deaths))}</td>
+                <td>{number(sum(dire.map((p) => p.damage)))}</td>
+                <td class="party">{@render party(fight.n, false)}</td>
               </tr>
             {/each}
           </tbody>
@@ -470,75 +559,241 @@
 {/if}
 
 <style>
-  .title {
-    margin-top: 8px;
+  .back {
+    margin: 0 0 12px;
   }
-  .title .muted {
-    font-weight: 400;
+
+  /* the game's own top bar: Radiant on the left, Dire on the right, the score between them */
+  .faceoff {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 12px 28px;
+    margin-bottom: 20px;
   }
-  .chart {
-    padding: 12px;
+  .side {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .side:first-child {
+    justify-content: flex-end;
+  }
+  .side figure {
+    flex: 0 1 104px;
+    margin: 0;
+    min-width: 0;
+  }
+  .side img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-bottom: 3px solid;
+  }
+  figure.radiant img {
+    border-color: var(--radiant);
+  }
+  figure.dire img {
+    border-color: var(--dire);
+  }
+  .side.lost img {
+    filter: saturate(0.35) brightness(0.75);
+  }
+  figcaption {
+    padding: 2px 4px;
+    background: var(--surface);
+    font-size: 12px;
+    font-stretch: var(--narrow);
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .score {
+    text-align: center;
+  }
+  .score p {
+    margin: 0;
+  }
+  .kills {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 16px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .kills b {
+    font-size: 46px;
+    font-weight: 800;
+    font-stretch: 125%;
+  }
+  .kills .radiant {
+    color: var(--radiant);
+  }
+  .kills .dire {
+    color: var(--dire);
+  }
+  .kills span {
+    font-size: 16px;
+    color: var(--text-2);
+  }
+  .result {
+    font-weight: 700;
+    font-stretch: var(--wide);
+    padding: 6px 0 2px;
+  }
+  .score .muted {
+    font-size: 13px;
+  }
+  @media (max-width: 860px) {
+    .faceoff {
+      grid-template-columns: 1fr 1fr;
+    }
+    .score {
+      grid-row: 1;
+      grid-column: 1 / -1;
+    }
+    .side:first-child {
+      justify-content: flex-start;
+    }
+  }
+
+  tr.radiant > :first-child,
+  tr.team.radiant th {
+    box-shadow: inset 3px 0 0 var(--radiant);
+  }
+  tr.dire > :first-child,
+  tr.team.dire th {
+    box-shadow: inset 3px 0 0 var(--dire);
   }
   .team th {
     background: var(--page);
+    color: var(--text);
+    font-size: 14px;
+    font-stretch: var(--wide);
   }
   .tag {
     margin-left: 8px;
     padding: 1px 6px;
-    border-radius: 4px;
-    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--raised);
     color: var(--text-2);
     font-size: 12px;
+    font-weight: 500;
+    font-stretch: normal;
   }
-  .items img,
-  .buy img {
-    vertical-align: middle;
-    border-radius: 3px;
-    margin-right: 2px;
+
+  .lanes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
   }
-  .group {
-    text-align: center;
-    border-left: 1px solid var(--grid);
+  .lane {
+    padding: 14px;
   }
   .versus {
-    display: inline-block;
-    min-width: 3.2em;
-    margin-left: 6px;
-    color: var(--muted);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
   }
-  .build {
-    white-space: normal;
+  .heroes {
+    display: flex;
+    gap: 3px;
+    min-height: 28px;
   }
-  .buy {
-    display: inline-block;
-    margin: 2px 10px 2px 0;
+  /* a rope pulled from the middle: the bar grows towards the side that is ahead in net worth */
+  .tug {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: 8px;
+    background: var(--raised);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .tug span {
+    display: flex;
+  }
+  .tug span:first-child {
+    justify-content: flex-end;
+    border-right: 1px solid var(--text-2);
+  }
+  .tug .radiant {
+    background: var(--radiant);
+  }
+  .tug .dire {
+    background: var(--dire);
+  }
+  .standing {
+    margin: 8px 0 10px;
     color: var(--text-2);
     font-variant-numeric: tabular-nums;
   }
+
+  .timeline {
+    display: grid;
+    grid-template-columns: max-content max-content 1fr;
+    align-items: center;
+    padding: 6px 14px 10px;
+  }
+  .timeline > * {
+    padding: 6px 12px 6px 0;
+    border-bottom: 1px solid var(--grid);
+    align-self: stretch;
+  }
+  .head {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    font-stretch: var(--narrow);
+  }
+  .axis {
+    position: relative;
+    padding-right: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .axis span {
+    position: absolute;
+  }
+  .owner {
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+  }
+  .owner.radiant {
+    box-shadow: inset 3px 0 0 var(--radiant);
+  }
+  .owner.dire {
+    box-shadow: inset 3px 0 0 var(--dire);
+  }
+  .start {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: center;
+    gap: 3px 2px;
+    max-width: 90px;
+  }
+  /* a faint line every five minutes */
+  .track {
+    position: relative;
+    box-sizing: content-box;
+    padding-right: 0;
+    background-image: repeating-linear-gradient(90deg, var(--grid) 0 1px, transparent 1px var(--step));
+  }
+  .track img {
+    position: absolute;
+    margin-top: 6px;
+  }
+  .timeline img {
+    border-radius: 2px;
+  }
+
   .maps {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 0 24px;
-  }
-  .legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 16px;
-    margin: 0 0 8px;
-    color: var(--text-2);
-  }
-  .swatch {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-    margin-right: 6px;
-  }
-  .swatch.radiant {
-    background: var(--radiant);
-  }
-  .swatch.dire {
-    background: var(--dire);
   }
   .mark {
     stroke: #fff;
@@ -565,9 +820,14 @@
   .cross.dire path:not(.halo) {
     stroke: var(--dire);
   }
+
+  .fights .when {
+    text-align: center;
+    color: var(--text-2);
+  }
   .party img {
     vertical-align: middle;
-    margin-right: 2px;
+    margin: 0 1px;
   }
   .party .absent {
     opacity: 0.25;

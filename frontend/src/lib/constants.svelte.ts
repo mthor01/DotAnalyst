@@ -16,6 +16,12 @@ export function heroIcon(id: number): string | undefined {
   return name && `${CDN}/heroes/icons/${name}.png`
 }
 
+/** The wide portrait (256x144) the game shows in its top bar. */
+export function heroPortrait(id: number): string | undefined {
+  const name = constants.heroes[id]?.name.replace('npc_dota_hero_', '')
+  return name && `${CDN}/heroes/${name}.png`
+}
+
 /** Icon for an item name as replays give it, without the item_ prefix. */
 export const itemIconByName = (name: string) => `${CDN}/items/${name}.png`
 
