@@ -5,7 +5,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import Account, Hero, Item, Match, MatchPlayer
+from .db import Account, Hero, Item, Match, MatchPlayer, Recipe
 
 BASE = "https://api.steampowered.com"
 HISTORY = "IDOTA2Match_570/GetMatchHistory/V001/"
@@ -13,6 +13,7 @@ HISTORY = "IDOTA2Match_570/GetMatchHistory/V001/"
 DETAILS = "IDOTA2Match_570/GetMatchHistoryBySequenceNum/V001/"
 HEROES = "IEconDOTA2_570/GetHeroes/v1/"
 ITEM_IDS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/item_ids.json"
+ITEMS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/items.json"
 PAUSE = 1.0  # seconds before every request
 ANONYMOUS = 4294967295
 HISTORY_NOT_EXPOSED = 15
@@ -103,16 +104,23 @@ def sync(session: Session, client: httpx.Client, key: str) -> dict[int, int | No
 
 
 def sync_constants(session: Session, client: httpx.Client, key: str) -> tuple[int, int]:
-    """Store hero and item names. Returns how many of each."""
+    """Store hero and item names, and what each item is built from. Returns how many heroes and items."""
     heroes = call(client, key, HEROES, language="en")["heroes"]
     for h in heroes:
         session.merge(Hero(id=h["id"], name=h["name"], localized_name=h["localized_name"]))
-    # the Web API has no working item list; this file maps item id to internal name
-    response = client.get(ITEM_IDS, timeout=30)
-    if response.status_code != 200:
-        raise SteamError(f"item names: HTTP {response.status_code}")
-    items = response.json()
+    # the Web API has no working item list; these files map item id to internal name, and item to its components
+    files = []
+    for url in (ITEM_IDS, ITEMS):
+        response = client.get(url, timeout=30)
+        if response.status_code != 200:
+            raise SteamError(f"item names: HTTP {response.status_code}")
+        files.append(response.json())
+    items, details = files
     for item_id, name in items.items():
         session.merge(Item(id=int(item_id), name=name))
+    for name, detail in details.items():
+        components = [c for c in detail.get("components") or [] if c]  # a scroll is listed as ""
+        if components:
+            session.merge(Recipe(item=name, components=components))
     session.commit()
     return len(heroes), len(items)

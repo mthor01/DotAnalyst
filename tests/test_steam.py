@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 from dotanalyst import steam
-from dotanalyst.db import Account, Base, Hero, Item, Match, MatchPlayer
+from dotanalyst.db import Account, Base, Hero, Item, Match, MatchPlayer, Recipe
 
 FIXTURES = Path(__file__).parent / "fixtures"
 ME = 314448639
@@ -23,6 +23,7 @@ PAGE1, PAGE2, DETAILS, HEROES = (
     load(n) for n in ("history_page1.json", "history_page2.json", "details_by_seq.json", "heroes.json")
 )
 ITEM_IDS = load("item_ids.json")
+ITEMS = load("items.json")  # eleven items cut from dotaconstants' items.json
 EMPTY_PAGE ={"result": {"status": 1, "num_results": 0, "results_remaining": 0, "matches": []}}
 NOT_EXPOSED = {"result": {"status": 15, "statusDetail": "Cannot get match history for a user that hasn't allowed it"}}
 HISTORY = PAGE1["result"]["matches"] + PAGE2["result"]["matches"]
@@ -46,7 +47,7 @@ class FakeSteam:
         params = request.url.params
         if request.url.host != "api.steampowered.com":
             assert "key" not in params  # the key must never go to another host
-            return httpx.Response(200, json=ITEM_IDS)
+            return httpx.Response(200, json=ITEMS if request.url.path.endswith("/items.json") else ITEM_IDS)
         assert params["key"] == KEY
         if "GetHeroes" in request.url.path:
             return httpx.Response(200, json=HEROES)
@@ -173,4 +174,8 @@ def test_sync_constants_stores_heroes_and_items(session):
     assert counts == (len(HEROES["result"]["heroes"]), len(ITEM_IDS))
     assert session.get(Hero, 1).name == "npc_dota_hero_antimage"
     assert session.get(Item, 1).name == "blink"
+    assert session.get(Recipe, "power_treads").components == ["boots", "gloves", "belt_of_strength"]
+    assert session.get(Recipe, "sphere").components == ["pers", "ultimate_orb"]  # the scroll, listed as "", is dropped
+    assert session.get(Recipe, "boots") is None  # bought whole
     assert steam.sync_constants(session, FakeSteam().client, KEY) == counts  # rerun replaces, no duplicates
+    assert len(session.scalars(select(Recipe)).all()) == 5

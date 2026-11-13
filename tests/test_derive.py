@@ -39,6 +39,26 @@ def test_purchases(rows):
     luna = [(r["time"], r["item"]) for r in rows[Purchase] if r["player_slot"] == 1]
     assert luna[:2] == [(-89, "magic_stick"), (-89, "tango")]
     assert (485, "power_treads") in luna
+    assert all(r["built_at"] is None for r in rows[Purchase])  # nothing is known about recipes here
+
+
+def test_parts_built_into_a_bigger_item():
+    recipes = {
+        "power_treads": ["boots", "gloves", "belt_of_strength"], "magic_wand": ["magic_stick", "branches", "branches"],
+        "maelstrom": ["mithril_hammer", "javelin", "gloves"],
+    }  # fmt: skip
+    bought = derive(read_log(FIXTURES / f"{MATCH_ID}.jsonl.gz"), recipes)[Purchase]
+    luna = [(r["time"], r["item"], r["built_at"]) for r in bought if r["player_slot"] == 1]
+    # wand at 3:30 from the stick and both branches of the start; treads at 8:05, with the Band of Elvenskin
+    # (boots_of_elves) in the place of the recipe's Belt of Strength
+    assert [r for r in luna if r[2] is not None] == [
+        (-89, "magic_stick", 210), (-89, "branches", 210), (-89, "branches", 210),
+        (168, "boots_of_elves", 485), (331, "boots", 485), (407, "gloves", 485),
+    ]  # fmt: skip
+    assert (-89, "quelling_blade", None) in luna and (485, "power_treads", None) in luna
+    # Muerta bought gloves twice: the pair of 1:47 went into the treads at 3:55, the pair of 10:41 into Maelstrom
+    muerta = [(r["time"], r["built_at"]) for r in bought if r["player_slot"] == MUERTA and r["item"] == "gloves"]
+    assert muerta == [(107, 235), (641, 827)]
 
 
 def test_deaths_are_the_scoreboard_deaths(rows):

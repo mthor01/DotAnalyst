@@ -1,0 +1,87 @@
+{
+ "blink": {
+  "id": 1,
+  "dname": "Blink Dagger",
+  "cost": 2250,
+  "components": null
+ },
+ "boots": {
+  "id": 29,
+  "dname": "Boots of Speed",
+  "cost": 500,
+  "components": null
+ },
+ "gloves": {
+  "id": 25,
+  "dname": "Gloves of Haste",
+  "cost": 450,
+  "components": null
+ },
+ "belt_of_strength": {
+  "id": 17,
+  "dname": "Belt of Strength",
+  "cost": 450,
+  "components": null
+ },
+ "power_treads": {
+  "id": 63,
+  "dname": "Power Treads",
+  "cost": 1400,
+  "components": [
+   "boots",
+   "gloves",
+   "belt_of_strength"
+  ]
+ },
+ "magic_stick": {
+  "id": 34,
+  "dname": "Magic Stick",
+  "cost": 200,
+  "components": null
+ },
+ "branches": {
+  "id": 16,
+  "dname": "Iron Branch",
+  "cost": 55,
+  "components": null
+ },
+ "magic_wand": {
+  "id": 36,
+  "dname": "Magic Wand",
+  "cost": 460,
+  "components": [
+   "magic_stick",
+   "branches",
+   "branches"
+  ]
+ },
+ "sphere": {
+  "id": 123,
+  "dname": "Linken's Sphere",
+  "cost": 4800,
+  "components": [
+   "pers",
+   "ultimate_orb",
+   ""
+  ]
+ },
+ "mask_of_madness": {
+  "id": 172,
+  "dname": "Mask of Madness",
+  "cost": 1900,
+  "components": [
+   "broadsword",
+   "lifesteal"
+  ]
+ },
+ "maelstrom": {
+  "id": 166,
+  "dname": "Maelstrom",
+  "cost": 2950,
+  "components": [
+   "mithril_hammer",
+   "javelin",
+   "gloves"
+  ]
+ }
+}

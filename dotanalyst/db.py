@@ -75,6 +75,13 @@ class Item(Base):
     name: Mapped[str]  # without the item_ prefix
 
 
+class Recipe(Base):
+    __tablename__ = "recipes"
+
+    item: Mapped[str] = mapped_column(primary_key=True)  # without the item_ prefix, like Item.name
+    components: Mapped[list] = mapped_column(JSON)  # item names; the recipe scroll is not among them
+
+
 class Derived(DeclarativeBase):
     """Tables computed from the raw replay logs. `recompute` drops and rebuilds them, so their shape may change freely."""
 
@@ -102,6 +109,7 @@ class Purchase(Derived):
     player_slot: Mapped[int]
     time: Mapped[int]  # game clock in seconds, negative before the horn
     item: Mapped[str]  # without the item_ prefix, like Item.name
+    built_at: Mapped[int | None]  # when it became part of a bigger item; None while it is an item of its own
 
 
 class Death(Derived):

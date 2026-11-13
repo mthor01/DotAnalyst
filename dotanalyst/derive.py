@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 
 from . import queries
 from .db import (
-    DATA, TABLES, Death, Derived, Lane, Match, Metric, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Ward,
+    DATA, TABLES, Death, Derived, Lane, Match, Metric, PlayerMinute, Purchase, Recipe, Teamfight, TeamfightPlayer,
+    Ward,
 )  # fmt: skip
 from .metrics import METRICS
 
@@ -20,6 +21,7 @@ USED = {
 }  # fmt: skip
 # a combined lotus counts as the lotuses it was made from
 LOTUSES = {"item_famango": 1, "item_great_famango": 3, "item_greater_famango": 6}
+TREADS_STAT = {"belt_of_strength", "boots_of_elves", "robe"}
 FIGHT_GAP = 15  # seconds without a death that end a fight; also how long before the first death it starts
 FIGHT_DEATHS = 3
 LANING_END = 600
@@ -96,16 +98,31 @@ def minutes(log: Log) -> list[dict]:
     return rows
 
 
-def purchases(log: Log) -> list[dict]:
-    return [
+def purchases(log: Log, recipes: dict[str, list[str]]) -> list[dict]:
+    """Every purchase. The log reports a finished item as a purchase too, at the moment its parts come together;
+    `recipes` (item -> components) then tells which earlier purchases it used up."""
+    rows = [
         {
             "player_slot": log.player_slot[log.hero_slot[e["targetname"]]],
             "time": e["time"],
             "item": e["valuename"].removeprefix("item_"),
+            "built_at": None,
         }
         for e in log.events
         if e["type"] == "DOTA_COMBATLOG_PURCHASE" and e.get("targetname") in log.hero_slot and e.get("valuename")
     ]
+    for built in rows:
+        for component in recipes.get(built["item"], ()):
+            # the recipe list names one of the three items Power Treads can be built with
+            wanted = TREADS_STAT if built["item"] == "power_treads" and component in TREADS_STAT else {component}
+            parts = [
+                r for r in rows
+                if r is not built and r["player_slot"] == built["player_slot"] and r["item"] in wanted
+                and r["built_at"] is None and r["time"] <= built["time"]
+            ]  # fmt: skip
+            if parts:  # none when an ally bought the part
+                max(parts, key=lambda r: r["time"])["built_at"] = built["time"]
+    return rows
 
 
 def fights(death_times: list[int]) -> list[tuple[int, int, int]]:
@@ -223,13 +240,13 @@ def lanes(log: Log) -> list[dict]:
     return rows
 
 
-def derive(events: list[dict]) -> dict[type, list[dict]]:
+def derive(events: list[dict], recipes: dict[str, list[str]] | None = None) -> dict[type, list[dict]]:
     log = Log(events)
     death_rows = deaths(log)
     fight_rows, fight_player_rows = teamfights(log, death_rows)
     return {
         PlayerMinute: minutes(log),
-        Purchase: purchases(log),
+        Purchase: purchases(log, recipes or {}),
         Death: death_rows,
         Teamfight: fight_rows,
         TeamfightPlayer: fight_player_rows,
@@ -240,7 +257,8 @@ def derive(events: list[dict]) -> dict[type, list[dict]]:
 
 def derive_match(session: Session, match_id: int, raw_dir: Path = DATA / "raw") -> None:
     """Replace one match's derived rows."""
-    rows = derive(read_log(raw_dir / f"{match_id}.jsonl.gz"))
+    recipes = {r.item: r.components for r in session.scalars(select(Recipe))}
+    rows = derive(read_log(raw_dir / f"{match_id}.jsonl.gz"), recipes)
     for model in TABLES:
         session.execute(delete(model).where(model.match_id == match_id))
         if rows.get(model):
