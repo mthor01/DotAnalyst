@@ -56,6 +56,7 @@ Source: the odota/parser output, stored in `data/raw/{match_id}.jsonl.gz`.
 | Camps stacked and lotuses used, per minute | `player_minute` | Laning table |
 | Every purchase with its time, and when it was built into a bigger item | `purchases` | Item timeline |
 | Deaths with time, map position, killer, and whether it was in a teamfight | `deaths` | Death map |
+| Position of every hero each second, and whether it is alive | none: read from the raw log when asked | Death playback |
 | Teamfights: start, end and deaths; per player whether they took part, damage dealt, healing, and net worth and XP gained | `teamfights`, `teamfight_players` | Teamfight table, unfolded fight |
 | Wards: position, placed, removed, lifetime, who destroyed them | `wards` | Ward map |
 | Lane per player (top, mid, bot or jungle) | `lanes` | Lane cards, profile roles |
@@ -73,7 +74,7 @@ Metrics in `metrics`, shown on the Trends page:
 
 ### In the output but not used yet
 
-- **Position every second:** heat maps, movement, time spent in each part of the map
+- **Position every second** (so far only used for the death playback): heat maps, movement, time spent in each part of the map
 - **Damage log:** damage by target and by ability or item, damage taken, damage to illusions
 - **Healing log:** who healed whom, and with what
 - **Disables:** stuns and slows, with their durations

@@ -15,6 +15,8 @@
     open = []
     hidden = []
     period = null
+    watching = null
+    playing = false
     get<MatchDetail>(`matches/${id}`).then(
       (found) => current && ((match = found), (error = '')),
       (e) => current && (error = e.message),
@@ -226,9 +228,9 @@
     'ward_observer', 'ward_sentry', 'ward_dispenser', 'smoke_of_deceit', 'dust', 'blood_grenade', 'tome_of_knowledge',
   ]) // prettier-ignore
   const itemName = (item: string) => item.replaceAll('_', ' ')
-  // seconds; a part that went into a bigger item this soon after it was bought is not shown. Two minutes still left
-  // piles of parts under most finished items; the starting items are always shown
-  const BUILT_SOON = 300
+  // seconds; a part that went into a bigger item this soon after it was bought is not shown. The starting items are
+  // always shown
+  const BUILT_SOON = 60
   const ICON = 29 // px one item takes on the timeline, gap included
   const ROW = 23
   let trackWidth = $state(0)
@@ -305,7 +307,7 @@
     match!.deaths.filter((d) => d.x !== null && d.time >= fight.start && d.time <= fight.end)
   const FIGHT_VIEW = 48 // cells; a fight is shown on at least this much of the 127-cell map
   /** The square of the map that holds these deaths, with room around them, kept inside the map. */
-  function viewOf(deaths: Death[]) {
+  function viewOf(deaths: { x: number | null; y: number | null }[]) {
     if (!deaths.length) return { x: 0, y: 0, size: 127 }
     const xs = deaths.map((d) => mapX(d.x!))
     const ys = deaths.map((d) => mapY(d.y!))
@@ -314,6 +316,34 @@
     const from = (vs: number[]) => Math.min(127 - size, Math.max(0, (Math.min(...vs) + Math.max(...vs) - size) / 2))
     return { x: from(xs), y: from(ys), size }
   }
+
+  // ---- a death, played back: where every hero stood in the 20 seconds before it. The positions are not part of the
+  // match; they are fetched for the one death that is watched
+  type Spot = { time: number; player_slot: number; x: number; y: number; alive: boolean }
+  const REPLAY = 20 // seconds shown before a death
+  const TICK = 500 // ms one game second takes: double speed. The same time is in the CSS of .mover
+  let watching = $state.raw<Death | null>(null)
+  let spots = $state.raw<Spot[] | null>(null) // null until they arrive
+  let replayError = $state('')
+  let frame = $state(0) // seconds into the playback
+  let playing = $state(false)
+  function watch(d: Death) {
+    ;[watching, spots, replayError, frame, playing] = [d, null, '', 0, false]
+    get<Spot[]>(`matches/${id}/positions`, `start=${d.time - REPLAY}&end=${d.time}`).then(
+      (rows) => watching === d && ((spots = rows), (playing = true)),
+      (e) => watching === d && (replayError = e.message),
+    )
+  }
+  $effect(() => {
+    if (!playing) return
+    const timer = setInterval(() => (frame >= REPLAY ? (playing = false) : (frame += 1)), TICK)
+    return () => clearInterval(timer)
+  })
+  const spotAt = $derived(new Map((spots ?? []).map((s) => [`${s.player_slot}:${s.time}`, s])))
+  /** The part of the map the dying hero crossed. */
+  const replayView = $derived(viewOf((spots ?? []).filter((s) => s.player_slot === watching?.player_slot)))
+  /** The dying hero last, so it is drawn on top. */
+  const cast = $derived([...players].sort((a, b) => +(a.player_slot === watching?.player_slot) - +(b.player_slot === watching?.player_slot)))
 </script>
 
 {#snippet side(team: MatchPlayer[], won: boolean)}
@@ -532,7 +562,7 @@
     <h2>Item timeline</h2>
     <p class="muted">
       Each item sits at the time it was bought; hover one for its name and time. A part that went into a bigger item
-      within five minutes is left out, so only the finished item shows. Consumables, wards and recipes are left out too.
+      within a minute is left out, so only the finished item shows. Consumables, wards and recipes are left out too.
     </p>
     <div class="card timeline" style:--step="{Math.max(timeX(300), 1)}px">
       <span></span>
@@ -548,7 +578,7 @@
             <img src={itemIconByName(b.item)} alt={itemName(b.item)} title="{itemName(b.item)} at {clock(b.time)}" width="27" height="20" loading="lazy" />
           {/each}
         </span>
-        <span class="track" style:height="{line.rows * ROW}px">
+        <span class="track" style:min-height="{line.rows * ROW}px">
           {#each line.placed as b}
             <img
               src={itemIconByName(b.item)}
@@ -600,20 +630,89 @@
       </section>
     </div>
 
+    <details class="card replay">
+      <summary>Play back a death</summary>
+      <div class="playback">
+        <ul aria-label="Deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}">
+          {#each deathsShown as d}
+            <li>
+              <button aria-pressed={watching === d} onclick={() => watch(d)}>
+                <span class="num">{clock(d.time)}</span>
+                <img src={heroIcon(hero.get(d.player_slot) ?? 0)} alt="" width="22" height="22" loading="lazy" />
+                {name(d.player_slot)}
+                {#if d.killer_slot !== null}
+                  <img class="killer" src={heroIcon(hero.get(d.killer_slot) ?? 0)} alt="killed by {name(d.killer_slot)}" title="killed by {name(d.killer_slot)}" width="22" height="22" loading="lazy" />
+                {/if}
+              </button>
+            </li>
+          {/each}
+        </ul>
+        <section>
+          {#if !watching}
+            <p class="muted">
+              Choose a death to see the {REPLAY} seconds before it: every hero's position second by second, and the
+              wards standing at that moment. The list follows the part of the game chosen above.
+            </p>
+          {:else if replayError}
+            <p class="error" role="alert">{replayError}</p>
+          {:else if !spots}
+            <p class="muted">Loading…</p>
+          {:else}
+            {@const now = watching.time - REPLAY + frame}
+            {@const icon = replayView.size * 0.085}
+            <h3>{deathNote(watching)}</h3>
+            <div class:playing>
+              <MiniMap label="Positions of the heroes at {clock(now)}, {REPLAY - frame} seconds before {name(watching.player_slot)} died" view="{replayView.x} {replayView.y} {replayView.size} {replayView.size}">
+                {#each match.wards.filter((w) => standing(w, now)) as w}{@render wardMark(w, replayView.size * 0.025, '')}{/each}
+                {#each cast as p (p.player_slot)}
+                  {@const at = spotAt.get(`${p.player_slot}:${now}`)}
+                  {@const dies = p.player_slot === watching.player_slot}
+                  {#if at}
+                    <g
+                      class="fallen mover {teamOf(p.player_slot)}"
+                      class:down={!at.alive || (dies && frame === REPLAY)}
+                      style:transform="translate({mapX(at.x)}px, {mapY(at.y)}px)"
+                    >
+                      <title>{heroName(p.hero_id)}</title>
+                      {#if dies}<circle class="halo" r={icon * 0.82} stroke-width={icon * 0.1} />{/if}
+                      <circle r={icon * 0.62} stroke-width={icon * 0.1} />
+                      <image href={heroIcon(p.hero_id)} x={-icon / 2} y={-icon / 2} width={icon} height={icon} />
+                    </g>
+                  {/if}
+                {/each}
+              </MiniMap>
+            </div>
+            <p class="controls">
+              <button onclick={() => (frame >= REPLAY && (frame = 0), (playing = !playing))}>
+                {playing ? 'Pause' : frame >= REPLAY ? 'Play again' : 'Play'}
+              </button>
+              <input type="range" min="0" max={REPLAY} bind:value={frame} oninput={() => (playing = false)} aria-label="Second of the playback" />
+              <span>{clock(now)}</span>
+            </p>
+            <p class="muted">
+              Double speed. The hero with the white ring is the one that dies; a faded hero is dead. Wards as on the
+              map above: ● observer, ◆ sentry.
+            </p>
+          {/if}
+        </section>
+      </div>
+    </details>
+
     <h2>Teamfights</h2>
     {#if fights.length === 0}
       <p class="muted">No fight with three or more deaths after 10:00.</p>
     {:else}
       <p class="muted">
         Three or more deaths less than 15 seconds apart, from 10:00 on. Faded heroes neither dealt nor took hero damage
-        and did not die. Click a fight to see where it happened and what each hero did.
+        and did not die. The bar under the time is how much more net worth one team gained in the fight than the other.
+        Click a fight to see where it happened and what each hero did.
       </p>
       <div class="card">
         <table class="fights">
           <thead>
             <tr>
               <th class="num">Radiant took part</th><th class="num">Damage</th><th class="num">Deaths</th>
-              <th class="when">Time</th>
+              <th class="when">Time and net worth swing</th>
               <th>Deaths</th><th>Damage</th><th>Dire took part</th>
             </tr>
           </thead>
@@ -623,13 +722,21 @@
               {@const dire = fightPlayers(fight.n, false)}
               {@const unfolded = open.includes(fight.n)}
               {@const when = `${clock(fight.start)} – ${clock(fight.end)}`}
+              {@const gold = swing(fight.n, 'net_worth_gain')}
               <!-- the button in the row is the keyboard's way in; its click reaches this handler too -->
               <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
               <tr class="fight" class:unfolded onclick={() => toggle(fight.n)}>
                 <td class="num party">{@render party(fight.n, true)}</td>
                 <td class="num">{number(sum(radiant.map((p) => p.damage)))}</td>
                 <td class="num">{sum(radiant.map((p) => p.deaths))}</td>
-                <td class="when"><button aria-expanded={unfolded}>{when}</button></td>
+                <td class="when">
+                  <button aria-expanded={unfolded}>{when}</button>
+                  <span class="tug" aria-hidden="true">
+                    <span><i class="radiant" style:width="{(100 * Math.max(gold, 0)) / swingBound[0]}%"></i></span>
+                    <span><i class="dire" style:width="{(100 * Math.max(-gold, 0)) / swingBound[0]}%"></i></span>
+                  </span>
+                  <span class="swing">{ahead(gold)}</span>
+                </td>
                 <td>{sum(dire.map((p) => p.deaths))}</td>
                 <td>{number(sum(dire.map((p) => p.damage)))}</td>
                 <td class="party">{@render party(fight.n, false)}</td>
@@ -1038,6 +1145,15 @@
     text-align: center;
     color: var(--text-2);
   }
+  .when .tug {
+    width: 150px;
+    background: var(--axis); /* the row turns the colour of the usual track when hovered or unfolded */
+    margin: 5px auto 3px;
+  }
+  .swing {
+    display: block;
+    font-size: 13px;
+  }
   .party img {
     vertical-align: middle;
     margin: 0 1px;
@@ -1133,13 +1249,110 @@
   .fallen.dire circle {
     stroke: var(--dire);
   }
+
+  .replay {
+    margin-top: 16px;
+  }
+  .replay summary {
+    padding: 11px 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .playback {
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr);
+    align-items: start;
+    gap: 16px 28px;
+    padding: 4px 14px 14px;
+  }
+  .playback ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 600px;
+    overflow-y: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .playback li button {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    padding: 4px 8px;
+    font: inherit;
+    color: var(--text-2);
+    text-align: left;
+    background: none;
+    border: 0;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .playback li button[aria-pressed='true'] {
+    background: var(--raised);
+    color: var(--text);
+  }
+  .playback li .num {
+    min-width: 5ch;
+  }
+  .playback .killer {
+    margin-left: auto;
+  }
+  .playback h3 {
+    margin-top: 0;
+    font-size: 15px;
+  }
+  .playback section .muted {
+    max-width: 520px;
+    font-size: 13px;
+  }
+  /* a hero slides to its next position in the time one second of the game takes: TICK in the script */
+  .playing .mover {
+    transition: transform 0.5s linear;
+  }
+  .mover.down {
+    opacity: 0.3;
+  }
+  .mover circle.halo {
+    fill: none;
+    stroke: #fff;
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 520px;
+    margin: 10px 0 8px;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .controls button {
+    min-width: 9ch;
+    padding: 4px 12px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--raised);
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .controls input {
+    flex: 1;
+    margin: 0;
+    padding: 0;
+  }
   @media (max-width: 760px) {
-    .inside {
+    .inside,
+    .playback {
       grid-template-columns: minmax(0, 1fr);
+    }
+    .playback ul {
+      max-height: 220px;
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .when button::after {
+    .when button::after,
+    .playing .mover {
       transition: none;
     }
   }
