@@ -11,7 +11,7 @@ How it works:
 
 The Teams page shows, for every team of the Reincarnation league (seasons 6 to 8), which heroes are banned against it, whether it picks them when they are open, and who plays what.
 
-`uv run --env-file .env python -m dotanalyst sync-leagues` fetches the league's games. The first run takes about an hour; run it again before a match to get the newest games. No server restart is needed.
+`uv run --env-file .env python -m dotanalyst sync-leagues` fetches the league's games. The first run takes about half an hour; run it again before a match to get the newest games. No server restart is needed.
 
 ## Replay salts from a second Steam account
 
