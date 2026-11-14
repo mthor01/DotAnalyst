@@ -190,6 +190,8 @@ def teams(session: Session) -> list[dict]:
         for team_id, name, win in sides:
             if team_id:
                 t = found.setdefault(team_id, {"team_id": team_id, "games": 0, "wins": 0})
+                # Steam sends some games with an empty team name: the last name it did send stays
+                name = name or t.get("name")
                 t.update(name=name, games=t["games"] + 1, wins=t["wins"] + win, last_played=g.start_time)
     return sorted(found.values(), key=lambda t: (t["name"] or "").lower())
 
@@ -204,6 +206,7 @@ def team(session: Session, team_id: int) -> dict | None:
     rows = session.scalars(select(m).where(played).order_by(m.start_time.desc())).all() if team_id else []
     if not rows:
         return None
+    names = {t["team_id"]: t["name"] for t in teams(session)}
     games = []
     heroes: dict[int, dict] = {}
     players: dict[int, dict] = {}
@@ -214,6 +217,7 @@ def team(session: Session, team_id: int) -> dict | None:
     for g in rows:
         radiant = g.radiant_team_id == team_id
         win = radiant == g.radiant_win
+        opponent = g.dire_team_id if radiant else g.radiant_team_id
         bans = [b for b in g.raw_json.get("picks_bans") or [] if not b["is_pick"]]
         own = [b["hero_id"] for b in bans if (b["team"] == 0) == radiant]  # the draft calls Radiant team 0
         against = [b["hero_id"] for b in bans if (b["team"] == 0) != radiant]
@@ -235,21 +239,19 @@ def team(session: Session, team_id: int) -> dict | None:
         games.append(
             {
                 "match_id": g.match_id, "start_time": g.start_time, "league": LEAGUES.get(g.league_id, str(g.league_id)),
-                "radiant": radiant, "win": win, "opponent_id": g.dire_team_id if radiant else g.radiant_team_id,
-                "opponent": g.dire_name if radiant else g.radiant_name, "picks": [p["hero_id"] for p in side],
-                "bans": own, "bans_against": against,
+                "radiant": radiant, "win": win, "opponent_id": opponent, "opponent": names.get(opponent),
+                "picks": [p["hero_id"] for p in side], "bans": own, "bans_against": against,
             }
         )  # fmt: skip
     for h in heroes.values():
         h["open"] = len(rows) - h["banned_against"] - h["banned"]
     n = PlayerName
-    names = dict(session.execute(select(n.account_id, n.name).where(n.account_id.in_(players))).all())
+    known = dict(session.execute(select(n.account_id, n.name).where(n.account_id.in_(players))).all())
     for player in players.values():
-        player["name"] = names.get(player["account_id"])
+        player["name"] = known.get(player["account_id"])
         player["heroes"] = sorted(player["heroes"].values(), key=lambda h: -h["games"])
     return {
-        "team_id": team_id, "name": rows[0].radiant_name if rows[0].radiant_team_id == team_id else rows[0].dire_name,
-        "games": games,
+        "team_id": team_id, "name": names[team_id], "games": games,
         "heroes": sorted(heroes.values(), key=lambda h: (-h["banned_against"], -h["picked"])),
         "players": sorted(players.values(), key=lambda p: -p["games"]),
     }  # fmt: skip

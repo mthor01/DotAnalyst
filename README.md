@@ -7,6 +7,12 @@ How it works:
 - The salt each match's replay URL needs comes from Valve's game coordinator, asked by a second Steam account (`steam/salts.mjs`), or else from the [OpenDota API](https://docs.opendota.com).
 - Replays are parsed by [odota/parser](https://github.com/odota/parser), OpenDota's replay parser, running locally in Docker.
 
+## Scouting league teams
+
+The Teams page shows, for every team of the Reincarnation league (seasons 6 to 8), which heroes are banned against it, whether it picks them when they are open, and who plays what.
+
+`uv run --env-file .env python -m dotanalyst sync-leagues` fetches the league's games. The first run takes about an hour; run it again before a match to get the newest games. No server restart is needed.
+
 ## Replay salts from a second Steam account
 
 Optional; without it OpenDota is asked, which can take hours to know a new match.

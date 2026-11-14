@@ -15,7 +15,7 @@ Stack and rules are in [CLAUDE.md](CLAUDE.md). This file says what to build and 
 | First custom metrics | Lane CS differential, vision habits, fight participation |
 | Replay URLs | `replay_salt` comes from Valve's game coordinator through a second Steam account, or else from the OpenDota API; the site downloads from Valve itself |
 | Fetching | The backend polls while it is running |
-| Out of scope | Logins and multi-user, hosting beyond this PC, live-game tracking, pro and league matches, global percentiles, MMR tracking, mobile layout, own Game Coordinator client |
+| Out of scope | Logins and multi-user, hosting beyond this PC, live-game tracking, pro matches, replays of league games (their drafts and scoreboards are in since November 2026, see Teams), global percentiles, MMR tracking, mobile layout, own Game Coordinator client |
 
 Defaults chosen without asking — change any of them before the milestone that uses it:
 
@@ -79,6 +79,8 @@ Raw data is fetched once and never refetched:
 - `data/opendota/{match_id}.json.gz` — the OpenDota response that supplied the replay salt.
 - `data/salts.json` — the replay salts the second Steam account got from Valve, by match id.
 - `data/steam/` — that account's login token and the Steam library's own files. Never committed.
+- `league_matches` — one row per league game: league, start time, both team ids and names, winner, and the full API response as JSON (the draft is its `picks_bans`). Kept out of `matches` so that league games neither join the accounts' stats nor have their replays downloaded.
+- `player_names` — Steam name per account of a league player, as it was when first asked for.
 - `heroes`, `items` — id-to-name lookups.
 - `recipes` — for each item that is built from others, the names of its components.
 
@@ -189,6 +191,22 @@ Known limit: the lane differences describe the lane, not the player, and a lane 
 - `uv run pytest` passes, with each metric function tested on the fixture replay against values worked out by hand.
 - `curl "http://localhost:8000/api/metrics?metric=lane_cs_diff&account_id=<id>"` returns one value per parsed match in which the account had a lane opponent.
 - The Trends page renders the rolling line for two accounts at once, and the Group page shows the pair win-rate table.
+
+## Teams: scouting a league team (November 2026)
+
+For preparing a tournament match: what do other teams ban against this team, and does the team pick those heroes when they are left open? Built from drafts and scoreboards only; no replay of a league game is downloaded.
+
+- **Which games**: the leagues in `LEAGUES` in `steam.py`, for now seasons 6 to 8 of "REINCARNATION - D/A/CH Dota 2 by BEING ESPORTS" (league ids 18795, 19418, 20408). Adding a league is one entry there.
+- **Fetching**: `dotanalyst sync-leagues`, run by hand. `GetMatchHistory` with `league_id` lists a league's games, each with both team ids; every game not stored yet is fetched once through `GetMatchHistoryBySequenceNum`, like an account's match. The first run takes about an hour (some 1,100 games, one request a second); a later run only fetches new games. The players' Steam names come last, from `GetPlayerSummaries`, 100 per request.
+- **Facts about the league list**: Steam has no query for a team's games, only for a league's. The list is paged by series, about 40 games a page, and `results_remaining` reaches 0 with games still to come, so pages are read until one is empty. Checked against dota2.com's `GetLeagueData`, which lists every series of a league without a key: all 198 games of season 8 came back, and 423 of 424 of season 6.
+- **Teams page** (`#teams`): every team with a game in those leagues, with games, wins and last game, and a name search.
+- **Team page** (`#team/<team_id>`):
+  - Heroes in their drafts, one sortable table: banned against them, banned by them, open, picked when open, won with it. A hero is open in a game when neither side banned it. Counts are shown as "3 of 4", never as a percentage: a team has a handful of games. The first 15 rows show, the rest on request.
+  - Players: everyone who played for the team, with games per hero.
+  - Games, newest first: season, opponent (a link to that team), side, result, their picks, the bans against them and their own bans.
+- Picks are read from the ten players of a game, bans from `picks_bans`. A team's name is the newest one Steam sent that is not empty.
+
+Not built: a season filter, replay stats of league games, automatic fetching by the poller, leagues chosen in the UI.
 
 ## Design and profile page (November 2026)
 

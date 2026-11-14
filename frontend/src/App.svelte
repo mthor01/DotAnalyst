@@ -6,15 +6,20 @@
   import Matches from './Matches.svelte'
   import Group from './Group.svelte'
   import Profile from './Profile.svelte'
+  import Team from './Team.svelte'
   import Teammates from './Teammates.svelte'
+  import Teams from './Teams.svelte'
   import Trends from './Trends.svelte'
 
-  const PAGES = { profile: 'Profile', matches: 'Matches', heroes: 'Heroes', teammates: 'Teammates & matchups', trends: 'Trends', group: 'Group' }
+  const PAGES = { profile: 'Profile', matches: 'Matches', heroes: 'Heroes', teammates: 'Teammates & matchups', trends: 'Trends', group: 'Group', teams: 'Teams' }
   const ALL_ACCOUNTS: Page[] = ['trends', 'group'] // these pages show every tracked account at once
   type Page = keyof typeof PAGES
   let hash = $state(location.hash.slice(1))
   const page = $derived<Page>(hash in PAGES ? (hash as Page) : 'profile')
   const matchId = $derived(/^match\/(\d+)$/.exec(hash)?.[1]) // #match/123 is one match, outside the pages above
+  const teamId = $derived(/^team\/(\d+)$/.exec(hash)?.[1]) // #team/123 is one league team, under Teams
+  // the league pages are about other people's games: no account and none of the filters apply
+  const league = $derived(!!teamId || (!matchId && page === 'teams'))
   let accounts = $state<Account[]>([])
   let error = $state('')
   let filters = $state({ account_id: '', lobby_type: '', game_mode: '', date_from: '', date_to: '' })
@@ -44,10 +49,10 @@
     <h1><a class="brand" href="#{Object.keys(PAGES)[0]}">DotAnalyst</a></h1>
     <nav aria-label="Pages">
       {#each Object.entries(PAGES) as [id, title]}
-        <a href="#{id}" aria-current={!matchId && page === id ? 'page' : undefined}>{title}</a>
+        <a href="#{id}" aria-current={(teamId ? id === 'teams' : !matchId && page === id) ? 'page' : undefined}>{title}</a>
       {/each}
     </nav>
-    <label class="who" hidden={!!matchId || ALL_ACCOUNTS.includes(page)}>
+    <label class="who" hidden={!!matchId || league || ALL_ACCOUNTS.includes(page)}>
       Account
       <select bind:value={filters.account_id}>
         {#each accounts as a}
@@ -57,7 +62,7 @@
     </label>
   </header>
 
-  <div class="filters" hidden={!!matchId}>
+  <div class="filters" hidden={!!matchId || league}>
     <label>
       Lobby
       <select bind:value={filters.lobby_type}>
@@ -82,6 +87,10 @@
     <p class="error" role="alert">Could not reach the API: {error}</p>
   {:else if matchId}
     <Match id={matchId} />
+  {:else if teamId}
+    <Team id={teamId} />
+  {:else if page === 'teams'}
+    <Teams />
   {:else if !filters.account_id}
     <p class="muted">No tracked accounts yet. Add one with <code>dotanalyst add-account</code>.</p>
   {:else if page === 'profile'}

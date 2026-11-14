@@ -156,6 +156,7 @@ LEAGUE_GAMES = [
     league_game(4, 4, THEM, OTHER, True, radiant_bans=[50], dire_bans=[50]),  # not a game of Us
     league_game(5, 5, OTHER, NO_TEAM, False, radiant_bans=[], dire_bans=[]),  # the Dire side has no team
 ]  # fmt: skip
+LEAGUE_GAMES[3]["dire_name"] = LEAGUE_GAMES[4]["radiant_name"] = ""  # Steam sends some games with an empty team name
 
 
 @pytest.fixture
@@ -213,6 +214,11 @@ def test_team_players_with_their_heroes(league):
     }  # fmt: skip
     assert players[1004]["name"] is None  # Steam gave no name
     assert players[1004]["heroes"] == [{"hero_id": 5, "games": 2, "wins": 2}, {"hero_id": 11, "games": 1, "wins": 0}]
+
+
+def test_team_name_is_the_newest_one_that_is_not_empty(league):
+    assert queries.team(league, OTHER)["name"] == "Other"
+    assert queries.team(league, THEM)["games"][0]["opponent"] == "Other"  # game 4 itself has no name for them
 
 
 def test_team_without_games_is_none(league):
