@@ -60,6 +60,31 @@ class MatchPlayer(Base):
     leaver_status: Mapped[int | None]
 
 
+class LeagueMatch(Base):
+    """A league game. Not in `matches`: there it would join the accounts' stats and have its replay downloaded."""
+
+    __tablename__ = "league_matches"
+
+    match_id: Mapped[int] = mapped_column(primary_key=True)
+    league_id: Mapped[int]
+    start_time: Mapped[int]
+    radiant_team_id: Mapped[int] = mapped_column(index=True)  # 0 when that side played without a team
+    dire_team_id: Mapped[int] = mapped_column(index=True)
+    radiant_name: Mapped[str | None]
+    dire_name: Mapped[str | None]
+    radiant_win: Mapped[bool]
+    raw_json: Mapped[dict] = mapped_column(JSON)  # has picks_bans, the draft in order, and the ten players
+
+
+class PlayerName(Base):
+    """Steam name of a league player, as it was when first asked for."""
+
+    __tablename__ = "player_names"
+
+    account_id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+
 class Hero(Base):
     __tablename__ = "heroes"
 

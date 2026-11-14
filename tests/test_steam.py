@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 from dotanalyst import steam
-from dotanalyst.db import Account, Base, Hero, Item, Match, MatchPlayer, Recipe
+from dotanalyst.db import Account, Base, Hero, Item, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
 
 FIXTURES = Path(__file__).parent / "fixtures"
 ME = 314448639
@@ -179,3 +179,80 @@ def test_sync_constants_stores_heroes_and_items(session):
     assert session.get(Recipe, "boots") is None  # bought whole
     assert steam.sync_constants(session, FakeSteam().client, KEY) == counts  # rerun replaces, no duplicates
     assert len(session.scalars(select(Recipe)).all()) == 5
+
+
+LEAGUE_PAGE, LEAGUE_DETAILS = load("league_history.json"), load("league_details.json")  # three games of league 18795
+LEAGUE_GAMES = LEAGUE_PAGE["result"]["matches"]
+# Steam says results_remaining 0 on a page that has more behind it: this game is only on the page after
+LATER_GAME = {**LEAGUE_GAMES[0], "match_id": 8568000000, "match_seq_num": 7196000000}
+RECORDED = 8568399403  # the game league_details.json was recorded from
+NO_PROFILE = 1010  # Steam leaves an account without a profile out of its answer
+
+
+class FakeLeague:
+    """Steam's answers about league 18795: two pages of games, the recorded details for each, and player names."""
+
+    def __init__(self):
+        self.requests: list[httpx.Request] = []
+        self.client = httpx.Client(transport=httpx.MockTransport(self.handle))
+
+    def count(self, method: str) -> int:
+        return sum(method in r.url.path for r in self.requests)
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        params = request.url.params
+        assert params["key"] == KEY
+        if "GetPlayerSummaries" in request.url.path:
+            accounts = [int(i) - steam.STEAM_ID_BASE for i in params["steamids"].split(",")]
+            assert len(accounts) <= 100
+            players = [{"steamid": str(a + steam.STEAM_ID_BASE), "personaname": f"player {a}"} for a in accounts]
+            return httpx.Response(200, json={"response": {"players": [p for p in players if "1010" not in p["personaname"]]}})
+        if "GetMatchHistoryBySequenceNum" in request.url.path:
+            seq = int(params["start_at_match_seq_num"])
+            entry = next(e for e in [*LEAGUE_GAMES, LATER_GAME] if e["match_seq_num"] == seq)
+            body = copy.deepcopy(LEAGUE_DETAILS)
+            body["result"]["matches"][0].update(match_seq_num=seq, match_id=entry["match_id"])
+            return httpx.Response(200, json=body)
+        if params["league_id"] != "18795":
+            return httpx.Response(200, json=EMPTY_PAGE)
+        start = params.get("start_at_match_id")
+        if start is None:
+            return httpx.Response(200, json=LEAGUE_PAGE)
+        if int(start) == LEAGUE_GAMES[-1]["match_id"] - 1:
+            return httpx.Response(200, json={"result": {"status": 1, "results_remaining": 0, "matches": [LATER_GAME]}})
+        return httpx.Response(200, json=EMPTY_PAGE)
+
+
+def test_league_sync_stores_each_game_with_its_teams_and_draft(session):
+    assert steam.sync_leagues(session, FakeLeague().client, KEY) == 4
+    game = session.get(LeagueMatch, RECORDED)
+    assert (game.league_id, game.start_time, game.radiant_win) == (18795, 1763665760, False)
+    assert (game.radiant_team_id, game.radiant_name) == (9906479, "Sayonara")
+    assert (game.dire_team_id, game.dire_name) == (9635282, "New Kidz Doto")
+    assert len(game.raw_json["picks_bans"]) == 24 and len(game.raw_json["players"]) == 10
+
+
+def test_league_sync_reads_on_past_a_page_that_says_nothing_remains(session):
+    steam.sync_leagues(session, FakeLeague().client, KEY)
+    assert session.get(LeagueMatch, LATER_GAME["match_id"]) is not None
+
+
+def test_league_games_stay_out_of_the_accounts_matches(session):
+    """A row in `matches` would join the accounts' stats and have its replay downloaded."""
+    steam.sync_leagues(session, FakeLeague().client, KEY)
+    assert session.scalar(select(func.count()).select_from(Match)) == 0
+
+
+def test_second_league_sync_fetches_no_details(session):
+    steam.sync_leagues(session, FakeLeague().client, KEY)
+    fake = FakeLeague()
+    assert steam.sync_leagues(session, fake.client, KEY) == 0
+    assert fake.count("GetMatchHistoryBySequenceNum") == 0
+
+
+def test_league_sync_stores_the_players_steam_names(session):
+    steam.sync_leagues(session, FakeLeague().client, KEY)
+    assert session.get(PlayerName, 1001).name == "player 1001"
+    assert session.get(PlayerName, NO_PROFILE) is None
+    assert session.scalar(select(func.count()).select_from(PlayerName)) == 9

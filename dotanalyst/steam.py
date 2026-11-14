@@ -5,13 +5,17 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import Account, Hero, Item, Match, MatchPlayer, Recipe
+from .db import Account, Hero, Item, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
 
 BASE = "https://api.steampowered.com"
 HISTORY = "IDOTA2Match_570/GetMatchHistory/V001/"
 # GetMatchDetails is broken on Valve's side; a sequence query for exactly one match replaces it
 DETAILS = "IDOTA2Match_570/GetMatchHistoryBySequenceNum/V001/"
 HEROES = "IEconDOTA2_570/GetHeroes/v1/"
+NAMES = "ISteamUser/GetPlayerSummaries/v2/"
+STEAM_ID_BASE = 76561197960265728  # a 64-bit Steam id is this plus the 32-bit account id
+# REINCARNATION - D/A/CH Dota 2 by BEING ESPORTS: the seasons whose games the team pages are built from
+LEAGUES = {18795: "Season 6", 19418: "Season 7", 20408: "Season 8"}
 ITEM_IDS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/item_ids.json"
 ITEMS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/items.json"
 PAUSE = 1.0  # seconds before every request
@@ -36,7 +40,8 @@ def call(client: httpx.Client, key: str, path: str, **params) -> dict:
         raise SteamError(f"{path}: {type(error).__name__}") from None
     if response.status_code != 200:
         raise SteamError(f"{path}: HTTP {response.status_code}")
-    return response.json()["result"]
+    body = response.json()
+    return body["result"] if "result" in body else body["response"]  # ISteamUser answers under "response"
 
 
 def match_history(client: httpx.Client, key: str, account_id: int) -> list[dict] | None:
@@ -54,6 +59,16 @@ def match_history(client: httpx.Client, key: str, account_id: int) -> list[dict]
         if not page or result.get("results_remaining", 0) <= 0:
             return matches
         params["start_at_match_id"] = page[-1]["match_id"] - 1
+
+
+def details(client: httpx.Client, key: str, entry: dict) -> dict | None:
+    """Full data of one match of a history page, or None when Steam does not have it yet."""
+    found = call(client, key, DETAILS, start_at_match_seq_num=entry["match_seq_num"], matches_requested=1)
+    found = found.get("matches", [])
+    if not found or found[0]["match_id"] != entry["match_id"]:
+        logging.warning("no details for match %s, will retry on the next sync", entry["match_id"])
+        return None
+    return found[0]
 
 
 def store_match(session: Session, m: dict) -> None:
@@ -90,17 +105,57 @@ def sync(session: Session, client: httpx.Client, key: str) -> dict[int, int | No
         for entry in history:
             if session.get(Match, entry["match_id"]) is not None:
                 continue  # stored matches are never refetched
-            found = call(
-                client, key, DETAILS, start_at_match_seq_num=entry["match_seq_num"], matches_requested=1
-            ).get("matches", [])
-            if not found or found[0]["match_id"] != entry["match_id"]:
-                logging.warning("no details for match %s, will retry on the next sync", entry["match_id"])
+            found = details(client, key, entry)
+            if found is None:
                 continue
-            store_match(session, found[0])
+            store_match(session, found)
             session.commit()  # per match, so an interrupted backfill keeps its progress
             new += 1
         result[account.account_id] = new
     return result
+
+
+def store_league_match(session: Session, m: dict) -> None:
+    session.add(
+        LeagueMatch(
+            match_id=m["match_id"], league_id=m["leagueid"], start_time=m["start_time"],
+            radiant_team_id=m.get("radiant_team_id", 0), dire_team_id=m.get("dire_team_id", 0),
+            radiant_name=m.get("radiant_name"), dire_name=m.get("dire_name"),
+            radiant_win=bool(m.get("radiant_win")), raw_json=m,
+        )
+    )
+
+
+def sync_leagues(session: Session, client: httpx.Client, key: str) -> int:
+    """Store the games of LEAGUES that are not stored yet, and their players' Steam names. Returns the new games."""
+    new = 0
+    for league_id in LEAGUES:
+        params = {"league_id": league_id}
+        while True:
+            # read until a page is empty: results_remaining counts series and reaches 0 with games still to come
+            page = call(client, key, HISTORY, **params).get("matches", [])
+            if not page:
+                break
+            for entry in page:
+                if session.get(LeagueMatch, entry["match_id"]) is not None:
+                    continue  # stored matches are never refetched
+                found = details(client, key, entry)
+                if found is None:
+                    continue
+                store_league_match(session, found)
+                session.commit()  # per match, so an interrupted backfill keeps its progress
+                new += 1
+            # shortcut: pages follow the series, not the match ids, so about 1 game in 400 falls between two pages
+            # (measured against dota2.com's GetLeagueData); take the match ids from there if one is ever missed
+            params["start_at_match_id"] = page[-1]["match_id"] - 1
+    players = {p.get("account_id") for raw in session.scalars(select(LeagueMatch.raw_json)) for p in raw["players"]}
+    unnamed = sorted(players - {None, ANONYMOUS} - set(session.scalars(select(PlayerName.account_id))))
+    for i in range(0, len(unnamed), 100):  # Steam takes 100 ids in one request
+        steam_ids = ",".join(str(a + STEAM_ID_BASE) for a in unnamed[i : i + 100])
+        for p in call(client, key, NAMES, steamids=steam_ids)["players"]:
+            session.add(PlayerName(account_id=int(p["steamid"]) - STEAM_ID_BASE, name=p["personaname"]))
+        session.commit()
+    return new
 
 
 def sync_constants(session: Session, client: httpx.Client, key: str) -> tuple[int, int]:
