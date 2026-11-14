@@ -13,7 +13,7 @@ Stack and rules are in [CLAUDE.md](CLAUDE.md). This file says what to build and 
 | Basic views | Match history, hero performance, teammates and matchups |
 | Replay views | Laning phase, economy timelines, fights and deaths, vision and map |
 | First custom metrics | Lane CS differential, vision habits, fight participation |
-| Replay URLs | OpenDota API supplies `cluster` and `replay_salt`; the site downloads from Valve itself |
+| Replay URLs | `replay_salt` comes from Valve's game coordinator through a second Steam account, or else from the OpenDota API; the site downloads from Valve itself |
 | Fetching | The backend polls while it is running |
 | Out of scope | Logins and multi-user, hosting beyond this PC, live-game tracking, pro and league matches, global percentiles, MMR tracking, mobile layout, own Game Coordinator client |
 
@@ -46,6 +46,8 @@ Checked live on 2026-11-11:
 - `sqlalchemy`, `httpx`, `pytest`, `fastapi` and `uvicorn` install on Python 3.14.
 - OpenDota's `GET /api/matches/{match_id}` returns `replay_salt` and the same `cluster` as the Web API for ordinary public matches, without a key. Its headers show a free limit of 60 calls a minute and about 3,000 a day.
 - OpenDota has no salt for some matches (2 of 15 tried, 60 and 120 days old), and asking again did not produce one.
+- OpenDota only has a salt once it has looked the match up itself. On 2026-11-14 a match that had ended 2.6 hours before still had none; others had theirs after 8 to 20 minutes.
+- OpenDota's own retriever (`odota/core`, `svc/retriever.ts`) gets the salt from the Dota 2 game coordinator with a Steam account: `CMsgGCMatchDetailsRequest` (7095), whose answer holds `replay_salt` as field 13 of the match. Its notes give the limits as about 100 questions per account and 500 per IP address a day.
 - Valve served every replay tried, up to 75 days old. Each carries a header dated 100 days after upload, which is probably when it is deleted.
 - All six replays inspected were Zstandard files under the `.dem.bz2` name, 40–67 MB each. Python 3.14 reads them with the standard library (`compression.zstd`).
 - One match takes about 15 seconds to download and parse, and its raw output is about 2.5 MB.
@@ -75,6 +77,8 @@ Raw data is fetched once and never refetched:
 - `match_players` — one row per player per match with the end-of-game numbers from the API.
 - `data/raw/{match_id}.jsonl.gz` — the parser output.
 - `data/opendota/{match_id}.json.gz` — the OpenDota response that supplied the replay salt.
+- `data/salts.json` — the replay salts the second Steam account got from Valve, by match id.
+- `data/steam/` — that account's login token and the Steam library's own files. Never committed.
 - `heroes`, `items` — id-to-name lookups.
 - `recipes` — for each item that is built from others, the names of its components.
 
@@ -120,11 +124,12 @@ No Game Coordinator and no OpenDota.
 
 This comes before the replay stats because replays expire: raw output collected now can be turned into stats later, but a missed replay is gone.
 
-- Each poll, for stored matches with replay state `none` or `pending`: ask OpenDota for `replay_salt`, build the URL from the stored `cluster` and that salt, download from Valve, decompress with the standard library (Zstandard or bz2, told apart by the first bytes), parse, store, delete the `.dem`.
+- Each poll, for stored matches with replay state `none` or `pending`: get the `replay_salt` (see below), build the URL from the stored `cluster` and that salt, download from Valve, decompress with the standard library (Zstandard or bz2, told apart by the first bytes), parse, store, delete the `.dem`.
 - At most 10 matches per poll, never-tried matches first, newest first. With the default 15-minute poll that is 40 an hour.
 - Matches older than 30 days are not downloaded (chosen on 2026-11-11; `MAX_AGE_DAYS` in `poll.py`). They keep state `none`.
 - A match is tried at most once per hour. A try that finds no salt or no file leaves it `pending`; once the match is 14 days old such a try makes it `unavailable`, and it is never tried again.
 - An OpenDota response with a salt is stored, so a salt is never requested twice.
+- Added 2026-11-14: when `STEAM_ALT_USER` and `STEAM_ALT_PASSWORD` are set, the salts come from Valve first. Once per poll `steam/salts.mjs` (Node, the `steam-user` library) logs in with that second account, connects to the Dota 2 game coordinator and asks for the match details of every due match. Its salts are stored in `data/salts.json` and never asked for again. OpenDota is asked for the matches it got no salt for, and for all of them when the script fails. The first login is done by hand (`node --env-file=.env steam/salts.mjs`) to type the Steam Guard code; the login token it leaves in `data/steam/` serves the later ones.
 
 **Done when**
 

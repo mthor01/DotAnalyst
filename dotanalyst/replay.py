@@ -1,6 +1,7 @@
 import bz2
 import gzip
 import json
+import subprocess
 import time
 from compression import zstd
 from pathlib import Path
@@ -13,6 +14,7 @@ from .db import DATA, Match
 PARSER_URL = "http://localhost:5600/"
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 OPENDOTA_MATCH = "https://api.opendota.com/api/matches/{}"
+SALT_SCRIPT = Path(__file__).parent.parent / "steam" / "salts.mjs"
 RETRY_DAYS = 14  # a match this old with no replay to get is given up on
 
 
@@ -68,6 +70,34 @@ def replay_url(match_id: int, cluster: int, salt: int) -> str:
     return f"http://replay{cluster}.valve.net/570/{match_id}_{salt}.dem.bz2"
 
 
+def steam_salts(match_ids: list[int], data: Path = DATA) -> dict[int, int]:
+    """Replay salts straight from Valve, asked for by the second Steam account (steam/salts.mjs).
+
+    Returns every salt known this way. One is kept in data/salts.json and never asked for again; Valve allows an
+    account about 100 questions a day.
+    """
+    stored = data / "salts.json"
+    known = {int(k): v for k, v in json.loads(stored.read_text()).items()} if stored.exists() else {}
+    missing = [str(match_id) for match_id in match_ids if match_id not in known]
+    if not missing:
+        return known
+    try:
+        done = subprocess.run(
+            ["node", str(SALT_SCRIPT), *missing],
+            capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60 + 6 * len(missing),
+        )  # fmt: skip
+        if done.returncode:
+            raise ReplayError(done.stderr.strip()[-300:] or f"salts.mjs ended with code {done.returncode}")
+        answer = json.loads(done.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as error:  # no node, no answer in time, not JSON
+        raise ReplayError(repr(error)) from error
+    # a salt goes into a URL, so nothing but a number passes
+    known |= {int(k): v for k, v in answer.items() if k in missing and type(v) is int}
+    data.mkdir(parents=True, exist_ok=True)
+    stored.write_text(json.dumps(known))
+    return known
+
+
 def replay_salt(match_id: int, client: httpx.Client, opendota_dir: Path) -> int | None:
     """Replay salt from OpenDota, or None if it has none. A response with a salt is kept and never asked for again."""
     stored = opendota_dir / f"{match_id}.json.gz"
@@ -112,15 +142,20 @@ def download_replay(url: str, dem: Path, client: httpx.Client) -> bool:
     return True
 
 
-def fetch_replay(session: Session, match: Match, client: httpx.Client, data: Path = DATA) -> bool:
-    """Download and parse one match's replay. False when there is no replay to get (yet)."""
+def fetch_replay(
+    session: Session, match: Match, client: httpx.Client, data: Path = DATA, salt: int | None = None
+) -> bool:
+    """Download and parse one match's replay. False when there is no replay to get (yet).
+
+    Without a salt from the caller (see steam_salts), OpenDota is asked for it.
+    """
     # recorded before any request, so a match that keeps erroring waits an hour like any other
     match.replay_state = "pending"
     match.replay_tried_at = int(time.time())
     session.commit()
     dem = data / "tmp" / f"{match.match_id}.dem"
     try:
-        salt = replay_salt(match.match_id, client, data / "opendota")
+        salt = salt or replay_salt(match.match_id, client, data / "opendota")
         if salt is None or not download_replay(replay_url(match.match_id, match.cluster, salt), dem, client):
             if time.time() - match.start_time > RETRY_DAYS * 86400:
                 match.replay_state = "unavailable"

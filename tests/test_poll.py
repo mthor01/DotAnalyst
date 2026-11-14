@@ -1,6 +1,8 @@
 import bz2
 import gzip
+import json
 import os
+import subprocess
 import time
 from compression import zstd
 from pathlib import Path
@@ -151,6 +153,62 @@ def test_salt_is_asked_for_once_even_if_the_download_has_to_be_repeated(session,
     assert len(to("valve.net", calls)) == 2
     assert len(to("opendota", calls)) == 1
     assert session.get(Match, GOOD).replay_state == "pending"
+
+
+def test_salts_come_from_the_second_steam_account_and_from_opendota_for_the_rest(session, tmp_path, monkeypatch):
+    add_match(session, GOOD)
+    add_match(session, WRONG_LOG, age_days=1)
+    asked = []
+
+    def node(command, **options):  # stands in for steam/salts.mjs: Valve has a salt for GOOD only
+        asked.append(command[2:])
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps({str(GOOD): 111}), stderr="")
+
+    monkeypatch.setattr(subprocess, "run", node)
+    calls = []
+    client = network(calls, opendota=(200, OPENDOTA))  # salts, but Valve has no file yet
+
+    poll_once(session, client, "", tmp_path / "nowhere", tmp_path, alt=True)
+    assert asked == [[str(GOOD), str(WRONG_LOG)]]  # one login for all the matches of a poll
+    assert to("valve.net", calls) == [
+        f"http://replay{CLUSTER}.valve.net/570/{GOOD}_111.dem.bz2",
+        f"http://replay{CLUSTER}.valve.net/570/{WRONG_LOG}_519105714.dem.bz2",
+    ]
+    assert to("opendota", calls) == [f"https://api.opendota.com/api/matches/{WRONG_LOG}"]
+
+    for match_id in (GOOD, WRONG_LOG):
+        session.get(Match, match_id).replay_tried_at -= 3601
+    session.commit()
+    poll_once(session, client, "", tmp_path / "nowhere", tmp_path, alt=True)
+    assert asked[1:] == [[str(WRONG_LOG)]]  # the salt of GOOD was kept
+    assert to("valve.net", calls)[2] == f"http://replay{CLUSTER}.valve.net/570/{GOOD}_111.dem.bz2"
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        subprocess.CompletedProcess([], 1, stdout="", stderr="Steam login failed: InvalidPassword"),
+        subprocess.CompletedProcess([], 0, stdout="not JSON", stderr=""),
+        FileNotFoundError("node"),
+        subprocess.TimeoutExpired("node", 66),
+    ],
+    ids=["login failed", "not JSON", "no node", "no answer in time"],
+)
+def test_opendota_is_asked_when_the_second_steam_account_fails(session, tmp_path, monkeypatch, outcome):
+    add_match(session, GOOD)
+
+    def node(command, **options):
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(subprocess, "run", node)
+    calls = []
+    client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
+
+    assert poll_once(session, client, "", tmp_path / "nowhere", tmp_path, alt=True) == (0, 1)
+    assert to("valve.net", calls) == [f"http://replay{CLUSTER}.valve.net/570/{GOOD}_519105714.dem.bz2"]
+    assert not (tmp_path / "salts.json").exists()
 
 
 @pytest.mark.parametrize(

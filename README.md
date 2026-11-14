@@ -4,5 +4,14 @@ A local Dota 2 stats site for the players I care about. There are plenty of stat
 
 How it works:
 - Match data comes from Valve's Steam Web API.
-- The [OpenDota API](https://docs.opendota.com) provides the salt each match's replay URL needs.
+- The salt each match's replay URL needs comes from Valve's game coordinator, asked by a second Steam account (`steam/salts.mjs`), or else from the [OpenDota API](https://docs.opendota.com).
 - Replays are parsed by [odota/parser](https://github.com/odota/parser), OpenDota's replay parser, running locally in Docker.
+
+## Replay salts from a second Steam account
+
+Optional; without it OpenDota is asked, which can take hours to know a new match.
+
+1. `npm install` in `steam/`.
+2. Put the account in `.env` as `STEAM_ALT_USER` and `STEAM_ALT_PASSWORD`. Use an account you do not play on: the script shows it as playing Dota 2.
+3. Run `node --env-file=.env steam/salts.mjs` once and type the Steam Guard code it asks for. It prints `{}` when the login worked.
+4. Restart the server.

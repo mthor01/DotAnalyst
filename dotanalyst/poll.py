@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from .db import DATA, Match, PlayerMinute
 from .derive import derive_match
-from .replay import ReplayError, fetch_replay, parse_replay
+from .replay import ReplayError, fetch_replay, parse_replay, steam_salts
 from .steam import sync
 
 log = logging.getLogger("uvicorn.error")  # the logger uvicorn already prints
@@ -22,7 +22,7 @@ DOWNLOADS_PER_POLL = 10  # about 40 MB each; also keeps OpenDota calls far below
 
 
 def poll_once(
-    session: Session, client: httpx.Client, key: str, replay_dir: Path, data: Path = DATA
+    session: Session, client: httpx.Client, key: str, replay_dir: Path, data: Path = DATA, alt: bool = False
 ) -> tuple[int, int]:
     """Sync all accounts, parse replays the Dota client has downloaded, download missing ones,
     then compute the stats of every parsed match that has none.
@@ -66,9 +66,16 @@ def poll_once(
         .order_by(Match.replay_tried_at.is_not(None), Match.start_time.desc())
         .limit(DOWNLOADS_PER_POLL)
     )
-    for match in session.scalars(due).all():
+    matches = session.scalars(due).all()
+    salts = {}
+    if alt and matches:  # the second Steam account asks Valve; OpenDota is asked for what that leaves open
         try:
-            parsed += fetch_replay(session, match, client, data)
+            salts = steam_salts([match.match_id for match in matches], data)
+        except ReplayError as error:
+            log.warning("replay salts from Steam: %s; asking OpenDota instead", error)
+    for match in matches:
+        try:
+            parsed += fetch_replay(session, match, client, data, salts.get(match.match_id))
         except ReplayError as error:
             log.warning("replay download: %s", error)
         except (OSError, httpx.HTTPError) as error:
@@ -91,7 +98,9 @@ def poll_once(
 def _run(engine: Engine) -> tuple[int, int]:
     replay_dir = Path(os.environ.get("DOTA_REPLAY_DIR", REPLAY_DIR))
     with Session(engine) as session, httpx.Client() as client:
-        return poll_once(session, client, os.environ.get("STEAM_API_KEY", ""), replay_dir)
+        return poll_once(
+            session, client, os.environ.get("STEAM_API_KEY", ""), replay_dir, alt=bool(os.environ.get("STEAM_ALT_USER"))
+        )
 
 
 async def poll_forever(engine: Engine) -> None:
