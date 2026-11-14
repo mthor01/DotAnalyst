@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GAME_MODES, LOBBY_TYPES, get, type Account } from './lib/api'
+  import { GAME_MODES, LOBBY_TYPES, get, post, type Account } from './lib/api'
   import { loadConstants } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
   import Match from './Match.svelte'
@@ -40,6 +40,29 @@
   $effect(() => {
     if (filters.account_id) localStorage.setItem('account_id', filters.account_id)
   })
+
+  let checking = $state(false)
+  let checked = $state('') // what the last check found, or why it failed
+  let version = $state(0) // goes up with every check; the page below is built anew, so it asks for its data again
+  const some = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+  async function check() {
+    checking = true
+    checked = ''
+    try {
+      if (league) {
+        const found = await post<{ league_games: number }>('teams/refresh')
+        checked = some(found.league_games, 'new league game')
+      } else {
+        const found = await post<{ matches: number; replays: number; waiting: number }>('refresh')
+        checked = `${some(found.matches, 'new match', 'new matches')}, ${some(found.replays, 'replay')} parsed`
+        if (found.waiting) checked += `, ${some(found.waiting, 'match', 'matches')} still without a replay`
+      }
+      version += 1
+    } catch (e) {
+      checked = `Check failed: ${(e as Error).message}`
+    }
+    checking = false
+  }
 </script>
 
 <svelte:window onhashchange={() => (hash = location.hash.slice(1))} />
@@ -52,14 +75,20 @@
         <a href="#{id}" aria-current={(teamId ? id === 'teams' : !matchId && page === id) ? 'page' : undefined}>{title}</a>
       {/each}
     </nav>
-    <label class="who" hidden={!!matchId || league || ALL_ACCOUNTS.includes(page)}>
-      Account
-      <select bind:value={filters.account_id}>
-        {#each accounts as a}
-          <option value={String(a.account_id)}>{a.label ?? a.account_id}</option>
-        {/each}
-      </select>
-    </label>
+    <div class="side">
+      <label hidden={!!matchId || league || ALL_ACCOUNTS.includes(page)}>
+        Account
+        <select bind:value={filters.account_id}>
+          {#each accounts as a}
+            <option value={String(a.account_id)}>{a.label ?? a.account_id}</option>
+          {/each}
+        </select>
+      </label>
+      <span class="muted" role="status">{checked}</span>
+      <button class="action" onclick={check} disabled={checking}>
+        {checking ? 'Checking…' : league ? 'Check for new league games' : 'Check for new games'}
+      </button>
+    </div>
   </header>
 
   <div class="filters" hidden={!!matchId || league}>
@@ -83,6 +112,7 @@
     <label>To <input type="date" bind:value={filters.date_to} /></label>
   </div>
 
+  {#key version}
   {#if error}
     <p class="error" role="alert">Could not reach the API: {error}</p>
   {:else if matchId}
@@ -106,4 +136,5 @@
   {:else}
     <Teammates {query} />
   {/if}
+  {/key}
 </main>

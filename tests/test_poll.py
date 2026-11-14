@@ -140,6 +140,17 @@ def test_match_without_a_replay_is_retried_hourly_and_given_up_after_14_days(ses
     assert poll() == 1  # the pending one again; the unavailable one never
 
 
+def test_a_refresh_by_hand_does_not_wait_the_hour(session, tmp_path):
+    add_match(session, 1)
+    calls = []
+    client = network(calls)  # OpenDota does not know the match
+    poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
+    poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
+    assert len(to("opendota", calls)) == 1  # the timed poll leaves a match tried a moment ago alone
+    poll_once(session, client, "", tmp_path / "nowhere", tmp_path, retry_seconds=0)
+    assert len(to("opendota", calls)) == 2
+
+
 def test_salt_is_asked_for_once_even_if_the_download_has_to_be_repeated(session, tmp_path):
     add_match(session, GOOD)
     calls = []

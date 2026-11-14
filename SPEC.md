@@ -197,7 +197,7 @@ Known limit: the lane differences describe the lane, not the player, and a lane 
 For preparing a tournament match: what do other teams ban against this team, and does the team pick those heroes when they are left open? Built from drafts and scoreboards only; no replay of a league game is downloaded.
 
 - **Which games**: the leagues in `LEAGUES` in `steam.py`, for now seasons 6 to 8 of "REINCARNATION - D/A/CH Dota 2 by BEING ESPORTS" (league ids 18795, 19418, 20408). Adding a league is one entry there.
-- **Fetching**: `dotanalyst sync-leagues`, run by hand. `GetMatchHistory` with `league_id` lists a league's games, each with both team ids; every game not stored yet is fetched once through `GetMatchHistoryBySequenceNum`, like an account's match. The first run took half an hour (1,130 games); a later run only fetches new games. The players' Steam names come last, from `GetPlayerSummaries`, 100 per request.
+- **Fetching**: the button in the top bar (see below) or `dotanalyst sync-leagues`; the poller does not do it. `GetMatchHistory` with `league_id` lists a league's games, each with both team ids; every game not stored yet is fetched once through `GetMatchHistoryBySequenceNum`, like an account's match. The first run took half an hour (1,130 games); a later run only fetches new games. The players' Steam names come last, from `GetPlayerSummaries`, 100 per request.
 - **Facts about the league list**: Steam has no query for a team's games, only for a league's. The list is paged by series, about 40 games a page, and `results_remaining` reaches 0 with games still to come, so pages are read until one is empty. Checked against dota2.com's `GetLeagueData`, which lists every series of a league without a key: all 198 games of season 8 came back, and 423 of 424 of season 6.
 - **Known limit**: the list reaches back 500 games per league and no further, whatever `start_at_match_id` says. Season 7 has 561 games, so its oldest 67 (the first weeks, March 2026) are not stored. Asking with `account_id` of a player next to `league_id` does list that player's older league games; that route is not built.
 - **Teams page** (`#teams`): every team with a game in those leagues, with games, wins and last game, and a name search.
@@ -208,6 +208,14 @@ For preparing a tournament match: what do other teams ban against this team, and
 - Picks are read from the ten players of a game, bans from `picks_bans`. A team's name is the newest one Steam sent that is not empty.
 
 Not built: a season filter, replay stats of league games, automatic fetching by the poller, leagues chosen in the UI.
+
+## The check button (November 2026)
+
+The top bar ends in a button that fetches now instead of at the next poll. The page shows what was found and loads its data again.
+
+- On the Teams pages it reads "Check for new league games": `POST /api/teams/refresh` runs `sync-leagues`, about 50 seconds.
+- Everywhere else it reads "Check for new games": `POST /api/refresh` runs one poll (new matches of every account, then replays), about half a minute plus 10 seconds per replay. Unlike the timed poll it tries every waiting replay again, whenever it was last tried: someone who presses it after starting Docker expects the replays that failed a minute ago. It answers with the new matches, the replays parsed, and how many matches still have none.
+- The timed poll and both checks share one lock, so they never fetch at the same time; a check started during a poll waits for it.
 
 ## Design and profile page (November 2026)
 

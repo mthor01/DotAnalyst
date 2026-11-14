@@ -116,8 +116,17 @@ nav a[aria-current='page'] {
   color: var(--text);
   border-bottom-color: var(--text);
 }
-.who {
+/* the right end of the top bar: the account, then the button that checks for new games */
+.side {
   margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+.action:disabled {
+  color: var(--muted);
+  cursor: default;
 }
 .filters {
   display: flex;

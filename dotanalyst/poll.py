@@ -1,17 +1,18 @@
 import asyncio
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 
 import httpx
-from sqlalchemy import Engine, and_, or_, select
+from sqlalchemy import Engine, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from .db import DATA, Match, PlayerMinute
 from .derive import derive_match
 from .replay import ReplayError, fetch_replay, parse_replay, steam_salts
-from .steam import sync
+from .steam import sync, sync_leagues
 
 log = logging.getLogger("uvicorn.error")  # the logger uvicorn already prints
 REPLAY_DIR = Path(r"C:\Program Files (x86)\Steam\steamapps\common\dota 2 beta\game\dota\replays")
@@ -19,15 +20,17 @@ SETTLE_SECONDS = 120
 RETRY_SECONDS = 3600
 MAX_AGE_DAYS = 30  # how far back replays are downloaded; Valve keeps them about 100 days
 DOWNLOADS_PER_POLL = 10  # about 40 MB each; also keeps OpenDota calls far below its 60 a minute
+BUSY = threading.Lock()  # the timed poll and a refresh from the site never fetch at the same time
 
 
 def poll_once(
-    session: Session, client: httpx.Client, key: str, replay_dir: Path, data: Path = DATA, alt: bool = False
-) -> tuple[int, int]:
+    session: Session, client: httpx.Client, key: str, replay_dir: Path, data: Path = DATA, alt: bool = False,
+    retry_seconds: int = RETRY_SECONDS,
+) -> tuple[int, int]:  # fmt: skip
     """Sync all accounts, parse replays the Dota client has downloaded, download missing ones,
     then compute the stats of every parsed match that has none.
 
-    Returns (new matches, replays parsed).
+    A replay that was not there is tried again after retry_seconds. Returns (new matches, replays parsed).
     """
     new = 0
     if key:
@@ -61,7 +64,7 @@ def poll_once(
                 Match.replay_state == "pending",
                 and_(Match.replay_state == "none", Match.start_time > now - MAX_AGE_DAYS * 86400),
             ),
-            or_(Match.replay_tried_at.is_(None), Match.replay_tried_at < now - RETRY_SECONDS),
+            or_(Match.replay_tried_at.is_(None), Match.replay_tried_at < now - retry_seconds),
         )
         .order_by(Match.replay_tried_at.is_not(None), Match.start_time.desc())
         .limit(DOWNLOADS_PER_POLL)
@@ -95,12 +98,27 @@ def poll_once(
     return new, parsed
 
 
-def _run(engine: Engine) -> tuple[int, int]:
+def _run(engine: Engine, retry_seconds: int = RETRY_SECONDS) -> tuple[int, int]:
     replay_dir = Path(os.environ.get("DOTA_REPLAY_DIR", REPLAY_DIR))
-    with Session(engine) as session, httpx.Client() as client:
+    with BUSY, Session(engine) as session, httpx.Client() as client:
         return poll_once(
-            session, client, os.environ.get("STEAM_API_KEY", ""), replay_dir, alt=bool(os.environ.get("STEAM_ALT_USER"))
-        )
+            session, client, os.environ.get("STEAM_API_KEY", ""), replay_dir,
+            alt=bool(os.environ.get("STEAM_ALT_USER")), retry_seconds=retry_seconds,
+        )  # fmt: skip
+
+
+def refresh(engine: Engine) -> dict:
+    """A poll asked for from the site. It tries every waiting replay again, whenever it was last tried."""
+    new, parsed = _run(engine, retry_seconds=0)
+    with Session(engine) as session:
+        waiting = session.scalar(select(func.count()).select_from(Match).where(Match.replay_state == "pending"))
+    return {"matches": new, "replays": parsed, "waiting": waiting}
+
+
+def refresh_leagues(engine: Engine) -> dict:
+    """New league games, asked for from the site."""
+    with BUSY, Session(engine) as session, httpx.Client() as client:
+        return {"league_games": sync_leagues(session, client, os.environ.get("STEAM_API_KEY", ""))}
 
 
 async def poll_forever(engine: Engine) -> None:

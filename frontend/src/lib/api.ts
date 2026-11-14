@@ -129,6 +129,13 @@ export async function get<T>(path: string, query = ''): Promise<T> {
   return response.json()
 }
 
+/** A request that makes the server do something. The server's own words are the error message. */
+export async function post<T>(path: string): Promise<T> {
+  const response = await fetch(`/api/${path}`, { method: 'POST' })
+  if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? `${path}: HTTP ${response.status}`)
+  return response.json()
+}
+
 export const LOBBY_TYPES: Record<number, string> = { 0: 'Normal', 7: 'Ranked' }
 export const GAME_MODES: Record<number, string> = {
   1: 'All Pick',

@@ -1,5 +1,6 @@
 """Run with: uv run --env-file .env uvicorn dotanalyst.api:app"""
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -9,10 +10,11 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import derive, queries
+from . import derive, poll, queries
 from .db import DATA, Account, Hero, Item, open_engine
 from .metrics import NAMES
 from .poll import poll_forever
+from .steam import SteamError
 
 engine = open_engine()
 FRONTEND = Path("frontend/dist")
@@ -97,6 +99,25 @@ def teammates(session: Db, where: Where) -> list[dict]:
 @app.get("/api/matchups")
 def matchups(session: Db, where: Where) -> list[dict]:
     return queries.matchups(session, where)
+
+
+# plain functions, so FastAPI runs them in a worker thread and a long check does not stall the other requests
+@app.post("/api/refresh")
+def refresh() -> dict:
+    try:
+        return poll.refresh(engine)
+    except SteamError as error:
+        raise HTTPException(502, f"Steam: {error}") from None
+
+
+@app.post("/api/teams/refresh")
+def refresh_leagues() -> dict:
+    if not os.environ.get("STEAM_API_KEY"):
+        raise HTTPException(503, "STEAM_API_KEY is not set")
+    try:
+        return poll.refresh_leagues(engine)
+    except SteamError as error:
+        raise HTTPException(502, f"Steam: {error}") from None
 
 
 @app.get("/api/teams")
