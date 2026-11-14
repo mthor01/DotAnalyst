@@ -127,7 +127,10 @@ def store_league_match(session: Session, m: dict) -> None:
 
 
 def sync_leagues(session: Session, client: httpx.Client, key: str) -> int:
-    """Store the games of LEAGUES that are not stored yet, and their players' Steam names. Returns the new games."""
+    """Store the games of LEAGUES that are not stored yet, and their players' Steam names. Returns the new games.
+
+    Only the newest 500 games of a league can be listed, see the shortcut below.
+    """
     new = 0
     for league_id in LEAGUES:
         params = {"league_id": league_id}
@@ -145,8 +148,9 @@ def sync_leagues(session: Session, client: httpx.Client, key: str) -> int:
                 store_league_match(session, found)
                 session.commit()  # per match, so an interrupted backfill keeps its progress
                 new += 1
-            # shortcut: pages follow the series, not the match ids, so about 1 game in 400 falls between two pages
-            # (measured against dota2.com's GetLeagueData); take the match ids from there if one is ever missed
+            # shortcut: Steam lists only the newest 500 games of a league (season 7 has 561), and about 1 game in 400
+            # falls between two pages; both measured against dota2.com's GetLeagueData. An older game can still be
+            # listed with account_id of one of its players next to league_id, if the missing ones are ever wanted
             params["start_at_match_id"] = page[-1]["match_id"] - 1
     players = {p.get("account_id") for raw in session.scalars(select(LeagueMatch.raw_json)) for p in raw["players"]}
     unnamed = sorted(players - {None, ANONYMOUS} - set(session.scalars(select(PlayerName.account_id))))
