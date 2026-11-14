@@ -99,5 +99,18 @@ def matchups(session: Db, where: Where) -> list[dict]:
     return queries.matchups(session, where)
 
 
+@app.get("/api/teams")
+def teams(session: Db) -> list[dict]:
+    return queries.teams(session)
+
+
+@app.get("/api/teams/{team_id}")
+def team(session: Db, team_id: int) -> dict:
+    found = queries.team(session, team_id)
+    if found is None:
+        raise HTTPException(404, f"no league games of team {team_id} are stored")
+    return found
+
+
 if FRONTEND.is_dir():  # after the API routes, so /api/* wins
     app.mount("/", StaticFiles(directory=FRONTEND, html=True))

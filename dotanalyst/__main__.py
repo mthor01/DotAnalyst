@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from .db import Account, Match, open_session
 from .derive import TABLES, recompute
 from .replay import ReplayError, parse_replay
-from .steam import SteamError, sync, sync_constants
+from .steam import LEAGUES, SteamError, sync, sync_constants, sync_leagues
 
 
 def main() -> int:
@@ -23,13 +23,14 @@ def main() -> int:
     sub.add_parser("status", help="show what is stored")
     sub.add_parser("sync", help="fetch new matches of all tracked accounts")
     sub.add_parser("sync-constants", help="fetch hero and item names")
+    sub.add_parser("sync-leagues", help="fetch the league games the team pages are built from")
     replay = sub.add_parser("parse-replay", help="parse a .dem named <match_id>.dem")
     replay.add_argument("dem", type=Path)
     sub.add_parser("recompute", help="rebuild all replay stats from the stored raw logs")
     args = parser.parse_args()
 
     key = os.environ.get("STEAM_API_KEY", "")
-    if args.command in ("sync", "sync-constants") and not key:
+    if args.command in ("sync", "sync-constants", "sync-leagues") and not key:
         print("error: STEAM_API_KEY is not set (run with: uv run --env-file .env ...)", file=sys.stderr)
         return 1
 
@@ -61,12 +62,15 @@ def main() -> int:
             print(f"matches: {sum(states.values())}, parsed: {states.get('parsed', 0)}")
             for state, count in sorted(states.items()):
                 print(f"  replay {state}: {count}")
-        elif args.command in ("sync", "sync-constants"):
+        elif args.command in ("sync", "sync-constants", "sync-leagues"):
             try:
                 with httpx.Client() as client:
                     if args.command == "sync-constants":
                         heroes, items = sync_constants(session, client, key)
                         print(f"{heroes} heroes and {items} items stored")
+                        return 0
+                    if args.command == "sync-leagues":
+                        print(f"{sync_leagues(session, client, key)} new league games ({len(LEAGUES)} leagues)")
                         return 0
                     counts = sync(session, client, key)
             except SteamError as error:
