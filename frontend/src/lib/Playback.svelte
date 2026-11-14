@@ -5,6 +5,34 @@
   import MiniMap, { mapX, mapY, viewOf } from './MiniMap.svelte'
 
   type Spot = { time: number; player_slot: number; x: number; y: number; alive: boolean }
+  type Fallen = { name: string; time: number }
+
+  // Where each building stands, in map cells: the centre of the circle melee heroes stand on while hitting it, fitted
+  // over 228 replays of the November 2026 map. The two tier-4 towers of a side share one name.
+  const BUILDINGS: [string, number, number][] = [
+    ['goodguys_tower1_top', 78.7, 144.6], ['goodguys_tower2_top', 78.1, 122.6], ['goodguys_tower3_top', 77.1, 102.3],
+    ['goodguys_tower1_mid', 117.7, 118.7], ['goodguys_tower2_mid', 104.1, 106.3], ['goodguys_tower3_mid', 92.5, 96.5],
+    ['goodguys_tower1_bot', 166.1, 79.5], ['goodguys_tower2_bot', 126.2, 79.1], ['goodguys_tower3_bot', 98.3, 80.7],
+    ['goodguys_melee_rax_top', 78.2, 99.7], ['goodguys_range_rax_top', 75.5, 99.4],
+    ['goodguys_melee_rax_mid', 92.1, 94.1], ['goodguys_range_rax_mid', 90.5, 96.1],
+    ['goodguys_melee_rax_bot', 95.5, 79.1], ['goodguys_range_rax_bot', 96.0, 81.7],
+    ['goodguys_tower4', 84.0, 91.3], ['goodguys_tower4', 86.9, 88.0], ['goodguys_fort', 83.6, 87.5],
+    ['badguys_tower1_top', 86.6, 173.5], ['badguys_tower2_top', 126.1, 174.7], ['badguys_tower3_top', 154.7, 172.7],
+    ['badguys_tower1_mid', 130.5, 131.2], ['badguys_tower2_mid', 146.8, 143.6], ['badguys_tower3_mid', 160.7, 156.4],
+    ['badguys_tower1_bot', 177.0, 108.7], ['badguys_tower2_bot', 177.4, 129.1], ['badguys_tower3_bot', 177.1, 150.9],
+    ['badguys_melee_rax_top', 156.6, 171.1], ['badguys_range_rax_top', 156.7, 174.1],
+    ['badguys_melee_rax_mid', 163.1, 156.9], ['badguys_range_rax_mid', 160.9, 158.7],
+    ['badguys_melee_rax_bot', 178.1, 153.3], ['badguys_range_rax_bot', 175.7, 153.2],
+    ['badguys_tower4', 165.8, 164.8], ['badguys_tower4', 169.0, 161.7], ['badguys_fort', 169.2, 165.5],
+  ]
+  /** goodguys_tower2_mid -> Radiant tier 2 mid tower */
+  function buildingName(name: string) {
+    const [side, kind, ...rest] = name.split('_')
+    const team = side === 'goodguys' ? 'Radiant' : 'Dire'
+    if (kind === 'fort') return `${team} Ancient`
+    if (kind.startsWith('tower')) return `${team} tier ${kind.slice(5)} ${rest.join(' ')} tower`.replace('  ', ' ')
+    return `${team} ${rest[1]} ${kind} barracks`
+  }
   type Props = {
     matchId: string
     /** Game seconds; the positions of that time are fetched, they are not part of the match. */
@@ -24,6 +52,7 @@
   const SPEED = 2 // game seconds per second
   const LEAP = 8 // cells in one second: more than any hero walks, so a teleport, a blink or a respawn
   let spots = $state.raw<Spot[] | null>(null) // null until they arrive
+  let fallen = $state.raw<Fallen[]>([])
   let error = $state('')
   let at = $state(0) // seconds into the playback, with fractions
   let playing = $state(false)
@@ -33,8 +62,10 @@
   $effect(() => {
     let current = true
     ;[spots, error, at, playing] = [null, '', 0, false]
-    get<Spot[]>(`matches/${matchId}/positions`, `start=${start}&end=${end}`).then(
-      (rows) => current && ((spots = rows), (playing = !matchMedia('(prefers-reduced-motion: reduce)').matches)),
+    get<{ heroes: Spot[]; fallen: Fallen[] }>(`matches/${matchId}/positions`, `start=${start}&end=${end}`).then(
+      (got) =>
+        current &&
+        ((spots = got.heroes), (fallen = got.fallen), (playing = !matchMedia('(prefers-reduced-motion: reduce)').matches)),
       (e) => current && (error = e.message),
     )
     return () => (current = false)
@@ -78,6 +109,20 @@
     return { x: curve(p0.x, p1.x, p2.x, p3.x), y: curve(p0.y, p1.y, p2.y, p3.y), alive: p1.alive }
   }
 
+  /** Every building, and whether it has fallen by the second shown. */
+  const buildings = $derived.by(() => {
+    const times = new Map<string, number[]>()
+    for (const f of fallen) {
+      const name = f.name.replace('npc_dota_', '')
+      times.set(name, [...(times.get(name) ?? []), f.time])
+    }
+    // shortcut: of two tier-4 towers the one listed first is taken to fall first, the log does not say which
+    return BUILDINGS.map(([name, x, y]) => {
+      const time = times.get(name)?.shift()
+      return { name, x, y, down: time !== undefined && time <= second }
+    })
+  })
+
   const view = $derived(viewOf([...points, ...(follow === null ? [] : (tracks.get(follow) ?? []))]))
   const icon = $derived(view.size * 0.085)
   /** The followed hero last, so it is drawn on top. */
@@ -90,6 +135,20 @@
   <p class="muted">Loading…</p>
 {:else}
   <MiniMap label="Positions of the heroes at {clock(second)}, {label}" view="{view.x} {view.y} {view.size} {view.size}">
+    {#each buildings as b, i (i)}
+      {@const size = icon * (b.name.endsWith('fort') ? 0.9 : b.name.includes('rax') ? 0.38 : 0.5)}
+      <rect
+        class="building {b.name.startsWith('goodguys') ? 'radiant' : 'dire'}"
+        class:fallen={b.down}
+        x={mapX(b.x) - size / 2}
+        y={mapY(b.y) - size / 2}
+        width={size}
+        height={size}
+        stroke-width={icon * 0.07}
+      >
+        <title>{buildingName(b.name)}{b.down ? ', destroyed' : ''}</title>
+      </rect>
+    {/each}
     {@render wards(second, view.size)}
     {#each cast as p (p.player_slot)}
       {@const spot = place(tracks.get(p.player_slot) ?? [], at)}
@@ -125,6 +184,20 @@
   }
   .dire circle {
     stroke: var(--dire);
+  }
+  .building {
+    stroke: var(--page);
+  }
+  .building.radiant {
+    fill: var(--radiant);
+  }
+  .building.dire {
+    fill: var(--dire);
+  }
+  .building.fallen {
+    fill: none;
+    stroke: var(--text-2);
+    opacity: 0.6;
   }
   g circle.halo {
     fill: none;

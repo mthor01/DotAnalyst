@@ -65,7 +65,7 @@ def match(session: Db, match_id: int) -> dict:
 
 
 @app.get("/api/matches/{match_id}/positions")
-def positions(match_id: int, start: int, end: int) -> list[dict]:
+def positions(match_id: int, start: int, end: int) -> dict:
     log = DATA / "raw" / f"{match_id}.jsonl.gz"
     if not log.is_file():
         raise HTTPException(404, f"no replay log for match {match_id}")

@@ -106,14 +106,25 @@ def test_wards(rows):
     assert (dewarded["killed"], dewarded["killed_by"]) == (True, PHOENIX)
 
 
+FALLEN = [
+    {"name": "npc_dota_goodguys_tower1_mid", "time": 508},
+    {"name": "npc_dota_goodguys_tower1_bot", "time": 611},
+    {"name": "npc_dota_goodguys_tower1_top", "time": 806},
+    {"name": "npc_dota_goodguys_fort", "time": 911},
+]
+
+
 def test_positions():
     """The 20 seconds before Phoenix's first death at 1:40."""
-    found = positions(FIXTURES / "8810606282.jsonl.gz", 80, 100)
+    both = positions(FIXTURES / "8810606282.jsonl.gz", 80, 100)
+    found = both["heroes"]
     assert len(found) == 210  # ten heroes, 21 seconds
     at = {(p["time"], p["player_slot"]): p for p in found}
     assert at[80, PHOENIX] == {"time": 80, "player_slot": PHOENIX, "x": 88.228516, "y": 163.85059, "alive": True}
     assert (at[100, PHOENIX]["x"], at[100, PHOENIX]["y"]) == (83.84253, 164.08154)
     assert (at[100, SHADOW_FIEND]["x"], at[100, SHADOW_FIEND]["y"]) == (126.23926, 129.03516)
+    # buildings of the whole match, whatever the seconds asked for; creeps and filler buildings are not in it
+    assert both["fallen"] == FALLEN
 
 
 def test_zone():
