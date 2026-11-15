@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GAME_MODES, LOBBY_TYPES, clock, get, type MatchDetail, type MatchPlayer } from './lib/api'
+  import { GAME_MODES, LOBBY_TYPES, clock, get, post, type MatchDetail, type MatchPlayer } from './lib/api'
   import Chart, { type Ink } from './lib/Chart.svelte'
   import { abilityIcon, abilityName, constants, heroIcon, heroName, heroPortrait, itemIcon, itemIconByName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
@@ -18,12 +18,32 @@
     period = null
     watching = null
     played = []
+    asked = ''
     get<MatchDetail>(`matches/${id}`).then(
       (found) => current && ((match = found), (error = '')),
       (e) => current && (error = e.message),
     )
     return () => (current = false)
   })
+
+  // ---- a match without a replay can ask for it: the server downloads and parses it while the request waits
+  let asking = $state(false)
+  let asked = $state('') // why the last request brought no replay
+  async function requestReplay() {
+    asking = true
+    asked = ''
+    try {
+      const { replay_state } = await post<{ replay_state: string }>(`matches/${id}/replay`)
+      if (replay_state === 'parsed') match = await get<MatchDetail>(`matches/${id}`)
+      else {
+        match!.replay_state = replay_state
+        asked = replay_state === 'unavailable' ? 'Valve no longer has this replay.' : 'There is no replay to get yet. Try again later.'
+      }
+    } catch (e) {
+      asked = (e as Error).message
+    }
+    asking = false
+  }
 
   // ---- the page is split into parts; all but the first need the replay
   const TABS = { general: 'General', graphs: 'Graphs', laning: 'Laning', builds: 'Builds', map: 'Wards and deaths', fights: 'Teamfights' } // prettier-ignore
@@ -507,8 +527,14 @@
       </p>
     {:else}
       <p class="muted">
-        No replay data for this match (replay: {match.replay_state}). Replays are fetched for matches up to 30 days old;
-        until one is parsed, only the scoreboard above is known.
+        No replay data for this match (replay: {match.replay_state}), so only the scoreboard above is known. Replays are
+        fetched on their own for matches up to 30 days old; Valve keeps them for about 100 days.
+      </p>
+      <p>
+        <button class="action" onclick={requestReplay} disabled={asking}>
+          {asking ? 'Fetching the replay, about 15 seconds…' : 'Request replay'}
+        </button>
+        <span class="muted" role="status">{asked}</span>
       </p>
     {/if}
   {:else if shown === 'graphs'}

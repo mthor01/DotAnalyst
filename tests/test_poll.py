@@ -13,7 +13,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from dotanalyst.db import Base, Derived, Match, PlayerMinute
-from dotanalyst.poll import poll_once
+from dotanalyst.poll import poll_once, request_replay
 
 FIXTURES = Path(__file__).parent / "fixtures"
 GOOD = 8810606282
@@ -113,6 +113,31 @@ def test_poll_downloads_and_parses_replays(session, tmp_path):
     calls.clear()
     assert poll_once(session, client, "", tmp_path / "nowhere", tmp_path) == (0, 0)
     assert calls == []  # parsed and failed matches are never fetched again
+
+
+def test_a_requested_replay_is_fetched_whatever_the_age_of_the_match(session, tmp_path):
+    add_match(session, GOOD, age_days=60)  # outside the download window: no poll would fetch it
+    calls = []
+    client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
+    poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
+    assert calls == [] and session.get(Match, GOOD).replay_state == "none"
+
+    assert request_replay(session, client, GOOD, tmp_path) == "parsed"
+    assert to("valve.net", calls) == [f"http://replay{CLUSTER}.valve.net/570/{GOOD}_519105714.dem.bz2"]
+    assert {row.match_id for row in session.query(PlayerMinute)} == {GOOD}  # with its stats
+
+    calls.clear()
+    assert request_replay(session, client, GOOD, tmp_path) == "parsed"
+    assert calls == []  # a stored replay is never fetched again
+    assert request_replay(session, client, NOT_STORED, tmp_path) is None
+
+
+def test_a_requested_replay_that_valve_no_longer_has_is_unavailable(session, tmp_path):
+    add_match(session, 1, age_days=60)
+    add_match(session, 2, age_days=1)
+    client = network([], opendota=(200, OPENDOTA))  # a salt, but no file
+    assert request_replay(session, client, 1, tmp_path) == "unavailable"
+    assert request_replay(session, client, 2, tmp_path) == "pending"  # may still come
 
 
 def test_match_without_a_replay_is_retried_hourly_and_given_up_after_14_days(session, tmp_path):

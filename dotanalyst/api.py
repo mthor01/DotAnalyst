@@ -14,6 +14,7 @@ from . import derive, poll, queries
 from .db import DATA, Ability, Account, Hero, Item, open_engine
 from .metrics import NAMES
 from .poll import poll_forever
+from .replay import ReplayError
 from .steam import SteamError
 
 engine = open_engine()
@@ -65,6 +66,18 @@ def match(session: Db, match_id: int) -> dict:
     if found is None:
         raise HTTPException(404, f"match {match_id} is not stored")
     return found
+
+
+@app.post("/api/matches/{match_id}/replay")
+def request_replay(match_id: int) -> dict:
+    """Fetch this match's replay now. About 15 seconds; the answer is the replay state it ends in."""
+    try:
+        state = poll.refresh_replay(engine, match_id)
+    except ReplayError as error:
+        raise HTTPException(502, str(error)) from None
+    if state is None:
+        raise HTTPException(404, f"match {match_id} is not stored")
+    return {"replay_state": state}
 
 
 @app.get("/api/matches/{match_id}/positions")

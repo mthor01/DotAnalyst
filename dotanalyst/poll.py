@@ -98,6 +98,35 @@ def poll_once(
     return new, parsed
 
 
+def request_replay(
+    session: Session, client: httpx.Client, match_id: int, data: Path = DATA, alt: bool = False
+) -> str | None:
+    """Download and parse one match's replay now, whatever its age and whenever it was last tried, and compute its
+    stats. Returns the match's replay state afterwards, or None for a match that is not stored."""
+    match = session.get(Match, match_id)
+    if match is None:
+        return None
+    if match.replay_state != "parsed":  # a stored replay is never fetched again
+        salt = None
+        if alt:
+            try:
+                salt = steam_salts([match_id], data).get(match_id)
+            except ReplayError as error:
+                log.warning("replay salt from Steam: %s; asking OpenDota instead", error)
+        if fetch_replay(session, match, client, data, salt):
+            derive_match(session, match_id, data / "raw")
+    return match.replay_state
+
+
+def refresh_replay(engine: Engine, match_id: int) -> str | None:
+    """`request_replay`, asked for from the site. Whatever stops it is a ReplayError."""
+    with BUSY, Session(engine) as session, httpx.Client() as client:
+        try:
+            return request_replay(session, client, match_id, alt=bool(os.environ.get("STEAM_ALT_USER")))
+        except (OSError, httpx.HTTPError) as error:
+            raise ReplayError(f"the download or the parser failed ({type(error).__name__}); is Docker running?") from error
+
+
 def _run(engine: Engine, retry_seconds: int = RETRY_SECONDS) -> tuple[int, int]:
     replay_dir = Path(os.environ.get("DOTA_REPLAY_DIR", REPLAY_DIR))
     with BUSY, Session(engine) as session, httpx.Client() as client:
