@@ -124,7 +124,8 @@ def refresh_replay(engine: Engine, match_id: int) -> str | None:
         try:
             return request_replay(session, client, match_id, alt=bool(os.environ.get("STEAM_ALT_USER")))
         except (OSError, httpx.HTTPError) as error:
-            raise ReplayError(f"the download or the parser failed ({type(error).__name__}); is Docker running?") from error
+            reason = f"the download or the parser failed ({type(error).__name__}); is Docker running?"
+            raise ReplayError(reason) from error
 
 
 def _run(engine: Engine, retry_seconds: int = RETRY_SECONDS) -> tuple[int, int]:

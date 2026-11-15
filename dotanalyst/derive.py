@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from . import queries
 from .db import (
-    DATA, TABLES, AbilityUpgrade, Building, Death, Derived, Lane, Match, Metric, PlayerMinute, Purchase, Recipe, Teamfight,
-    TeamfightPlayer, Ward,
+    DATA, TABLES, AbilityUpgrade, Building, Death, Derived, Lane, Match, Metric, PlayerMinute, Purchase, Recipe,
+    Teamfight, TeamfightPlayer, Ward,
 )  # fmt: skip
 from .metrics import METRICS
 
