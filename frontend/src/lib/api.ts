@@ -80,6 +80,8 @@ export type MatchDetail = {
   teamfights: { n: number; start: number; end: number; deaths: number }[]
   teamfight_players: { n: number; player_slot: number; took_part: boolean; damage: number; healing: number; deaths: number; net_worth_gain: number; xp_gain: number }[]
   wards: { player_slot: number; type: 'obs' | 'sen'; x: number; y: number; placed: number; removed: number | null; killed: boolean; killed_by: number | null }[]
+  /** The towers, barracks and Ancients that fell, in that order; one that is not listed stood to the end. */
+  buildings: { name: string; time: number }[]
   lanes: { player_slot: number; lane: string | null }[]
 }
 

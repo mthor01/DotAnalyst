@@ -272,6 +272,8 @@
   const inPeriod = (time: number) => period === null || (Math.max(time, 0) >= period * 60 && time < (period + 10) * 60)
   const wardsShown = $derived((match?.wards ?? []).filter((w) => inPeriod(w.placed)))
   const deathsShown = $derived((match?.deaths ?? []).filter((d) => d.x !== null && inPeriod(d.time)))
+  /** The buildings on both maps are those standing when the part of the game shown ends. */
+  const periodEnd = $derived(period === null ? Infinity : (period + 10) * 60)
   const standing = (w: Ward, time: number) => w.placed <= time && (w.removed === null || w.removed > time)
 
   const WARD = { obs: 'Observer', sen: 'Sentry' }
@@ -576,7 +578,10 @@
           <button aria-pressed={period === from} onclick={() => (period = from)}>{from}–{from + 10} min</button>
         {/each}
       </span>
-      <span class="muted">A ward belongs to the ten minutes it was placed in. Hover a mark for details.</span>
+      <span class="muted">
+        A ward belongs to the ten minutes it was placed in. ■ Towers, barracks and the Ancients as they stood at the end of
+        the time shown; an empty one has fallen. Hover a mark for details.
+      </span>
     </p>
     <div class="maps">
       <section>
@@ -587,7 +592,7 @@
           <span>● Observer</span>
           <span>◆ Sentry</span>
         </p>
-        <MiniMap label="Map of the {wardsShown.length} wards placed {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}">
+        <MiniMap label="Map of the {wardsShown.length} wards placed {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd}>
           {#each wardsShown as w}{@render wardMark(w, 1.7, '')}{/each}
         </MiniMap>
       </section>
@@ -597,7 +602,7 @@
           <span><i class="swatch radiant"></i>green edge: a Radiant hero died</span>
           <span><i class="swatch dire"></i>red edge: a Dire hero died</span>
         </p>
-        <MiniMap label="Map of the {deathsShown.length} hero deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}">
+        <MiniMap label="Map of the {deathsShown.length} hero deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd}>
           {#each deathsShown as d}{@render fallenMark(d, 5.5)}{/each}
         </MiniMap>
       </section>
@@ -633,6 +638,7 @@
               start={watching.time - REPLAY}
               end={watching.time}
               {players}
+              fallen={match.buildings}
               points={[watching]}
               follow={watching.player_slot}
               wards={wardsAt}
@@ -711,7 +717,7 @@
                         {/each}
                         <p class="muted">How much more one team gained than the other during the fight. A full bar is the largest swing of this match.</p>
                         <h3>Deaths and wards</h3>
-                        <MiniMap label="Where the {dead.length} heroes died in the fight at {when}, and the wards standing there" view="{view.x} {view.y} {view.size} {view.size}">
+                        <MiniMap label="Where the {dead.length} heroes died in the fight at {when}, and the wards standing there" view="{view.x} {view.y} {view.size} {view.size}" fallen={match.buildings} at={fight.end}>
                           <!-- a ward that stood through the fight is a dark mark on a light one -->
                           {#each match.wards.filter((w) => standing(w, fight.start)) as w}{@render wardMark(w, view.size * 0.04, 'light')}{/each}
                           {#each match.wards.filter((w) => standing(w, fight.end)) as w}{@render wardMark(w, view.size * 0.022, 'dark')}{/each}
@@ -720,6 +726,7 @@
                         <p class="legend wardkey">
                           <span><i class="swatch radiant light"></i><i class="swatch dire light"></i>ward up at {clock(fight.start)}</span>
                           <span><i class="swatch radiant dark"></i><i class="swatch dire dark"></i>ward up at {clock(fight.end)}</span>
+                          <span>■ building; empty if fallen by {clock(fight.end)}</span>
                         </p>
                         <button class="action" aria-expanded={played.includes(fight.n)} onclick={() => (played = flip(played, fight.n))}>
                           {played.includes(fight.n) ? 'Close the playback' : 'Play back the fight'}
@@ -755,6 +762,7 @@
                             start={fight.start}
                             end={Math.min(fight.end, match.duration)}
                             {players}
+                            fallen={match.buildings}
                             points={dead}
                             wards={wardsAt}
                             label="during the fight at {when}"

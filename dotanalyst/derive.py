@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 
 from . import queries
 from .db import (
-    DATA, TABLES, Death, Derived, Lane, Match, Metric, PlayerMinute, Purchase, Recipe, Teamfight, TeamfightPlayer,
-    Ward,
+    DATA, TABLES, Building, Death, Derived, Lane, Match, Metric, PlayerMinute, Purchase, Recipe, Teamfight,
+    TeamfightPlayer, Ward,
 )  # fmt: skip
 from .metrics import METRICS
 
@@ -35,28 +35,24 @@ def read_log(path: Path) -> list[dict]:
         return [event for event in map(json.loads, lines) if event["type"] in USED]
 
 
-def positions(path: Path, start: int, end: int) -> dict:
-    """Where each hero was at every second from `start` to `end`, and when each building fell. Not a derived table:
-    ten rows a second for every match is too much to store for a view that is rarely opened, so this reads the raw
-    log when asked."""
-    player_slot, found, fallen = {}, [], []
+def positions(path: Path, start: int, end: int) -> list[dict]:
+    """Where each hero was at every second from `start` to `end`. Not a derived table: ten rows a second for every
+    match is too much to store for a view that is rarely opened, so this reads the raw log when asked."""
+    player_slot, found = {}, []
     with gzip.open(path, "rt", encoding="utf-8") as lines:
         for line in lines:
-            if '"interval"' not in line and '"player_slot"' not in line and '"DOTA_COMBATLOG_DEATH"' not in line:
+            if '"interval"' not in line and '"player_slot"' not in line:
                 continue  # parsing only these lines is what keeps this fast
             e = json.loads(line)
             if e["type"] == "player_slot":
                 player_slot[int(e["key"])] = e["value"]
             elif e["type"] == "interval" and start <= e["time"] <= end and e.get("x") is not None:
                 found.append(e)
-            elif e["type"] == "DOTA_COMBATLOG_DEATH" and BUILDING.fullmatch(e["targetname"]):
-                fallen.append({"name": e["targetname"], "time": e["time"]})
-    heroes = [
+    return [
         {"time": e["time"], "player_slot": player_slot[e["slot"]], "x": e["x"], "y": e["y"], "alive": e.get("life_state") == 0}
         for e in found
         if e["slot"] in player_slot
     ]  # fmt: skip
-    return {"heroes": heroes, "fallen": fallen}
 
 
 class Log:
@@ -243,6 +239,15 @@ def wards(log: Log) -> list[dict]:
     return rows
 
 
+def buildings(log: Log) -> list[dict]:
+    """When each tower, barracks and Ancient fell, in that order."""
+    return [
+        {"name": e["targetname"].removeprefix("npc_dota_"), "time": e["time"]}
+        for e in log.events
+        if e["type"] == "DOTA_COMBATLOG_DEATH" and BUILDING.fullmatch(e.get("targetname") or "")
+    ]
+
+
 def zone(x: float, y: float) -> str | None:
     """Part of the map a position belongs to. Coordinates are replay cells: about 64-191, Radiant base bottom left."""
     if (x < 96 and y < 96) or (x > 160 and y > 160):
@@ -278,6 +283,7 @@ def derive(events: list[dict], recipes: dict[str, list[str]] | None = None) -> d
         Teamfight: fight_rows,
         TeamfightPlayer: fight_player_rows,
         Ward: wards(log),
+        Building: buildings(log),
         Lane: lanes(log),
     }
 

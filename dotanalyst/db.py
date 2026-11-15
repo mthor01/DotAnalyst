@@ -189,6 +189,17 @@ class Ward(Derived):
     killed_by: Mapped[int | None]  # None when it expired, or a creep did it
 
 
+class Building(Derived):
+    """A tower, a barracks or an Ancient that fell. A building without a row stood to the end."""
+
+    __tablename__ = "buildings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    match_id: Mapped[int] = mapped_column(index=True)
+    name: Mapped[str]  # goodguys_tower1_mid; the two tier-4 towers of a side share goodguys_tower4
+    time: Mapped[int]
+
+
 class Lane(Derived):
     __tablename__ = "lanes"
 
@@ -206,7 +217,7 @@ class Metric(Derived):
     value: Mapped[float]  # a metric that does not apply to a player has no row
 
 
-TABLES = (PlayerMinute, Purchase, Death, Teamfight, TeamfightPlayer, Ward, Lane, Metric)
+TABLES = (PlayerMinute, Purchase, Death, Teamfight, TeamfightPlayer, Ward, Building, Lane, Metric)
 
 
 def open_engine() -> Engine:
