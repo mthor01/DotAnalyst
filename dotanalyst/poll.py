@@ -9,10 +9,10 @@ import httpx
 from sqlalchemy import Engine, and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from .db import DATA, Match, PlayerMinute
+from .db import DATA, LeagueMatch, Match, PlayerMinute
 from .derive import derive_match
 from .replay import ReplayError, fetch_replay, parse_replay, steam_salts
-from .steam import sync, sync_leagues
+from .steam import store_match, sync, sync_leagues
 
 log = logging.getLogger("uvicorn.error")  # the logger uvicorn already prints
 REPLAY_DIR = Path(r"C:\Program Files (x86)\Steam\steamapps\common\dota 2 beta\game\dota\replays")
@@ -102,10 +102,19 @@ def request_replay(
     session: Session, client: httpx.Client, match_id: int, data: Path = DATA, alt: bool = False
 ) -> str | None:
     """Download and parse one match's replay now, whatever its age and whenever it was last tried, and compute its
-    stats. Returns the match's replay state afterwards, or None for a match that is not stored."""
+    stats. Returns the match's replay state afterwards, or None for a match that is not stored.
+
+    A league game joins `matches` here, built from the answer Steam gave for it: from then on it is a match like any
+    other, with a replay state the poller follows up. No tracked account plays in it, so it joins nobody's stats.
+    """
     match = session.get(Match, match_id)
     if match is None:
-        return None
+        league = session.get(LeagueMatch, match_id)
+        if league is None:
+            return None
+        store_match(session, league.raw_json)
+        session.flush()
+        match = session.get(Match, match_id)
     if match.replay_state != "parsed":  # a stored replay is never fetched again
         salt = None
         if alt:

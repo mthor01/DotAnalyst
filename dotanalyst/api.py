@@ -105,6 +105,11 @@ def heroes(session: Db, where: Where) -> list[dict]:
     return queries.heroes(session, where)
 
 
+@app.get("/api/wards")
+def wards(session: Db, where: Where) -> list[dict]:
+    return queries.wards(session, where)
+
+
 @app.get("/api/teammates")
 def teammates(session: Db, where: Where) -> list[dict]:
     return queries.teammates(session, where)

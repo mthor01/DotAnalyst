@@ -73,24 +73,28 @@ def details(client: httpx.Client, key: str, entry: dict) -> dict | None:
     return found[0]
 
 
+def match_rows(m: dict) -> tuple[Match, list[MatchPlayer]]:
+    """The rows one match of the Web API becomes, not stored yet."""
+    match = Match(
+        match_id=m["match_id"], match_seq_num=m["match_seq_num"], start_time=m["start_time"],
+        duration=m["duration"], radiant_win=bool(m.get("radiant_win")), game_mode=m["game_mode"],
+        lobby_type=m["lobby_type"], cluster=m["cluster"], raw_json=m,
+    )  # fmt: skip
+    players = [
+        MatchPlayer(
+            match_id=m["match_id"], player_slot=p["player_slot"], hero_id=p["hero_id"],
+            account_id=None if p.get("account_id") in (None, ANONYMOUS) else p["account_id"],
+            items=[p.get(f"item_{i}", 0) for i in range(6)] + [p.get("item_neutral", 0)],
+            **{stat: p.get(stat) for stat in STATS},
+        )
+        for p in m["players"]
+    ]
+    return match, players
+
+
 def store_match(session: Session, m: dict) -> None:
-    session.add(
-        Match(
-            match_id=m["match_id"], match_seq_num=m["match_seq_num"], start_time=m["start_time"],
-            duration=m["duration"], radiant_win=bool(m.get("radiant_win")), game_mode=m["game_mode"],
-            lobby_type=m["lobby_type"], cluster=m["cluster"], raw_json=m,
-        )
-    )
-    for p in m["players"]:
-        account_id = p.get("account_id")
-        session.add(
-            MatchPlayer(
-                match_id=m["match_id"], player_slot=p["player_slot"], hero_id=p["hero_id"],
-                account_id=None if account_id in (None, ANONYMOUS) else account_id,
-                items=[p.get(f"item_{i}", 0) for i in range(6)] + [p.get("item_neutral", 0)],
-                **{stat: p.get(stat) for stat in STATS},
-            )
-        )
+    match, players = match_rows(m)
+    session.add_all([match, *players])
 
 
 def sync(session: Session, client: httpx.Client, key: str) -> dict[int, int | None]:

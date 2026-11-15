@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from dotanalyst import queries
-from dotanalyst.db import Account, Base, Derived, Lane, Metric, PlayerName
+from dotanalyst.db import Account, Base, Derived, Lane, Match, Metric, PlayerName, Ward
 from dotanalyst.steam import ANONYMOUS, store_league_match, store_match
 
 TEMPLATE = json.loads((Path(__file__).parent / "fixtures" / "details_by_seq.json").read_text(encoding="utf-8"))[
@@ -121,6 +121,24 @@ def test_matchups_with_and_against(session):
     assert len(rows) == 10
 
 
+def test_wards_of_the_account_with_the_side_it_played(session):
+    ward = {"placed": 0, "removed": None, "killed": False, "killed_by": None}
+    session.add_all(
+        [
+            Ward(match_id=1, player_slot=0, type="obs", x=100.0, y=90.0, **ward),  # mine, as Radiant
+            Ward(match_id=2, player_slot=128, type="sen", x=150.0, y=140.0, **ward),  # mine, as Dire
+            Ward(match_id=2, player_slot=0, type="obs", x=1.0, y=1.0, **ward),  # the friend's
+        ]
+    )
+    assert queries.wards(session, queries.conditions(ME)) == [
+        {"match_id": 1, "type": "obs", "x": 100.0, "y": 90.0, "radiant": True},
+        {"match_id": 2, "type": "sen", "x": 150.0, "y": 140.0, "radiant": False},
+    ]
+    assert queries.wards(session, queries.conditions(ME, date_to=date(2026, 6, 10))) == [
+        {"match_id": 1, "type": "obs", "x": 100.0, "y": 90.0, "radiant": True},
+    ]
+
+
 LEAGUE_TEMPLATE = json.loads(
     (Path(__file__).parent / "fixtures" / "league_details.json").read_text(encoding="utf-8")
 )["result"]["matches"][0]
@@ -150,7 +168,7 @@ LEAGUE_GAMES = [
     # Them ban 50 and 51 against Us; Us win with heroes 1-5
     league_game(1, 1, US, THEM, True, radiant_bans=[60], dire_bans=[50, 51]),
     # Us on the Dire side: Them ban 50 again, Us ban 51 themselves, and lose with hero 11 in the last place
-    league_game(2, 2, THEM, US, True, radiant_bans=[50], dire_bans=[51], dire_picks=(1, 2, 3, 4, 11)),
+    league_game(2, 2, THEM, US, True, radiant_bans=[50], dire_bans=[51], radiant_picks=(6, 7, 8, 9, 10), dire_picks=(1, 2, 3, 4, 11)),
     # 50 and 51 are open: Us pick 50 and win, the other side takes 51
     league_game(3, 3, US, OTHER, True, radiant_bans=[], dire_bans=[52], radiant_picks=(50, 2, 3, 4, 5), dire_picks=(51, 7, 8, 9, 10)),
     league_game(4, 4, THEM, OTHER, True, radiant_bans=[50], dire_bans=[50]),  # not a game of Us
@@ -163,6 +181,7 @@ LEAGUE_GAMES[3]["dire_name"] = LEAGUE_GAMES[4]["radiant_name"] = ""  # Steam sen
 def league():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
+    Derived.metadata.create_all(engine)
     with Session(engine) as s:
         for m in LEAGUE_GAMES:
             store_league_match(s, m)
@@ -186,7 +205,7 @@ def test_team_games_newest_first_from_the_teams_side(league):
     assert found["games"][1] == {
         "match_id": 2, "start_time": LEAGUE_GAMES[1]["start_time"], "league": "Season 8", "radiant": False,
         "win": False, "opponent_id": THEM, "opponent": "Them", "picks": [1, 2, 3, 4, 11], "bans": [51],
-        "bans_against": [50],
+        "bans_against": [50], "replay": False,
     }  # fmt: skip
     assert [g["win"] for g in found["games"]] == [True, False, True]
 
@@ -194,26 +213,66 @@ def test_team_games_newest_first_from_the_teams_side(league):
 def test_team_heroes_count_bans_against_and_picks_when_open(league):
     heroes = {h.pop("hero_id"): h for h in queries.team(league, US)["heroes"]}
     # 50: banned against Us in games 1 and 2, open in game 3, where Us picked it and won
-    assert heroes[50] == {"banned_against": 2, "banned": 0, "open": 1, "picked": 1, "wins": 1}
-    # 51: banned against Us once, banned by Us once, open once and then not picked
-    assert heroes[51] == {"banned_against": 1, "banned": 1, "open": 1, "picked": 0, "wins": 0}
-    assert heroes[52] == {"banned_against": 1, "banned": 0, "open": 2, "picked": 0, "wins": 0}
-    assert heroes[60] == {"banned_against": 0, "banned": 1, "open": 2, "picked": 0, "wins": 0}
-    assert heroes[1] == {"banned_against": 0, "banned": 0, "open": 3, "picked": 2, "wins": 1}
-    assert heroes[2] == {"banned_against": 0, "banned": 0, "open": 3, "picked": 3, "wins": 2}
-    assert heroes[11] == {"banned_against": 0, "banned": 0, "open": 3, "picked": 1, "wins": 0}
-    assert 6 not in heroes  # only the other side ever touched it
+    assert heroes[50] == {"banned_against": 2, "banned": 0, "picked_against": 0, "open": 1, "picked": 1, "wins": 1}
+    # 51: banned against Us once, banned by Us once, and in game 3 the other side took it: never open
+    assert heroes[51] == {"banned_against": 1, "banned": 1, "picked_against": 1, "open": 0, "picked": 0, "wins": 0}
+    assert heroes[52] == {"banned_against": 1, "banned": 0, "picked_against": 0, "open": 2, "picked": 0, "wins": 0}
+    assert heroes[60] == {"banned_against": 0, "banned": 1, "picked_against": 0, "open": 2, "picked": 0, "wins": 0}
+    assert heroes[1] == {"banned_against": 0, "banned": 0, "picked_against": 0, "open": 3, "picked": 2, "wins": 1}
+    assert heroes[2] == {"banned_against": 0, "banned": 0, "picked_against": 0, "open": 3, "picked": 3, "wins": 2}
+    assert heroes[11] == {"banned_against": 0, "banned": 0, "picked_against": 0, "open": 3, "picked": 1, "wins": 0}
+    # 6: Them picked it in both games against Us, so Us could have taken it only in game 3
+    assert heroes[6] == {"banned_against": 0, "banned": 0, "picked_against": 2, "open": 1, "picked": 0, "wins": 0}
 
 
 def test_team_players_with_their_heroes(league):
     players = {p["account_id"]: p for p in queries.team(league, US)["players"]}
     assert set(players) == {1000, 1001, 1002, 1003, 1004}  # nobody of the other side
-    assert players[1000] == {
-        "account_id": 1000, "name": "Carry", "games": 3,
-        "heroes": [{"hero_id": 1, "games": 2, "wins": 1}, {"hero_id": 50, "games": 1, "wins": 1}],
-    }  # fmt: skip
+    assert (players[1000]["name"], players[1000]["games"]) == ("Carry", 3)
     assert players[1004]["name"] is None  # Steam gave no name
-    assert players[1004]["heroes"] == [{"hero_id": 5, "games": 2, "wins": 2}, {"hero_id": 11, "games": 1, "wins": 0}]
+    played = [(h["hero_id"], h["games"], h["wins"]) for h in players[1004]["heroes"]]
+    assert played == [(5, 2, 2), (11, 1, 0)]
+    # the averages on a hero. Player 1000 is the recorded game's first player as Radiant (games 1 and 3) and its
+    # sixth as Dire (game 2), so on hero 1 the two scoreboards are averaged, and hero 50 has the first one's numbers
+    first, sixth = LEAGUE_TEMPLATE["players"][0], LEAGUE_TEMPLATE["players"][5]
+    on_1, on_50 = players[1000]["heroes"]
+    assert (on_1["hero_id"], on_50["hero_id"]) == (1, 50)
+    for stat in ("kills", "deaths", "assists", "last_hits", "gold_per_min", "xp_per_min"):
+        assert on_1[stat] == (first[stat] + sixth[stat]) / 2
+        assert on_50[stat] == first[stat]
+
+
+def test_team_players_wards_come_from_the_games_with_a_parsed_replay(league):
+    assert all(not g["replay"] for g in queries.team(league, US)["games"])
+    assert queries.team(league, US)["players"][0]["replays"] == 0
+    store_match(league, LEAGUE_GAMES[1])  # what asking for its replay does; Us play Dire in it
+    league.get(Match, 2).replay_state = "parsed"
+    ward = {"placed": 0, "removed": None, "killed": False, "killed_by": None}
+    league.add_all(
+        [
+            Ward(match_id=2, player_slot=128, type="obs", x=150.0, y=140.0, **ward),  # by 1000 of Us
+            Ward(match_id=2, player_slot=0, type="sen", x=100.0, y=90.0, **ward),  # by one of Them
+        ]
+    )
+    found = queries.team(league, US)
+    assert [g["replay"] for g in found["games"]] == [False, True, False]
+    players = {p["account_id"]: p for p in found["players"]}
+    assert players[1000]["replays"] == 1
+    assert players[1000]["wards"] == [{"type": "obs", "x": 150.0, "y": 140.0, "radiant": False}]
+    assert players[1001]["wards"] == []
+
+
+def test_a_league_game_is_a_match_page_before_its_replay_was_asked_for(league):
+    found = queries.match(league, 2)
+    assert (found["match_id"], found["radiant_win"], found["replay_state"]) == (2, True, "none")
+    assert found["start_time"] == LEAGUE_GAMES[1]["start_time"]
+    assert [p["player_slot"] for p in found["players"]] == SLOTS
+    assert [p["hero_id"] for p in found["players"]] == [6, 7, 8, 9, 10, 1, 2, 3, 4, 11]
+    first = LEAGUE_TEMPLATE["players"][0]
+    assert (found["players"][0]["kills"], found["players"][0]["net_worth"]) == (first["kills"], first["net_worth"])
+    assert found["players"][5]["account_id"] == 1000 and found["players"][5]["label"] is None
+    assert found["wards"] == [] and found["player_minute"] == []
+    assert queries.match(league, 99) is None
 
 
 def test_team_name_is_the_newest_one_that_is_not_empty(league):

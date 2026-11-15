@@ -12,8 +12,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from dotanalyst.db import Base, Derived, Match, PlayerMinute
+from dotanalyst.db import Base, Derived, Match, MatchPlayer, PlayerMinute
 from dotanalyst.poll import poll_once, request_replay
+from dotanalyst.steam import store_league_match
 
 FIXTURES = Path(__file__).parent / "fixtures"
 GOOD = 8810606282
@@ -130,6 +131,24 @@ def test_a_requested_replay_is_fetched_whatever_the_age_of_the_match(session, tm
     assert request_replay(session, client, GOOD, tmp_path) == "parsed"
     assert calls == []  # a stored replay is never fetched again
     assert request_replay(session, client, NOT_STORED, tmp_path) is None
+
+
+def test_a_requested_replay_of_a_league_game_makes_it_a_match(session, tmp_path):
+    game = json.loads((FIXTURES / "league_details.json").read_text(encoding="utf-8"))["result"]["matches"][0]
+    game.update(match_id=GOOD, cluster=CLUSTER)  # the parser of these tests answers with the log of GOOD
+    store_league_match(session, game)
+    session.commit()
+    assert session.get(Match, GOOD) is None  # a league game is not a match until its replay is asked for
+    calls = []
+    client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
+    poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
+    assert calls == []  # and no poll fetches its replay
+
+    assert request_replay(session, client, GOOD, tmp_path) == "parsed"
+    assert to("valve.net", calls) == [f"http://replay{CLUSTER}.valve.net/570/{GOOD}_519105714.dem.bz2"]
+    assert session.get(Match, GOOD).start_time == game["start_time"]
+    assert session.query(MatchPlayer).filter_by(match_id=GOOD).count() == 10
+    assert {row.match_id for row in session.query(PlayerMinute)} == {GOOD}
 
 
 def test_a_requested_replay_that_valve_no_longer_has_is_unavailable(session, tmp_path):

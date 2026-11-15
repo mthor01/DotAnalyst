@@ -4,13 +4,18 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
-from .db import TABLES, Account, Lane, LeagueMatch, Match, MatchPlayer, Metric, PlayerName
-from .steam import ANONYMOUS, LEAGUES
+from .db import TABLES, Account, Lane, LeagueMatch, Match, MatchPlayer, Metric, PlayerName, Ward
+from .steam import ANONYMOUS, LEAGUES, match_rows
 
 OTHER = aliased(MatchPlayer)
 IS_RADIANT = MatchPlayer.player_slot < 128
 WON = case((IS_RADIANT == Match.radiant_win, 1), else_=0)
 SAME_TEAM = (OTHER.player_slot < 128) == IS_RADIANT
+SCOREBOARD = (
+    "player_slot", "account_id", "hero_id", "kills", "deaths", "assists", "last_hits", "denies", "gold_per_min",
+    "xp_per_min", "net_worth", "level", "hero_damage", "tower_damage", "hero_healing", "items",
+)  # fmt: skip
+AVERAGED = ("kills", "deaths", "assists", "last_hits", "gold_per_min", "xp_per_min")  # of a league player on a hero
 
 
 def conditions(
@@ -123,27 +128,41 @@ def matchups(session: Session, where: list) -> list[dict]:
     return sorted(result.values(), key=lambda e: -(e["with_games"] + e["against_games"]))
 
 
+def wards(session: Session, where: list) -> list[dict]:
+    """Every ward the account placed in its parsed matches: the match, the kind, the place and the side played."""
+    ward = and_(Ward.match_id == MatchPlayer.match_id, Ward.player_slot == MatchPlayer.player_slot)
+    columns = (Match.match_id, Ward.type, Ward.x, Ward.y, IS_RADIANT.label("radiant"))
+    return _rows(session, _mine(*columns).join(Ward, ward).where(*where))
+
+
 def match(session: Session, match_id: int) -> dict | None:
-    """One match: the scoreboard, plus the replay stats where there are any (empty lists otherwise)."""
-    found = session.get(Match, match_id)
-    if found is None:
-        return None
+    """One match: the scoreboard, plus the replay stats where there are any (empty lists otherwise).
+
+    A league game is in `matches` only once its replay was asked for; before, its scoreboard is read from the
+    answer Steam gave for it.
+    """
     p = MatchPlayer
-    players = _rows(
-        session,
-        select(
-            p.player_slot, p.account_id, Account.label, p.hero_id, p.kills, p.deaths, p.assists, p.last_hits,
-            p.denies, p.gold_per_min, p.xp_per_min, p.net_worth, p.level, p.hero_damage, p.tower_damage,
-            p.hero_healing, p.items,
+    found = session.get(Match, match_id)
+    if found is not None:
+        players = _rows(
+            session,
+            select(*(getattr(p, column) for column in SCOREBOARD), Account.label)
+            .outerjoin(Account, and_(Account.account_id == p.account_id, Account.active))
+            .where(p.match_id == match_id)
+            .order_by(p.player_slot),
         )
-        .outerjoin(Account, and_(Account.account_id == p.account_id, Account.active))
-        .where(p.match_id == match_id)
-        .order_by(p.player_slot),
-    )  # fmt: skip
+    elif (league := session.get(LeagueMatch, match_id)) is not None:
+        found, rows = match_rows(league.raw_json)
+        players = [
+            {**{column: getattr(row, column) for column in SCOREBOARD}, "label": None}
+            for row in sorted(rows, key=lambda row: row.player_slot)
+        ]
+    else:
+        return None
     result = {
         "match_id": match_id, "start_time": found.start_time, "duration": found.duration,
         "radiant_win": found.radiant_win, "game_mode": found.game_mode, "lobby_type": found.lobby_type,
-        "replay_state": found.replay_state, "players": players,
+        "replay_state": found.replay_state or "none", "players": players,
     }  # fmt: skip
     for model in TABLES:
         table = model.__table__
@@ -199,7 +218,9 @@ def teams(session: Session) -> list[dict]:
 def team(session: Session, team_id: int) -> dict | None:
     """One team's league games, newest first, and what they add up to. None for a team without a stored game.
 
-    A hero is open in a game when neither side banned it, so banned_against + banned + open is the number of games.
+    A hero is open in a game when neither side banned it and the other side did not pick it, so banned_against +
+    banned + picked_against + open is the number of games. A player's wards come from the games whose replay is
+    parsed (`replays` says how many of the player's games those are).
     """
     m = LeagueMatch
     played = or_(m.radiant_team_id == team_id, m.dire_team_id == team_id)
@@ -212,8 +233,12 @@ def team(session: Session, team_id: int) -> dict | None:
     players: dict[int, dict] = {}
 
     def hero(hero_id: int) -> dict:
-        return heroes.setdefault(hero_id, {"hero_id": hero_id, "banned_against": 0, "banned": 0, "picked": 0, "wins": 0})
+        blank = {"hero_id": hero_id, "banned_against": 0, "banned": 0, "picked_against": 0, "picked": 0, "wins": 0}
+        return heroes.setdefault(hero_id, blank)
 
+    ids = [g.match_id for g in rows]
+    parsed = set(session.scalars(select(Match.match_id).where(Match.match_id.in_(ids), Match.replay_state == "parsed")))
+    placed_by: dict[tuple[int, int], dict] = {}  # (match, player slot) -> the player
     for g in rows:
         radiant = g.radiant_team_id == team_id
         win = radiant == g.radiant_win
@@ -221,8 +246,13 @@ def team(session: Session, team_id: int) -> dict | None:
         bans = [b for b in g.raw_json.get("picks_bans") or [] if not b["is_pick"]]
         own = [b["hero_id"] for b in bans if (b["team"] == 0) == radiant]  # the draft calls Radiant team 0
         against = [b["hero_id"] for b in bans if (b["team"] == 0) != radiant]
-        # picks come from the players, so a game without a recorded draft still has them
-        side = [p for p in g.raw_json["players"] if (p["player_slot"] < 128) == radiant]
+        # picks come from the players, so a game without a recorded draft still has them; in slot order, so that
+        # the site can tell which pick is which player slot
+        ten = sorted(g.raw_json["players"], key=lambda p: p["player_slot"])
+        side = [p for p in ten if (p["player_slot"] < 128) == radiant]
+        for p in ten:
+            if p not in side:
+                hero(p["hero_id"])["picked_against"] += 1
         for hero_id in own:
             hero(hero_id)["banned"] += 1
         for hero_id in against:
@@ -232,24 +262,39 @@ def team(session: Session, team_id: int) -> dict | None:
             hero(p["hero_id"])["wins"] += win
             if p.get("account_id") in (None, ANONYMOUS):
                 continue
-            player = players.setdefault(p["account_id"], {"account_id": p["account_id"], "games": 0, "heroes": {}})
+            blank = {"account_id": p["account_id"], "games": 0, "replays": 0, "heroes": {}, "wards": []}
+            player = players.setdefault(p["account_id"], blank)
             player["games"] += 1
-            on = player["heroes"].setdefault(p["hero_id"], {"hero_id": p["hero_id"], "games": 0, "wins": 0})
+            player["replays"] += g.match_id in parsed
+            placed_by[g.match_id, p["player_slot"]] = player
+            blank = {"hero_id": p["hero_id"], "games": 0, "wins": 0, **dict.fromkeys(AVERAGED, 0)}
+            on = player["heroes"].setdefault(p["hero_id"], blank)
             on.update(games=on["games"] + 1, wins=on["wins"] + win)
+            for stat in AVERAGED:
+                on[stat] += p.get(stat) or 0
         games.append(
             {
                 "match_id": g.match_id, "start_time": g.start_time, "league": LEAGUES.get(g.league_id, str(g.league_id)),
                 "radiant": radiant, "win": win, "opponent_id": opponent, "opponent": names.get(opponent),
                 "picks": [p["hero_id"] for p in side], "bans": own, "bans_against": against,
+                "replay": g.match_id in parsed,
             }
         )  # fmt: skip
     for h in heroes.values():
-        h["open"] = len(rows) - h["banned_against"] - h["banned"]
+        h["open"] = len(rows) - h["banned_against"] - h["banned"] - h["picked_against"]
+    w = Ward
+    for ward in session.execute(select(w.match_id, w.player_slot, w.type, w.x, w.y).where(w.match_id.in_(ids))):
+        if (ward.match_id, ward.player_slot) in placed_by:
+            placed_by[ward.match_id, ward.player_slot]["wards"].append(
+                {"type": ward.type, "x": ward.x, "y": ward.y, "radiant": ward.player_slot < 128}
+            )
     n = PlayerName
     known = dict(session.execute(select(n.account_id, n.name).where(n.account_id.in_(players))).all())
     for player in players.values():
         player["name"] = known.get(player["account_id"])
         player["heroes"] = sorted(player["heroes"].values(), key=lambda h: -h["games"])
+        for h in player["heroes"]:
+            h.update({stat: h[stat] / h["games"] for stat in AVERAGED})
     return {
         "team_id": team_id, "name": names[team_id], "games": games,
         "heroes": sorted(heroes.values(), key=lambda h: (-h["banned_against"], -h["picked"])),
