@@ -639,7 +639,7 @@
               label="the {REPLAY} seconds before {name(watching.player_slot)} died"
             />
             <p class="muted">
-              Double speed. The hero with the white ring is the one that dies; a faded hero is dead, and one that
+              The hero with the white ring is the one that dies; a faded hero is dead, and one that
               teleports or blinks jumps. Wards as on the map above: ● observer, ◆ sentry. ■ Towers, barracks and the
               Ancient; an empty one has fallen.
             </p>
@@ -760,7 +760,7 @@
                             label="during the fight at {when}"
                           />
                           <p class="muted">
-                            Double speed. A faded hero is dead, and one that teleports or blinks jumps. The wards are those
+                            A faded hero is dead, and one that teleports or blinks jumps. The wards are those
                             standing at each moment: ● observer, ◆ sentry. ■ Towers, barracks and the Ancient; an empty one has fallen.
                           </p>
                         </section>

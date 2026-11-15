@@ -49,13 +49,13 @@
   }
   let { matchId, start, end, players, points, follow = null, wards, label }: Props = $props()
 
-  const SPEED = 2 // game seconds per second
   const LEAP = 8 // cells in one second: more than any hero walks, so a teleport, a blink or a respawn
   let spots = $state.raw<Spot[] | null>(null) // null until they arrive
   let fallen = $state.raw<Fallen[]>([])
   let error = $state('')
   let at = $state(0) // seconds into the playback, with fractions
   let playing = $state(false)
+  let speed = $state(1) // game seconds per second
   const length = $derived(end - start)
   const second = $derived(Math.floor(start + at))
 
@@ -76,7 +76,7 @@
     if (!playing) return
     let last = performance.now()
     let request = requestAnimationFrame(function step(now) {
-      at = Math.min(length, at + (Math.max(0, now - last) / 1000) * SPEED)
+      at = Math.min(length, at + (Math.max(0, now - last) / 1000) * speed)
       last = now
       if (at >= length) playing = false
       else request = requestAnimationFrame(step)
@@ -172,6 +172,11 @@
     </button>
     <input type="range" min="0" max={length} step="any" bind:value={at} oninput={() => (playing = false)} aria-label="Second of the playback" />
     <span>{clock(second)}</span>
+    <span class="choice" role="group" aria-label="Speed of the playback">
+      {#each [1, 2] as times}
+        <button aria-pressed={speed === times} onclick={() => (speed = times)}>{times}×</button>
+      {/each}
+    </span>
   </p>
 {/if}
 
@@ -223,7 +228,7 @@
     margin: 0;
     padding: 0;
   }
-  .controls span {
+  .controls > span:not(.choice) {
     min-width: 5ch;
     text-align: right;
   }
