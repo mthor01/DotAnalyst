@@ -18,3 +18,7 @@
 # Gotchas
 - API keys only in .env (gitignored), never hardcode or commit them
 - External APIs are rate-limited: never refetch a match or replay that's already stored
+
+# Documentation
+- IMPLEMENTATION.md records the logic of everything the site works out itself (lanes, teamfights, lotuses collected, camps pulled, healing, team stats, ...)
+- With every change, check IMPLEMENTATION.md and update it where a rule, a threshold or a known limit changed; a new computed stat gets its own section there

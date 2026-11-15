@@ -2,7 +2,7 @@
 
 A personal Dota 2 stats site that runs on this PC. It tracks a changeable list of Steam accounts, stores every match's basic data, parses replays into a raw event log, and computes its own stats from that log.
 
-Stack and rules are in [CLAUDE.md](CLAUDE.md). This file says what to build and in what order.
+Stack and rules are in [CLAUDE.md](CLAUDE.md). This file says what to build and in what order. How each stat the site works out itself is computed, with its numbers and known limits, is in [IMPLEMENTATION.md](IMPLEMENTATION.md).
 
 ## Decisions from the interview
 
@@ -15,7 +15,7 @@ Stack and rules are in [CLAUDE.md](CLAUDE.md). This file says what to build and 
 | First custom metrics | Lane CS differential, vision habits, fight participation |
 | Replay URLs | `replay_salt` comes from Valve's game coordinator through a second Steam account, or else from the OpenDota API; the site downloads from Valve itself |
 | Fetching | The backend polls while it is running |
-| Out of scope | Logins and multi-user, hosting beyond this PC, live-game tracking, pro matches, replays of league games (their drafts and scoreboards are in since November 2026, see Teams), global percentiles, MMR tracking, mobile layout, own Game Coordinator client |
+| Out of scope | Logins and multi-user, hosting beyond this PC, live-game tracking, pro matches, fetching the replays of league games on their own (their drafts and scoreboards are in since November 2026, and one replay is fetched when asked for, see Teams), global percentiles, MMR tracking, mobile layout, own Game Coordinator client |
 
 Defaults chosen without asking — change any of them before the milestone that uses it:
 
@@ -79,7 +79,7 @@ Raw data is fetched once and never refetched:
 - `data/opendota/{match_id}.json.gz` — the OpenDota response that supplied the replay salt.
 - `data/salts.json` — the replay salts the second Steam account got from Valve, by match id.
 - `data/steam/` — that account's login token and the Steam library's own files. Never committed.
-- `league_matches` — one row per league game: league, start time, both team ids and names, winner, and the full API response as JSON (the draft is its `picks_bans`). Kept out of `matches` so that league games neither join the accounts' stats nor have their replays downloaded.
+- `league_matches` — one row per league game: league, start time, both team ids and names, winner, and the full API response as JSON (the draft is its `picks_bans`). Kept out of `matches` so that league games neither join the accounts' stats nor have their replays downloaded by the poller. A league game whose replay is asked for is copied into `matches` and `match_players` then.
 - `player_names` — Steam name per account of a league player, as it was when first asked for.
 - `heroes`, `items` — id-to-name lookups.
 - `recipes` — for each item that is built from others, the names of its components.
@@ -142,9 +142,8 @@ This comes before the replay stats because replays expire: raw output collected 
 ## Milestone 4 — Replay stats and the match page
 
 - `recompute` drops the derived tables and rebuilds them from raw output (about 1 second per match). The poller computes the same rows for each newly parsed match, so `recompute` is only needed after a derivation changes.
-  - `player_minute` — total gold earned, XP, net worth, last hits, denies, hero damage, healing, camps stacked, camps pulled and lotuses collected so far, per player per minute. Hero damage is the replay's own running count; healing is every heal of another hero of the own team; what a hero heals itself (regeneration, lifesteal) is not counted.
-    - Lotuses collected are worked out, because the parser reports who eats a lotus but not who picks one up. The rules of the pools since 7.38 are played through against the hero positions: a pool grows one lotus every three minutes and holds six, a great lotus (worth three) from 35:00 and a greater one (worth six) from 60:00, and a living hero within 3 cells of a pool for two seconds in a row takes one lotus each second. The pools are at cells (70.3, 161.3) and (186, 93.5): where heroes stood whenever three lotuses merged into a great one. Checked on 240 replays against the lotuses each hero ate or still had at the end: equal for 7 heroes in 10, within one for 9 in 10. Known limits: two heroes at a pool (the one there longer gets the lotus), a lotus handed to an ally, and Turbo, whose pools grow twice as fast.
-    - Camps pulled are worked out too. A pull shows as lane creeps and neutral creeps killing each other (kills less than 25 seconds apart are one pull), and it counts for the hero of the lane creeps' team who last traded hits with a neutral creep in the 30 seconds before. Known limits: a wave that walks into a camp the enemy pulled, and late in a game a hero farming a camp beside a pushed wave. Not checked against anything: no other source records pulls.
+  - `player_minute` — total gold earned, XP, net worth, last hits, denies, hero damage, healing, camps stacked, camps pulled and lotuses collected so far, per player per minute. Hero damage is the replay's own running count; healing is every heal of another hero of the own team, and what a hero heals itself (regeneration, lifesteal) is not counted.
+    - Lotuses collected and camps pulled are worked out, because the replay records neither; the rules are in IMPLEMENTATION.md.
   - `ability_upgrades` — every skill point in the order it was spent (`DOTA_ABILITY_LEVEL`), with the ability's new level and the hero's level; a talent is an ability named `special_bonus_*`. The list of all abilities the log prints at the second a hero appears is skipped, and Shadow Fiend's three Shadowrazes count as one point.
   - `buildings` — the second each tower, barracks and Ancient fell. The two tier-4 towers of a side share one name.
   - `purchases` — item, time, and `built_at`: when the item became part of a bigger one. The log reports a finished item as a purchase of its own at the moment its parts come together; the `recipes` table (item → components, from dotaconstants' `items.json`, filled by `sync-constants`) tells which earlier purchases it used up. Power Treads take a Band of Elvenskin or a Robe in the place of the listed Belt of Strength. A part an ally bought is not found, and stays an item of its own.
@@ -153,8 +152,8 @@ This comes before the replay stats because replays expire: raw output collected 
   - `teamfight_players` — per fight and player: damage dealt to enemy heroes, healing of the other heroes on the own team, deaths, net worth and XP gained from the fight's start to its end, and took part or not. A player took part by dealing hero damage, taking hero damage, or dying. Net worth is used for the gain, not gold earned, so that gold lost by dying or spent on a buyback counts.
   - `wards` — type, owner, position, placed time, removed time, whether destroyed and by which hero.
   - `lanes` — the zone (top, mid, bot, jungle) where the player spent most of 0:00–10:00, time in a base not counted.
-- `GET /api/matches/{match_id}` returns the scoreboard and one list per derived table; the lists are empty without a parsed replay. An unknown match is a 404.
-- `POST /api/matches/{match_id}/replay` fetches that match's replay now (salt, download, parse, stats; about 15 seconds), whatever its age and whenever it was last tried, and answers with the replay state it ended in. A parsed match is not fetched again.
+- `GET /api/matches/{match_id}` returns the scoreboard and one list per derived table; the lists are empty without a parsed replay. A league game answers too, from the answer Steam gave for it. An unknown match is a 404.
+- `POST /api/matches/{match_id}/replay` fetches that match's replay now (salt, download, parse, stats; about 15 seconds), whatever its age and whenever it was last tried, and answers with the replay state it ended in. A parsed match is not fetched again. Asked for a league game, it first copies the game into `matches`.
 - `GET /api/matches/{match_id}/positions?start=<s>&end=<s>` returns where each hero was at every second of that time, and whether it was alive. It is read from the raw log on each call, not stored in a table; a match without a raw log is a 404.
 - **Match page** (`#match/<id>`, linked from the date in the Matches table):
   - Header in the layout of the game's top bar: Radiant portraits, kill score and duration, Dire portraits; the losing side dimmed.
@@ -163,6 +162,7 @@ This comes before the replay stats because replays expire: raw output collected 
   - Graphs: one chart, chosen with buttons above it. Team lead: net worth and XP (area, green where Radiant leads, red where Dire leads). Net worth, hero damage and healing: one line per hero, all ten in one chart; the colour is the hero's place in its team and Dire's lines are dashed. The hero icons above the chart are its legend; a click takes a hero's line out or puts it back, and the scale follows the heroes shown.
   - Laning: top, mid and bottom each once, Radiant's heroes against Dire's, with the lane's net worth and XP lead from 0:00 to 10:00 (all lane charts on one scale); then one row per hero at 10:00 with last hits, denies, net worth, XP, camps stacked, camps pulled and lotuses collected. A game shorter than 10 minutes uses its last minute.
   - Builds, first the item timeline: one row per player, each item at the time it was bought, items from before 0:00 in their own column; consumables, wards and recipes left out. A part bought after 0:00 that was built into a bigger item within a minute is left out too, so a finished item does not sit on a pile of its parts. Then skills and talents: per hero every skill point as the ability's icon with the hero's level under it, and the talents as text with the level they were taken at.
+  - Every map (since November 2026): the wheel zooms in and out around the pointer, dragging moves the picture, and "Reset view" brings back the view it started with. Buttons above each map show and hide what it draws: the buildings, and per map the teams, the kinds of ward, the deaths or the wards. Marks keep their size on the screen when the map is zoomed, so a crowded spot comes apart. This is `lib/MiniMap.svelte`, so the playbacks have it too.
   - Ward map and death map on the minimap image (`frontend/public/minimap.webp`, Valve's artwork as redrawn by the OpenDota project). A death is the hero's icon with an edge in its team's colour. Both maps show the whole game, or one ten-minute part of it (0–10, 10–20, …); a ward belongs to the part it was placed in, and what happened before 0:00 to the first. Both also show the buildings as they stood at the end of the time shown.
   - Death playback, folded away until opened: a list of the deaths (of the part of the game chosen for the maps), and for the chosen death a map that plays the 20 seconds before it, at the game's speed or twice as fast (a switch beside the slider), with every hero's position and the wards standing at each second. Positions come once a second; between them a hero moves on a curve through its positions (Catmull-Rom), and a move of more than 8 cells in a second (teleport, blink, respawn) is shown as a jump. An unfolded fight has the same playback for the whole fight, behind a button. Both playbacks also show the towers, barracks and Ancients: filled while standing, an empty outline from the second they fall (fall times from `buildings`; positions are fixed in MiniMap.svelte, fitted from where melee heroes stand when hitting each building; every map of the match page draws them). The parser output has no creep positions, so creeps are not shown.
   - Teamfight list: time, the net worth swing as a bar, deaths and damage per team, who took part. Only fights that start at 10:00 or later are listed; the `teamfights` table and the fight metrics still hold the earlier ones. A click unfolds a fight: the net worth and XP swing (what Radiant gained minus what Dire gained), a map of the part of the map where heroes died with their icons, and damage, healing, net worth and XP gained per hero. That map also shows the wards: a light mark for a ward standing when the fight started, a dark mark for one standing when it ended, so a ward that lasted through the fight is a dark mark on a light one.
@@ -200,7 +200,7 @@ Known limit: the lane differences describe the lane, not the player, and a lane 
 
 ## Teams: scouting a league team (November 2026)
 
-For preparing a tournament match: what do other teams ban against this team, and does the team pick those heroes when they are left open? Built from drafts and scoreboards only; no replay of a league game is downloaded.
+For preparing a tournament match: what do other teams ban against this team, and does the team pick those heroes when they are left open? Built from drafts and scoreboards. The replay of a league game is downloaded only when asked for on the site (changed in November 2026; before, never): the wards and the first moves below need it.
 
 - **Which games**: the leagues in `LEAGUES` in `steam.py`, for now seasons 6 to 8 of "REINCARNATION - D/A/CH Dota 2 by BEING ESPORTS" (league ids 18795, 19418, 20408). Adding a league is one entry there.
 - **Fetching**: the button in the top bar (see below) or `dotanalyst sync-leagues`; the poller does not do it. `GetMatchHistory` with `league_id` lists a league's games, each with both team ids; every game not stored yet is fetched once through `GetMatchHistoryBySequenceNum`, like an account's match. The first run took half an hour (1,130 games); a later run only fetches new games. The players' Steam names come last, from `GetPlayerSummaries`, 100 per request.
@@ -208,12 +208,13 @@ For preparing a tournament match: what do other teams ban against this team, and
 - **Known limit**: the list reaches back 500 games per league and no further, whatever `start_at_match_id` says. Season 7 has 561 games, so its oldest 67 (the first weeks, March 2026) are not stored. Asking with `account_id` of a player next to `league_id` does list that player's older league games; that route is not built.
 - **Teams page** (`#teams`): every team with a game in those leagues, with games, wins and last game, and a name search.
 - **Team page** (`#team/<team_id>`):
-  - Heroes in their drafts, one sortable table: banned against them, banned by them, open, picked when open, won with it. A hero is open in a game when neither side banned it. Counts are shown as "3 of 4", never as a percentage: a team has a handful of games. The first 15 rows show, the rest on request.
-  - Players: everyone who played for the team, with games per hero.
-  - Games, newest first: season, opponent (a link to that team), side, result, their picks, the bans against them and their own bans.
+  - Heroes in their drafts, one sortable table: games played, win rate, banned against them, picked by the enemy team, open, picked when open. A hero is open in a game when neither side banned it and the enemy did not pick it. Counts come with their share of the team's games, as "5 (17%)"; the two rates are percentages alone. The first 15 rows show, the rest on request.
+  - Players: everyone who played for the team. A player unfolds into a profile: per hero the games, the win rate and the averages of a game (K / D / A, last hits, GPM, XPM), and a heatmap of the player's wards from the games whose replay is parsed.
+  - First moves: a map of where the team's five heroes walked from the start of the pre-game (−1:30) to 0:30 in their last 5 games, one colour per game. Buttons show and hide a game, a slider moves the clock. The positions come from `GET /api/matches/{match_id}/positions`. A button requests the replays that are missing, one after the other.
+  - Games, newest first: season, opponent (a link to that team), side, result, their picks, the bans against them, their own bans, and whether the replay is parsed. The date opens the game as a match page, where a game without a replay has the button that requests it.
 - Picks are read from the ten players of a game, bans from `picks_bans`. A team's name is the newest one Steam sent that is not empty.
 
-Not built: a season filter, replay stats of league games, automatic fetching by the poller, leagues chosen in the UI.
+Not built: a season filter, fetching league replays without being asked, automatic fetching of league games by the poller, leagues chosen in the UI.
 
 ## The check button (November 2026)
 
@@ -232,6 +233,7 @@ The top bar ends in a button that fetches now instead of at the next poll. The p
   - The most played heroes with win rate and average K / D / A.
   - One column per match: the lane's net worth lead at 10:00 (`lane_nw_diff`) as a bar, and the result.
   - Win rate; lanes won, even (within 500 net worth) and lost; share of ranked matches; share of matches with another tracked account on the team. Steam's match data does not say who queued together, so there is no party share.
+  - A heatmap of the wards placed in those matches (since November 2026), with buttons for observers, sentries, and the games played as Radiant or as Dire. `GET /api/wards` returns every ward of the account for the shared filters, each with its match, kind, place and side.
 - `GET /api/matches` carries what the profile needs per match: `radiant`, `lane`, `lane_nw_diff`, `with_tracked`.
 
 ## Risks

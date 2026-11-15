@@ -55,14 +55,14 @@ Source: the odota/parser output, stored in `data/raw/{match_id}.jsonl.gz`.
 | Gold, XP, net worth, last hits and denies every minute | `player_minute` | Graphs, laning table at 10:00 |
 | Hero damage and healing so far, every minute | `player_minute` | Graphs |
 | Camps stacked, per minute | `player_minute` | Laning table |
-| Camps pulled and lotuses collected, per minute: worked out, the replay records neither (see SPEC.md) | `player_minute` | Laning table |
+| Camps pulled and lotuses collected, per minute: worked out, the replay records neither (see IMPLEMENTATION.md) | `player_minute` | Laning table |
 | Every purchase with its time, and when it was built into a bigger item | `purchases` | Item timeline |
 | Every skill point and talent with its time and the hero's level | `ability_upgrades` | Builds tab |
 | When each tower, barracks and Ancient fell | `buildings` | Every map of the match page |
 | Deaths with time, map position, killer, and whether it was in a teamfight | `deaths` | Death map |
-| Position of every hero each second, and whether it is alive | none: read from the raw log when asked | Death playback |
+| Position of every hero each second, and whether it is alive | none: read from the raw log when asked | Death and fight playback, first moves of a league team |
 | Teamfights: start, end and deaths; per player whether they took part, damage dealt, healing, and net worth and XP gained | `teamfights`, `teamfight_players` | Teamfight table, unfolded fight |
-| Wards: position, placed, removed, lifetime, who destroyed them | `wards` | Ward map |
+| Wards: position, placed, removed, lifetime, who destroyed them | `wards` | Ward map, ward heatmaps (profile, league players) |
 | Lane per player (top, mid, bot or jungle) | `lanes` | Lane cards, profile roles |
 
 Metrics in `metrics`, shown on the Trends page:
@@ -78,7 +78,7 @@ Metrics in `metrics`, shown on the Trends page:
 
 ### In the output but not used yet
 
-- **Position every second** (so far only used for the death playback): heat maps, movement, time spent in each part of the map
+- **Position every second** (so far only used for the playbacks and a league team's first moves): heat maps, movement, time spent in each part of the map
 - **Damage log:** damage by target and by ability or item, damage taken, damage to illusions
 - **Healing log:** who healed whom, and with what
 - **Disables:** stuns and slows, with their durations
