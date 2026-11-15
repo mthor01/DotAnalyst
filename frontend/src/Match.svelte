@@ -234,6 +234,24 @@
       return { lane, sides, lead: sides[0].length && sides[1].length ? leadOf(there, laneMinute) : null }
     }),
   )
+  // The overview map puts every hero on its lane: where the laners of that side stand in the first ten minutes
+  // (the median over 60 replays), a second and third hero of the side in a row beside the first. Per lane, for
+  // Radiant and for Dire: x and y of the first hero, and the step to the next, in map cells.
+  const LANE_SPOTS: Record<string, [number, number, number, number][]> = {
+    top: [[81, 157, 6.5, 0], [85.5, 165.5, 6.5, 0]],
+    mid: [[121.7, 122.6, 4.6, -4.6], [126.5, 127.4, -4.6, 4.6]],
+    bot: [[170, 86.5, -6.5, 0], [174, 94.5, -6.5, 0]],
+    jungle: [[135, 98, 6.5, 0], [118, 158, -6.5, 0]], // each side's own jungle; the replay's lane does not say which
+  } // prettier-ignore
+  const onLanes = $derived(
+    Object.entries(LANE_SPOTS).flatMap(([lane, sides]) =>
+      sides.flatMap(([x, y, dx, dy], dire) =>
+        players
+          .filter((p) => laneOf.get(p.player_slot) === lane && isRadiant(p.player_slot) === !dire)
+          .map((p, i) => ({ player_slot: p.player_slot, x: x + i * dx, y: y + i * dy, lane: lane as keyof typeof LANES })),
+      ),
+    ),
+  )
   /** One scale for every lane chart: the largest lead in any lane, rounded up to a full thousand. */
   const laneBound = $derived(
     Math.max(1000, Math.ceil(Math.max(...lanes.flatMap((l) => (l.lead ?? []).flatMap((at) => [Math.abs(at.net_worth), Math.abs(at.xp)]))) / 1000) * 1000),
@@ -379,13 +397,13 @@
   {#each (match?.wards ?? []).filter((w) => standing(w, time)) as w}{@render wardMark(w, size * 0.025, '')}{/each}
 {/snippet}
 
-{#snippet fallenMark(d: Death, icon: number)}
-  {@const x = mapX(d.x!)}
-  {@const y = mapY(d.y!)}
-  <g class="fallen {teamOf(d.player_slot)}">
-    <title>{deathNote(d)}</title>
+{#snippet heroMark(at: { player_slot: number; x: number | null; y: number | null }, icon: number, note: string)}
+  {@const x = mapX(at.x!)}
+  {@const y = mapY(at.y!)}
+  <g class="onmap {teamOf(at.player_slot)}">
+    <title>{note}</title>
     <circle cx={x} cy={y} r={icon * 0.62} stroke-width={icon * 0.1} />
-    <image href={heroIcon(hero.get(d.player_slot) ?? 0)} x={x - icon / 2} y={y - icon / 2} width={icon} height={icon} />
+    <image href={heroIcon(hero.get(at.player_slot) ?? 0)} x={x - icon / 2} y={y - icon / 2} width={icon} height={icon} />
   </g>
 {/snippet}
 
@@ -472,7 +490,22 @@
       </table>
     </div>
 
-    {#if !hasReplay}
+    {#if hasReplay}
+      <h2>Lanes and buildings</h2>
+      <p class="legend">
+        <span><i class="swatch radiant"></i>Radiant</span>
+        <span><i class="swatch dire"></i>Dire</span>
+        <span>■ building standing at the end</span>
+        <span>□ destroyed</span>
+      </p>
+      <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings}>
+        {#each onLanes as at (at.player_slot)}{@render heroMark(at, 5, `${name(at.player_slot)}: ${LANES[at.lane]}`)}{/each}
+      </MiniMap>
+      <p class="muted">
+        A hero is drawn on the lane where it spent most of the first ten minutes, not at an exact place. Hover a hero or
+        a building for its name.
+      </p>
+    {:else}
       <p class="muted">
         No replay data for this match (replay: {match.replay_state}). Replays are fetched for matches up to 30 days old;
         until one is parsed, only the scoreboard above is known.
@@ -683,7 +716,7 @@
           <span><i class="swatch dire"></i>red edge: a Dire hero died</span>
         </p>
         <MiniMap label="Map of the {deathsShown.length} hero deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd}>
-          {#each deathsShown as d}{@render fallenMark(d, 5.5)}{/each}
+          {#each deathsShown as d}{@render heroMark(d, 5.5, deathNote(d))}{/each}
         </MiniMap>
       </section>
     </div>
@@ -802,7 +835,7 @@
                           <!-- a ward that stood through the fight is a dark mark on a light one -->
                           {#each match.wards.filter((w) => standing(w, fight.start)) as w}{@render wardMark(w, view.size * 0.04, 'light')}{/each}
                           {#each match.wards.filter((w) => standing(w, fight.end)) as w}{@render wardMark(w, view.size * 0.022, 'dark')}{/each}
-                          {#each dead as d}{@render fallenMark(d, icon)}{/each}
+                          {#each dead as d}{@render heroMark(d, icon, deathNote(d))}{/each}
                         </MiniMap>
                         <p class="legend wardkey">
                           <span><i class="swatch radiant light"></i><i class="swatch dire light"></i>ward up at {clock(fight.start)}</span>
@@ -1368,13 +1401,13 @@
   tr.dire .meter i {
     background: var(--dire);
   }
-  .fallen circle {
+  .onmap circle {
     fill: var(--page);
   }
-  .fallen.radiant circle {
+  .onmap.radiant circle {
     stroke: var(--radiant);
   }
-  .fallen.dire circle {
+  .onmap.dire circle {
     stroke: var(--dire);
   }
 
