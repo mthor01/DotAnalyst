@@ -17,7 +17,8 @@
     points: { x: number | null; y: number | null }[]
     /** The hero the playback is about: ringed, kept in the picture all the way, and dead at the end. */
     follow?: number | null
-    /** Drawn under the heroes. Gets the game second shown and the width of the picture in map cells. */
+    /** Drawn under the heroes, unless the reader hides the wards. Gets the game second shown and the width of the
+     *  picture in map cells. */
     wards: Snippet<[number, number]>
     label: string
   }
@@ -81,7 +82,6 @@
   }
 
   const view = $derived(viewOf([...points, ...(follow === null ? [] : (tracks.get(follow) ?? []))]))
-  const icon = $derived(view.size * 0.085)
   /** The followed hero last, so it is drawn on top. */
   const cast = $derived([...players].sort((a, b) => +(a.player_slot === follow) - +(b.player_slot === follow)))
 </script>
@@ -91,23 +91,23 @@
 {:else if !spots}
   <p class="muted">Loading…</p>
 {:else}
-  <MiniMap label="Positions of the heroes at {clock(second)}, {label}" view="{view.x} {view.y} {view.size} {view.size}" {fallen} at={second}>
-    {@render wards(second, view.size)}
-    {#each cast as p (p.player_slot)}
-      {@const spot = place(tracks.get(p.player_slot) ?? [], at)}
-      {#if spot}
-        <g
-          class={p.player_slot < 128 ? 'radiant' : 'dire'}
-          class:down={!spot.alive || (p.player_slot === follow && at >= length)}
-          transform="translate({mapX(spot.x)} {mapY(spot.y)})"
-        >
-          <title>{heroName(p.hero_id)}</title>
-          {#if p.player_slot === follow}<circle class="halo" r={icon * 0.82} stroke-width={icon * 0.1} />{/if}
-          <circle r={icon * 0.62} stroke-width={icon * 0.1} />
-          <image href={heroIcon(p.hero_id)} x={-icon / 2} y={-icon / 2} width={icon} height={icon} />
-        </g>
-      {/if}
-    {/each}
+  <MiniMap label="Positions of the heroes at {clock(second)}, {label}" {view} {fallen} at={second} layers={{ radiant: 'Radiant', dire: 'Dire', wards: 'Wards' }}>
+    {#snippet children(size, on)}
+      {@const icon = size * 0.085}
+      {#if on.wards}{@render wards(second, size)}{/if}
+      {#each cast as p (p.player_slot)}
+        {@const team = p.player_slot < 128 ? 'radiant' : 'dire'}
+        {@const spot = on[team] ? place(tracks.get(p.player_slot) ?? [], at) : null}
+        {#if spot}
+          <g class={team} class:down={!spot.alive || (p.player_slot === follow && at >= length)} transform="translate({mapX(spot.x)} {mapY(spot.y)})">
+            <title>{heroName(p.hero_id)}</title>
+            {#if p.player_slot === follow}<circle class="halo" r={icon * 0.82} stroke-width={icon * 0.1} />{/if}
+            <circle r={icon * 0.62} stroke-width={icon * 0.1} />
+            <image href={heroIcon(p.hero_id)} x={-icon / 2} y={-icon / 2} width={icon} height={icon} />
+          </g>
+        {/if}
+      {/each}
+    {/snippet}
   </MiniMap>
   <p class="controls">
     <button class="action" onclick={() => (at >= length && (at = 0), (playing = !playing))}>

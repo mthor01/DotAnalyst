@@ -6,9 +6,11 @@
   export const mapY = (y: number) => clamp(191 - y)
 
   const CLOSE_UP = 48 // cells; a close-up shows at least this much of the 127-cell map
+  const CLOSEST = 12 // cells; as far as the reader can zoom in
+  const WHOLE = { x: 0, y: 0, size: 127 }
   /** The square of the map that holds these places, with room around them, kept inside the map. */
   export function viewOf(places: { x: number | null; y: number | null }[]) {
-    if (!places.length) return { x: 0, y: 0, size: 127 }
+    if (!places.length) return WHOLE
     const xs = places.map((d) => mapX(d.x!))
     const ys = places.map((d) => mapY(d.y!))
     const extent = (vs: number[]) => Math.max(...vs) - Math.min(...vs)
@@ -48,21 +50,61 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
 
+  type View = { x: number; y: number; size: number }
   type Props = {
     label: string
-    /** Shows only a part of the map: an SVG viewBox in map cells. */
-    view?: string
+    /** The square of the map shown at first, in map cells (see viewOf). The reader moves and zooms from there. */
+    view?: View
     /** When each building fell (a match's `buildings`). With it the map draws the towers, barracks and Ancients. */
     fallen?: { name: string; time: number }[]
     /** The game second the buildings are shown at: one that fell later still stands. Left out, the end of the game. */
     at?: number
-    children?: Snippet
+    /** What the reader can show and hide besides the buildings: key -> the name on its button. */
+    layers?: Record<string, string>
+    /** Gets the width of the picture in map cells, to size its marks by so that they stay as large on the screen
+     *  when the reader zooms, and which layers are shown. */
+    children?: Snippet<[number, Record<string, boolean>]>
   }
-  let { label, view = '0 0 127 127', fallen, at = Infinity, children }: Props = $props()
+  let { label, view = WHOLE, fallen, at = Infinity, layers = {}, children }: Props = $props()
+
+  const box = (v: View) => `${v.x} ${v.y} ${v.size} ${v.size}`
+  let moved = $state<View | null>(null) // where the reader has taken the picture; null is the view given
+  const given = $derived(box(view))
+  $effect(() => {
+    given // another view given (another fight, another death) starts from that view again
+    moved = null
+  })
+  const shown = $derived(moved ?? view)
+  let svg: SVGSVGElement
+
+  function place(x: number, y: number, size: number) {
+    const inside = (v: number) => Math.min(127 - size, Math.max(0, v))
+    moved = { x: inside(x), y: inside(y), size }
+  }
+  function zoom(e: WheelEvent) {
+    const { x, y, size } = shown
+    const to = Math.min(127, Math.max(CLOSEST, size * (e.deltaY < 0 ? 0.8 : 1.25)))
+    if (to === size) return // at either end the wheel scrolls the page again
+    e.preventDefault()
+    const frame = svg.getBoundingClientRect()
+    // the cell under the pointer stays under it
+    place(x + ((e.clientX - frame.left) / frame.width) * (size - to), y + ((e.clientY - frame.top) / frame.height) * (size - to), to)
+  }
+  let grip: { x: number; y: number } | null = null // where the pointer was at the last step of a drag
+  function drag(e: PointerEvent) {
+    if (!grip) return
+    const cells = shown.size / svg.getBoundingClientRect().width // per pixel
+    place(shown.x - (e.clientX - grip.x) * cells, shown.y - (e.clientY - grip.y) * cells, shown.size)
+    grip = { x: e.clientX, y: e.clientY }
+  }
+
+  let hidden = $state<string[]>([])
+  const all = $derived({ ...layers, ...(fallen ? { buildings: 'Buildings' } : {}) })
+  const on = $derived(Object.fromEntries(Object.keys(all).map((key) => [key, !hidden.includes(key)])))
 
   /** Side of a tower's square in cells: a share of the picture, but small enough on the whole map that a tier-3
    *  tower and the barracks behind it stay apart. */
-  const unit = $derived(Math.min(+view.split(' ')[2] * 0.0425, 3))
+  const unit = $derived(Math.min(shown.size * 0.0425, 3))
   const buildings = $derived.by(() => {
     if (!fallen) return []
     const times = new Map<string, number[]>()
@@ -75,33 +117,79 @@
   })
 </script>
 
-<!-- one unit of the viewBox is one map cell, so marks are placed with mapX/mapY and sized in cells -->
-<svg viewBox={view} role="img" aria-label={label}>
-  <image href="/minimap.webp" width="127" height="127" opacity="0.8" />
-  {#each buildings as b, i (i)}
-    {@const size = unit * (b.name.endsWith('fort') ? 1.8 : b.name.includes('rax') ? 0.76 : 1)}
-    <rect
-      class={b.name.startsWith('goodguys') ? 'radiant' : 'dire'}
-      class:fallen={b.down}
-      x={mapX(b.x) - size / 2}
-      y={mapY(b.y) - size / 2}
-      width={size}
-      height={size}
-      stroke-width={unit * 0.14}
-    >
-      <title>{buildingName(b.name)}{b.down ? ', destroyed' : ''}</title>
-    </rect>
-  {/each}
-  {@render children?.()}
-</svg>
+<div class="map">
+  <p>
+    <span class="choice" role="group" aria-label="What the map shows">
+      {#each Object.entries(all) as [key, name] (key)}
+        <button aria-pressed={on[key]} onclick={() => (hidden = on[key] ? [...hidden, key] : hidden.filter((k) => k !== key))}>
+          {name}
+        </button>
+      {/each}
+    </span>
+    <button class="action" disabled={!moved || box(moved) === given} onclick={() => (moved = null)}>Reset view</button>
+  </p>
+  <!-- one unit of the viewBox is one map cell, so marks are placed with mapX/mapY and sized in cells.
+       Moving the map is an extra for the mouse: all it shows is in the label and the titles -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <svg
+    bind:this={svg}
+    viewBox={box(shown)}
+    role="img"
+    aria-label="{label}. Scroll to zoom, drag to move."
+    onwheel={zoom}
+    onpointerdown={(e) => ((grip = { x: e.clientX, y: e.clientY }), svg.setPointerCapture(e.pointerId))}
+    onpointermove={drag}
+    onpointerup={() => (grip = null)}
+    onpointercancel={() => (grip = null)}
+  >
+    <image href="/minimap.webp" width="127" height="127" opacity="0.8" />
+    {#if on.buildings}
+      {#each buildings as b, i (i)}
+        {@const size = unit * (b.name.endsWith('fort') ? 1.8 : b.name.includes('rax') ? 0.76 : 1)}
+        <rect
+          class={b.name.startsWith('goodguys') ? 'radiant' : 'dire'}
+          class:fallen={b.down}
+          x={mapX(b.x) - size / 2}
+          y={mapY(b.y) - size / 2}
+          width={size}
+          height={size}
+          stroke-width={unit * 0.14}
+        >
+          <title>{buildingName(b.name)}{b.down ? ', destroyed' : ''}</title>
+        </rect>
+      {/each}
+    {/if}
+    {@render children?.(shown.size, on)}
+  </svg>
+</div>
 
 <style>
+  .map {
+    max-width: 520px;
+  }
+  p {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin: 0 0 6px;
+    font-size: 13px;
+  }
+  p button:disabled {
+    color: var(--muted);
+    cursor: default;
+  }
   svg {
     display: block;
     width: 100%;
-    max-width: 520px;
     border-radius: 6px;
     background: #000;
+    cursor: grab;
+    user-select: none;
+  }
+  svg:active {
+    cursor: grabbing;
   }
   rect {
     stroke: var(--page);

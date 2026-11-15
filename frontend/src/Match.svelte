@@ -52,6 +52,7 @@
   const TEAMS = ['Radiant', 'Dire'] as const
   const isRadiant = (slot: number) => slot < 128
   const teamOf = (slot: number) => (isRadiant(slot) ? 'radiant' : 'dire')
+  const SIDES = { radiant: 'Radiant', dire: 'Dire' } // what a map lets the reader show and hide, by teamOf
   const number = (n: number | null | undefined) => (n == null ? '–' : n.toLocaleString()) // Steam omits some stats for older matches
   const thousands = (n: number) => (n === 0 ? '0' : `${Math.round(n / 100) / 10}k`)
   const sum = (values: number[]) => values.reduce((a, b) => a + b, 0)
@@ -518,8 +519,12 @@
         <span>■ building standing at the end</span>
         <span>□ destroyed</span>
       </p>
-      <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings}>
-        {#each onLanes as at (at.player_slot)}{@render heroMark(at, 5, `${name(at.player_slot)}: ${LANES[at.lane]}`)}{/each}
+      <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings} layers={SIDES}>
+        {#snippet children(size, on)}
+          {#each onLanes.filter((at) => on[teamOf(at.player_slot)]) as at (at.player_slot)}
+            {@render heroMark(at, size * 0.04, `${name(at.player_slot)}: ${LANES[at.lane]}`)}
+          {/each}
+        {/snippet}
       </MiniMap>
       <p class="muted">
         A hero is drawn on the lane where it spent most of the first ten minutes, not at an exact place. Hover a hero or
@@ -731,8 +736,10 @@
           <span>● Observer</span>
           <span>◆ Sentry</span>
         </p>
-        <MiniMap label="Map of the {wardsShown.length} wards placed {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd}>
-          {#each wardsShown as w}{@render wardMark(w, 1.7, '')}{/each}
+        <MiniMap label="Map of the {wardsShown.length} wards placed {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd} layers={{ ...SIDES, obs: 'Observers', sen: 'Sentries' }}>
+          {#snippet children(size, on)}
+            {#each wardsShown.filter((w) => on[teamOf(w.player_slot)] && on[w.type]) as w}{@render wardMark(w, size * 0.0134, '')}{/each}
+          {/snippet}
         </MiniMap>
       </section>
       <section>
@@ -741,8 +748,10 @@
           <span><i class="swatch radiant"></i>green edge: a Radiant hero died</span>
           <span><i class="swatch dire"></i>red edge: a Dire hero died</span>
         </p>
-        <MiniMap label="Map of the {deathsShown.length} hero deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd}>
-          {#each deathsShown as d}{@render heroMark(d, 5.5, deathNote(d))}{/each}
+        <MiniMap label="Map of the {deathsShown.length} hero deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd} layers={SIDES}>
+          {#snippet children(size, on)}
+            {#each deathsShown.filter((d) => on[teamOf(d.player_slot)]) as d}{@render heroMark(d, size * 0.043, deathNote(d))}{/each}
+          {/snippet}
         </MiniMap>
       </section>
     </div>
@@ -840,7 +849,6 @@
               {#if unfolded}
                 {@const dead = fallen(fight)}
                 {@const view = viewOf(dead)}
-                {@const icon = view.size * 0.12}
                 {@const most = Math.max(1, ...[...radiant, ...dire].flatMap((p) => [p.damage, p.healing]))}
                 <tr class="detail">
                   <td colspan="7">
@@ -857,11 +865,17 @@
                         {/each}
                         <p class="muted">How much more one team gained than the other during the fight. A full bar is the largest swing of this match.</p>
                         <h3>Deaths and wards</h3>
-                        <MiniMap label="Where the {dead.length} heroes died in the fight at {when}, and the wards standing there" view="{view.x} {view.y} {view.size} {view.size}" fallen={match.buildings} at={fight.end}>
-                          <!-- a ward that stood through the fight is a dark mark on a light one -->
-                          {#each match.wards.filter((w) => standing(w, fight.start)) as w}{@render wardMark(w, view.size * 0.04, 'light')}{/each}
-                          {#each match.wards.filter((w) => standing(w, fight.end)) as w}{@render wardMark(w, view.size * 0.022, 'dark')}{/each}
-                          {#each dead as d}{@render heroMark(d, icon, deathNote(d))}{/each}
+                        <MiniMap label="Where the {dead.length} heroes died in the fight at {when}, and the wards standing there" {view} fallen={match.buildings} at={fight.end} layers={{ deaths: 'Deaths', wards: 'Wards' }}>
+                          {#snippet children(size, on)}
+                            {#if on.wards}
+                              <!-- a ward that stood through the fight is a dark mark on a light one -->
+                              {#each match!.wards.filter((w) => standing(w, fight.start)) as w}{@render wardMark(w, size * 0.04, 'light')}{/each}
+                              {#each match!.wards.filter((w) => standing(w, fight.end)) as w}{@render wardMark(w, size * 0.022, 'dark')}{/each}
+                            {/if}
+                            {#if on.deaths}
+                              {#each dead as d}{@render heroMark(d, size * 0.12, deathNote(d))}{/each}
+                            {/if}
+                          {/snippet}
                         </MiniMap>
                         <p class="legend wardkey">
                           <span><i class="swatch radiant light"></i><i class="swatch dire light"></i>ward up at {clock(fight.start)}</span>
