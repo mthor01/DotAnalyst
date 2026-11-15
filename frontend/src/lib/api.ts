@@ -149,7 +149,7 @@ export async function post<T>(path: string): Promise<T> {
   return response.json()
 }
 
-export const LOBBY_TYPES: Record<number, string> = { 0: 'Normal', 7: 'Ranked' }
+export const LOBBY_TYPES: Record<number, string> = { 0: 'Normal', 1: 'Practice', 7: 'Ranked' } // a league game is a practice lobby
 export const GAME_MODES: Record<number, string> = {
   1: 'All Pick',
   2: 'Captains Mode',
