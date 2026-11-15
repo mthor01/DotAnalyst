@@ -1,17 +1,19 @@
 <script lang="ts">
-  import { get, percent, type Account, type MatchRow } from './lib/api'
+  import { get, percent, type Account, type MatchRow, type WardSpot } from './lib/api'
   import { heroIcon, heroName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
+  import WardHeat from './lib/WardHeat.svelte'
 
   let { query, account }: { query: string; account: Account | undefined } = $props()
   let rows = $state<MatchRow[]>([])
+  let wards = $state.raw<(WardSpot & { match_id: number })[]>([]) // of every match of these filters
   let error = $state('')
   let size = $state(25)
 
   $effect(() => {
     let current = true
-    get<MatchRow[]>('matches', query).then(
-      (found) => current && ((rows = found), (error = '')),
+    Promise.all([get<MatchRow[]>('matches', query), get<typeof wards>('wards', query)]).then(
+      ([found, placed]) => current && ((rows = found), (wards = placed), (error = '')),
       (e) => current && (error = e.message),
     )
     return () => (current = false)
@@ -78,6 +80,13 @@
   const note = (r: MatchRow) =>
     `${heroName(r.hero_id)}, ${date(r.start_time)}: ${r.win ? 'won' : 'lost'}` +
     (r.lane_nw_diff === null ? '' : `, lane ${signed(r.lane_nw_diff)} net worth at 10:00`)
+
+  // ---- the ward heatmap: the wards of the matches shown
+  const warded = $derived.by(() => {
+    const shown = new Set(recent.map((r) => r.match_id))
+    return wards.filter((w) => shown.has(w.match_id))
+  })
+  const parsed = $derived(recent.filter((r) => r.replay_state === 'parsed').length)
 
   const laned = $derived(recent.filter((r) => r.lane_nw_diff !== null))
   const lanes = $derived({
@@ -184,6 +193,23 @@
       One column per match, the oldest on the left. The bar is the net worth lead of the player's lane at 10:00: up when
       ahead, down when behind. A match without a parsed replay has no bar. The dot is the result.
     </p>
+  </section>
+
+  <section class="card vision">
+    <div>
+      <WardHeat wards={warded} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches" />
+    </div>
+    <div class="muted">
+      <h3>Wards placed</h3>
+      <p>
+        Where the wards went in the {parsed} of these {recent.length} matches that have a parsed replay. The map is cut
+        into squares of two map cells; a square is coloured when a ward was placed in it, stronger the more often.
+      </p>
+      <p>
+        Radiant and Dire ward different places, so the buttons above the map show one side's games alone, or one kind
+        of ward. Scroll over the map to zoom, drag to move it, hover a square for its count.
+      </p>
+    </div>
   </section>
 
   <dl class="card numbers">
@@ -386,6 +412,26 @@
   .strip.dense .dot {
     width: 5px;
     height: 5px;
+  }
+
+  .vision {
+    display: grid;
+    grid-template-columns: minmax(280px, 520px) minmax(200px, 1fr);
+    gap: 8px 24px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 900px) {
+    .vision {
+      grid-template-columns: 1fr;
+    }
+  }
+  .vision h3 {
+    margin: 0 0 8px;
+    color: var(--text);
+  }
+  .vision p {
+    max-width: 52ch;
   }
 
   .numbers {

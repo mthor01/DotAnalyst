@@ -88,14 +88,21 @@ export type MatchDetail = {
 }
 
 export type TeamRow = { team_id: number; name: string | null; games: number; wins: number; last_played: number }
-/** One hero in a team's league drafts. `open` counts the games in which neither side banned it. */
-export type TeamHero = { hero_id: number; banned_against: number; banned: number; open: number; picked: number; wins: number }
+/** A ward as a heatmap needs it: its kind, its place in map cells, and the side its owner played. */
+export type WardSpot = { type: 'obs' | 'sen'; x: number; y: number; radiant: boolean }
+/** One hero in a team's league drafts. `open` counts the games in which neither side banned it and the other side
+ *  did not pick it (`picked_against`). */
+export type TeamHero = { hero_id: number; banned_against: number; banned: number; picked_against: number; open: number; picked: number; wins: number }
+/** A league player's games on one hero; the numbers after `wins` are averages per game. */
+export type TeamPlayerHero = { hero_id: number; games: number; wins: number; kills: number; deaths: number; assists: number; last_hits: number; gold_per_min: number; xp_per_min: number }
 export type TeamDetail = {
   team_id: number
   name: string | null
-  games: { match_id: number; start_time: number; league: string; radiant: boolean; win: boolean; opponent_id: number; opponent: string | null; picks: number[]; bans: number[]; bans_against: number[] }[]
+  /** Newest first. `picks` are in player slot order; `replay` says whether the game's replay is parsed. */
+  games: { match_id: number; start_time: number; league: string; radiant: boolean; win: boolean; opponent_id: number; opponent: string | null; picks: number[]; bans: number[]; bans_against: number[]; replay: boolean }[]
   heroes: TeamHero[]
-  players: { account_id: number; name: string | null; games: number; heroes: { hero_id: number; games: number; wins: number }[] }[]
+  /** `wards` are those of the `replays` games of the player whose replay is parsed. */
+  players: { account_id: number; name: string | null; games: number; replays: number; heroes: TeamPlayerHero[]; wards: WardSpot[] }[]
 }
 
 export type MetricPoint ={ match_id: number; start_time: number; value: number }
