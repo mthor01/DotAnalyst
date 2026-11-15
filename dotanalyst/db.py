@@ -130,7 +130,7 @@ class PlayerMinute(Derived):
     last_hits: Mapped[int]
     denies: Mapped[int]
     hero_damage: Mapped[int]  # dealt to enemy heroes, as the replay counts it
-    healing: Mapped[int]  # of heroes on the own team, the healer included
+    healing: Mapped[int]  # of the other heroes on the own team; what a hero heals itself is not counted
     camps_stacked: Mapped[int]  # so far, like every column here
     camps_pulled: Mapped[int]  # into the own lane creeps; worked out from creep deaths, see derive.pulls
     lotuses: Mapped[int]  # collected from the pools; worked out from the positions, see derive.lotuses
@@ -178,7 +178,7 @@ class TeamfightPlayer(Derived):
     player_slot: Mapped[int] = mapped_column(primary_key=True)
     took_part: Mapped[bool]
     damage: Mapped[int]  # dealt to enemy heroes
-    healing: Mapped[int]  # of heroes on the own team, the healer included
+    healing: Mapped[int]  # of the other heroes on the own team
     deaths: Mapped[int]
     net_worth_gain: Mapped[int]  # from the fight's start to its end; a death or a buyback can make it negative
     xp_gain: Mapped[int]

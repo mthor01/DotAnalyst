@@ -97,11 +97,12 @@ class Log:
                     yield e["time"], attacker, victim, e["value"]
 
     def hero_heals(self):
-        """(time, healer slot, amount) for each heal by a hero on a hero of its own team, itself included."""
+        """(time, healer slot, amount) for each heal by a hero on another hero of its team. What a hero heals itself
+        (regeneration, lifesteal) is left out: it says how the hero lasted, not what it did for the team."""
         for e in self.events:
             if e["type"] == "DOTA_COMBATLOG_HEAL" and e.get("targethero") and not e.get("targetillusion"):
                 healer, healed = self.hero_slot.get(e.get("sourcename")), self.hero_slot.get(e.get("targetname"))
-                if healer is not None and healed is not None and self.radiant(healer) == self.radiant(healed):
+                if None not in (healer, healed) and healer != healed and self.radiant(healer) == self.radiant(healed):
                     yield e["time"], healer, e["value"]
 
 

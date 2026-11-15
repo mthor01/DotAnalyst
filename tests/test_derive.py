@@ -27,13 +27,16 @@ def test_per_minute_numbers(rows):
     assert len(ten) == 10
     assert (ten[DAWNBREAKER]["last_hits"], ten[DAWNBREAKER]["net_worth"], ten[DAWNBREAKER]["xp"]) == (46, 3188, 3697)
     assert max(r["minute"] for r in rows[PlayerMinute]) == 15  # the game ended at 15:11
-    # damage is the replay's own running count; healing is every heal of an own hero up to that minute, added up
-    # from the combat log: Muerta's is all her own regeneration
+    # damage is the replay's own running count; healing is every heal of another hero of the team up to that minute,
+    # added up from the combat log. By 10:00 that was one heal: Dawnbreaker's 14 on Lich at 8:57
     assert [(ten[slot]["hero_damage"], ten[slot]["healing"]) for slot in (DAWNBREAKER, PHOENIX, MUERTA)] == [
-        (2707, 1654), (4195, 724), (7477, 3055),
+        (2707, 14), (4195, 0), (7477, 0),
     ]  # fmt: skip
     fifteen = {r["player_slot"]: r for r in rows[PlayerMinute] if r["minute"] == 15}
-    assert (fifteen[MUERTA]["hero_damage"], fifteen[MUERTA]["healing"]) == (10667, 6812)
+    # Muerta healed only herself (6,812 of regeneration), which does not count. Dawnbreaker healed Lich for 194,
+    # Phoenix for 92 and Luna for 135; Legion Commander (slot 4) healed Dawnbreaker twelve times for 24
+    assert (fifteen[MUERTA]["hero_damage"], fifteen[MUERTA]["healing"]) == (10667, 0)
+    assert [fifteen[slot]["healing"] for slot in (DAWNBREAKER, 4, PHOENIX)] == [421, 288, 28]
 
 
 def test_stacks_pulls_and_lotuses(rows):
@@ -124,13 +127,13 @@ def test_teamfights(rows):
 
 def test_teamfight_healing_and_gains(rows):
     fight = {(p["n"], p["player_slot"]): p for p in rows[TeamfightPlayer]}
-    # first fight, 6:18 to 6:50: every heal was a hero healing itself; Muerta 593 in all, Luna none
-    assert [fight[0, slot]["healing"] for slot in (MUERTA, 130, 4, 2, DAWNBREAKER, 1)] == [593, 387, 219, 115, 17, 0]
+    # first fight, 6:18 to 6:50: every heal was a hero healing itself (Muerta 593), so nobody healed anyone
+    assert [fight[0, slot]["healing"] for slot in (MUERTA, 130, 4, 2, DAWNBREAKER, 1)] == [0, 0, 0, 0, 0, 0]
     # net worth and experience at 6:50 minus at 6:18; Lich (slot 2) died in it, Pangolier (131) was not near
     assert (fight[0, MUERTA]["net_worth_gain"], fight[0, MUERTA]["xp_gain"]) == (489, 454)
     assert (fight[0, 2]["net_worth_gain"], fight[0, 131]["xp_gain"]) == (39, 0)
-    # last fight: Dawnbreaker healed itself for 205 and Luna for 135; Phoenix healed only Luna, for 28
-    assert (fight[4, DAWNBREAKER]["healing"], fight[4, PHOENIX]["healing"]) == (340, 28)
+    # last fight: Dawnbreaker healed Luna for 135 (and itself for 205, not counted); Phoenix healed Luna for 28
+    assert (fight[4, DAWNBREAKER]["healing"], fight[4, PHOENIX]["healing"]) == (135, 28)
     assert (fight[4, 131]["net_worth_gain"], fight[4, 131]["xp_gain"]) == (930, 1487)
 
 

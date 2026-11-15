@@ -72,7 +72,7 @@
   const GRAPH_NOTES: Record<PerHero, string> = {
     net_worth: '',
     hero_damage: 'Damage dealt to enemy heroes so far. ',
-    healing: 'Healing of heroes on the own team so far, the healer included: regeneration from items and lifesteal count. ',
+    healing: 'Healing of the other heroes on the own team so far. What a hero heals itself (regeneration, lifesteal) is not counted. ',
   }
   let graph = $state<keyof typeof GRAPHS>('lead')
 
