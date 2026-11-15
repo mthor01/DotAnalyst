@@ -37,7 +37,7 @@ Source: Steam `GetMatchHistoryBySequenceNum`, available for every match and stor
 | Aghanim's Scepter, Aghanim's Shard, Moon Shard consumed | no |
 | Gold left at the end, gold spent | no |
 | "Scaled" damage and healing values | no |
-| Skill build (each ability level-up with its time) | no |
+| Skill build (each ability level-up with its time) | no (the Builds tab takes it from the replay) |
 | Facet (`hero_variant`) | no |
 
 ### Calculated from it
@@ -52,9 +52,13 @@ Source: the odota/parser output, stored in `data/raw/{match_id}.jsonl.gz`.
 
 | Stat | Table | Where on the site |
 |---|---|---|
-| Gold, XP, net worth, last hits and denies every minute | `player_minute` | Lead charts, laning table at 10:00 |
-| Camps stacked and lotuses used, per minute | `player_minute` | Laning table |
+| Gold, XP, net worth, last hits and denies every minute | `player_minute` | Graphs, laning table at 10:00 |
+| Hero damage and healing so far, every minute | `player_minute` | Graphs |
+| Camps stacked, per minute | `player_minute` | Laning table |
+| Camps pulled and lotuses collected, per minute: worked out, the replay records neither (see SPEC.md) | `player_minute` | Laning table |
 | Every purchase with its time, and when it was built into a bigger item | `purchases` | Item timeline |
+| Every skill point and talent with its time and the hero's level | `ability_upgrades` | Builds tab |
+| When each tower, barracks and Ancient fell | `buildings` | Every map of the match page |
 | Deaths with time, map position, killer, and whether it was in a teamfight | `deaths` | Death map |
 | Position of every hero each second, and whether it is alive | none: read from the raw log when asked | Death playback |
 | Teamfights: start, end and deaths; per player whether they took part, damage dealt, healing, and net worth and XP gained | `teamfights`, `teamfight_players` | Teamfight table, unfolded fight |
@@ -82,7 +86,6 @@ Metrics in `metrics`, shown on the Trends page:
 - **XP by source**
 - **Ability and item uses:** casts per ability, and uses of Blink, Black King Bar, Smoke and so on
 - **Runes:** how many each player picked up, and which runes
-- **Building kills with times:** tower and barracks timings
 - **Roshan:** kills, Aegis pick-up, Roshan kills per player
 - **Kill events:** kill streaks, multi-kills, first blood
 - **Items outside the shop:** starting items, neutral items found
