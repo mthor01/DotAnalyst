@@ -25,6 +25,10 @@
     return () => (current = false)
   })
 
+  // ---- the page is split into parts; all but the first need the replay
+  const TABS = { general: 'General', graphs: 'Graphs', laning: 'Laning', builds: 'Builds', map: 'Wards and deaths', fights: 'Teamfights' } // prettier-ignore
+  let tab = $state<keyof typeof TABS>('general') // kept from match to match
+
   const TEAMS = ['Radiant', 'Dire'] as const
   const isRadiant = (slot: number) => slot < 128
   const teamOf = (slot: number) => (isRadiant(slot) ? 'radiant' : 'dire')
@@ -37,6 +41,7 @@
   const hero = $derived(new Map(players.map((p) => [p.player_slot, p.hero_id])))
   const name = (slot: number | null) => (slot === null ? '' : heroName(hero.get(slot) ?? 0))
   const hasReplay = $derived(!!match?.player_minute.length)
+  const shown = $derived(hasReplay ? tab : 'general')
   const lastMinute = $derived(Math.max(0, ...(match?.player_minute ?? []).map((r) => r.minute)))
   const minuteRow = $derived(new Map((match?.player_minute ?? []).map((r) => [`${r.player_slot}:${r.minute}`, r])))
 
@@ -406,49 +411,59 @@
     {@render side(teams[1], !match.radiant_win)}
   </header>
 
-  <div class="card">
-    <table>
-      <thead>
-        <tr>
-          <th>Hero</th><th class="num">Level</th><th class="num">K / D / A</th><th class="num">LH / DN</th>
-          <th class="num">GPM</th><th class="num">XPM</th><th class="num">Net worth</th><th class="num">Hero damage</th><th>Items</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each teams as team, i}
-          <tr class="team {i ? 'dire' : 'radiant'}">
-            <th colspan="9">{TEAMS[i]}{#if match.radiant_win === (i === 0)}<span class="tag">Winner</span>{/if}</th>
-          </tr>
-          {#each team as p (p.player_slot)}
-            <tr class={teamOf(p.player_slot)}>
-              <td><Hero id={p.hero_id} />{#if p.label}<span class="tag">{p.label}</span>{/if}</td>
-              <td class="num">{p.level}</td>
-              <td class="num">{p.kills} / {p.deaths} / {p.assists}</td>
-              <td class="num">{p.last_hits} / {p.denies}</td>
-              <td class="num">{p.gold_per_min}</td>
-              <td class="num">{p.xp_per_min}</td>
-              <td class="num">{number(p.net_worth)}</td>
-              <td class="num">{number(p.hero_damage)}</td>
-              <td class="items">
-                {#each p.items.filter((item) => item) as item}
-                  {#if itemIcon(item)}
-                    <img src={itemIcon(item)} alt={itemName(constants.items[item])} title={itemName(constants.items[item])} width="30" height="22" loading="lazy" />
-                  {/if}
-                {/each}
-              </td>
-            </tr>
-          {/each}
-        {/each}
-      </tbody>
-    </table>
-  </div>
+  {#if hasReplay}
+    <div class="tabs" role="tablist" aria-label="Parts of the match">
+      {#each Object.entries(TABS) as [id, title]}
+        <button role="tab" aria-selected={tab === id} onclick={() => (tab = id as keyof typeof TABS)}>{title}</button>
+      {/each}
+    </div>
+  {/if}
 
-  {#if !hasReplay}
-    <p class="muted">
-      No replay data for this match (replay: {match.replay_state}). Replays are fetched for matches up to 30 days old;
-      until one is parsed, only the scoreboard above is known.
-    </p>
-  {:else}
+  {#if shown === 'general'}
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Hero</th><th class="num">Level</th><th class="num">K / D / A</th><th class="num">LH / DN</th>
+            <th class="num">GPM</th><th class="num">XPM</th><th class="num">Net worth</th><th class="num">Hero damage</th><th>Items</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each teams as team, i}
+            <tr class="team {i ? 'dire' : 'radiant'}">
+              <th colspan="9">{TEAMS[i]}{#if match.radiant_win === (i === 0)}<span class="tag">Winner</span>{/if}</th>
+            </tr>
+            {#each team as p (p.player_slot)}
+              <tr class={teamOf(p.player_slot)}>
+                <td><Hero id={p.hero_id} />{#if p.label}<span class="tag">{p.label}</span>{/if}</td>
+                <td class="num">{p.level}</td>
+                <td class="num">{p.kills} / {p.deaths} / {p.assists}</td>
+                <td class="num">{p.last_hits} / {p.denies}</td>
+                <td class="num">{p.gold_per_min}</td>
+                <td class="num">{p.xp_per_min}</td>
+                <td class="num">{number(p.net_worth)}</td>
+                <td class="num">{number(p.hero_damage)}</td>
+                <td class="items">
+                  {#each p.items.filter((item) => item) as item}
+                    {#if itemIcon(item)}
+                      <img src={itemIcon(item)} alt={itemName(constants.items[item])} title={itemName(constants.items[item])} width="30" height="22" loading="lazy" />
+                    {/if}
+                  {/each}
+                </td>
+              </tr>
+            {/each}
+          {/each}
+        </tbody>
+      </table>
+    </div>
+
+    {#if !hasReplay}
+      <p class="muted">
+        No replay data for this match (replay: {match.replay_state}). Replays are fetched for matches up to 30 days old;
+        until one is parsed, only the scoreboard above is known.
+      </p>
+    {/if}
+  {:else if shown === 'graphs'}
     <h2>Team lead</h2>
     <p class="legend">
       <span><i class="swatch radiant"></i>Radiant ahead</span>
@@ -474,9 +489,10 @@
       {/each}
     </div>
     <div class="card chart">
-      <Chart option={netWorth} height={380} label="Net worth over time of the heroes chosen above; the laning table below has the numbers at 10 minutes" />
+      <Chart option={netWorth} height={380} label="Net worth over time of the heroes chosen above; the table under Laning has the numbers at 10 minutes" />
     </div>
 
+  {:else if shown === 'laning'}
     <h2>Laning, first {laneMinute} minutes</h2>
     <p class="muted">
       A hero's lane is where it spent most of that time. Each chart is the lane's Radiant heroes together against its Dire
@@ -536,6 +552,7 @@
       </table>
     </div>
 
+  {:else if shown === 'builds'}
     <h2>Item timeline</h2>
     <p class="muted">
       Each item sits at the time it was bought; hover one for its name and time. A part that went into a bigger item
@@ -572,6 +589,7 @@
       {/each}
     </div>
 
+  {:else if shown === 'map'}
     <h2>Wards and deaths</h2>
     <p class="filters">
       <span class="choice" role="group" aria-label="Part of the game shown on both maps">
@@ -656,6 +674,7 @@
       </div>
     </details>
 
+  {:else}
     <h2>Teamfights</h2>
     {#if fights.length === 0}
       <p class="muted">No fight with three or more deaths after 10:00.</p>
@@ -898,6 +917,35 @@
     .side:first-child {
       justify-content: flex-start;
     }
+  }
+
+  /* the parts of a match, in the look of the site's own navigation */
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 22px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tabs button {
+    padding: 10px 0 9px;
+    font: inherit;
+    font-weight: 500;
+    color: var(--muted);
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+  }
+  .tabs button:hover {
+    color: var(--text);
+  }
+  .tabs button[aria-selected='true'] {
+    color: var(--text);
+    border-bottom-color: var(--text);
+  }
+  .tabs + :global(h2) {
+    margin-top: 0;
   }
 
   tr.radiant > :first-child,
