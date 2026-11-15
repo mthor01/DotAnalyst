@@ -7,6 +7,10 @@ How it works:
 - The salt each match's replay URL needs comes from Valve's game coordinator, asked by a second Steam account (`steam/salts.mjs`), or else from the [OpenDota API](https://docs.opendota.com).
 - Replays are parsed by [odota/parser](https://github.com/odota/parser), OpenDota's replay parser, running locally in Docker.
 
+## Keeping player ids out of the repo
+
+`git config core.hooksPath .githooks` once per clone turns on a pre-commit check that refuses files holding the account id or Steam id of any player in the local database. Test fixtures use made-up ids and names.
+
 ## Scouting league teams
 
 The Teams page shows, for every team of the Reincarnation league (seasons 6 to 8), which heroes are banned against it, whether it picks them when they are open, and who plays what. A game's replay is fetched when you ask for it on the page; with replays a team page also shows where each player wards and where the team walks in the first seconds of a game.

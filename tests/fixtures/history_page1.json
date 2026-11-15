@@ -14,7 +14,7 @@
     "dire_team_id": 0,
     "players": [
      {
-      "account_id": 113530411,
+      "account_id": 2001,
       "player_slot": 0,
       "team_number": 0,
       "team_slot": 0,
@@ -46,7 +46,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 118180344,
+      "account_id": 2002,
       "player_slot": 4,
       "team_number": 0,
       "team_slot": 4,
@@ -62,7 +62,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 314448639,
+      "account_id": 2003,
       "player_slot": 129,
       "team_number": 1,
       "team_slot": 1,
@@ -78,7 +78,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 132070602,
+      "account_id": 2004,
       "player_slot": 131,
       "team_number": 1,
       "team_slot": 3,
@@ -104,7 +104,7 @@
     "dire_team_id": 0,
     "players": [
      {
-      "account_id": 128523842,
+      "account_id": 2005,
       "player_slot": 0,
       "team_number": 0,
       "team_slot": 0,
@@ -112,7 +112,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 376068104,
+      "account_id": 2006,
       "player_slot": 1,
       "team_number": 0,
       "team_slot": 1,
@@ -120,7 +120,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 428620719,
+      "account_id": 2007,
       "player_slot": 2,
       "team_number": 0,
       "team_slot": 2,
@@ -128,7 +128,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 210031710,
+      "account_id": 2008,
       "player_slot": 3,
       "team_number": 0,
       "team_slot": 3,
@@ -136,7 +136,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 314448639,
+      "account_id": 2003,
       "player_slot": 4,
       "team_number": 0,
       "team_slot": 4,
@@ -144,7 +144,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 35379655,
+      "account_id": 2009,
       "player_slot": 128,
       "team_number": 1,
       "team_slot": 0,
@@ -152,7 +152,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 204313399,
+      "account_id": 2010,
       "player_slot": 129,
       "team_number": 1,
       "team_slot": 1,
@@ -160,7 +160,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 287677208,
+      "account_id": 2011,
       "player_slot": 130,
       "team_number": 1,
       "team_slot": 2,
@@ -168,7 +168,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 1132656332,
+      "account_id": 2012,
       "player_slot": 131,
       "team_number": 1,
       "team_slot": 3,
@@ -218,7 +218,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 74369590,
+      "account_id": 2013,
       "player_slot": 3,
       "team_number": 0,
       "team_slot": 3,
@@ -226,7 +226,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 482661234,
+      "account_id": 2014,
       "player_slot": 4,
       "team_number": 0,
       "team_slot": 4,
@@ -250,7 +250,7 @@
       "hero_variant": 0
      },
      {
-      "account_id": 314448639,
+      "account_id": 2003,
       "player_slot": 130,
       "team_number": 1,
       "team_slot": 2,

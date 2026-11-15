@@ -18,6 +18,7 @@
 # Gotchas
 - API keys only in .env (gitignored), never hardcode or commit them
 - External APIs are rate-limited: never refetch a match or replay that's already stored
+- The GitHub repo is public: nothing committed may identify a real player (account ids, Steam ids, names). Fixtures saved from live answers get made-up ids (1001, 2001, ...) and names ("Player 1") before they are committed; the pre-commit hook in .githooks/ refuses ids it finds in the local database
 
 # Documentation
 - IMPLEMENTATION.md records the logic of everything the site works out itself (lanes, teamfights, lotuses collected, camps pulled, healing, team stats, ...)

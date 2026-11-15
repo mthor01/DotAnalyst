@@ -11,7 +11,7 @@ from dotanalyst import steam
 from dotanalyst.db import Ability, Account, Base, Hero, Item, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
 
 FIXTURES = Path(__file__).parent / "fixtures"
-ME = 314448639
+ME = 2003
 KEY = "SECRETKEY"
 
 
