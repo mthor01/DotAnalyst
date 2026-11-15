@@ -26,6 +26,8 @@ LOTUS_REACH = 3  # cells: the game's 350 units, and a little more because positi
 LOTUS_EVERY, LOTUS_MOST = 180, 6  # a pool grows one lotus every three minutes and holds six
 LOTUS_GREAT, LOTUS_GREATER = 2100, 3600  # from 35:00 it grows great lotuses (worth three), from 60:00 greater (six)
 TREADS_STAT = {"belt_of_strength", "boots_of_elves", "robe"}
+PULL_GAP = 25  # seconds without a kill between lane creeps and neutral creeps that end a pull
+PULL_LEAD = 30  # how long before the first such kill the puller drew the camp
 FIGHT_GAP = 15  # seconds without a death that end a fight; also how long before the first death it starts
 FIGHT_DEATHS = 3
 LANING_END = 600
@@ -129,8 +131,39 @@ def lotuses(log: Log) -> list[tuple[int, int, int]]:
     return found
 
 
+def pulls(log: Log) -> list[tuple[int, int]]:
+    """(time, slot) for each camp a hero pulled into the lane creeps of its team.
+
+    The replay has no event for it. A pull shows as lane creeps and neutral creeps killing each other, and the puller
+    is the hero of the lane creeps' team who last traded hits with a neutral creep in the 30 seconds before.
+    """
+    # shortcut: a wave that walks into a camp the enemy pulled counts for whoever of its own team hit a neutral creep
+    # just before, and nobody is credited when no hero of the team did. Creep positions would settle both; the
+    # parser output has none
+    kills, drew = [], []  # (time, the lane creeps are Radiant's) and (time, slot of a hero that hit a camp or was hit)
+    for e in log.events:
+        names = e.get("attackername") or "", e.get("targetname") or ""
+        if not any(name.startswith("npc_dota_neutral_") for name in names):
+            continue
+        lane = [name for name in names if name.startswith("npc_dota_creep_")]
+        # a neutral creep a hero has taken over fights lane creeps too: its source is the hero
+        owned = e.get("sourcename") in log.hero_slot or e.get("targetsourcename") in log.hero_slot
+        if e["type"] == "DOTA_COMBATLOG_DEATH" and lane and not owned:
+            kills.append((e["time"], "goodguys" in lane[0]))
+        elif e["type"] == "DOTA_COMBATLOG_DAMAGE":
+            drew += [(e["time"], log.hero_slot[name]) for name in names if name in log.hero_slot]
+    found, last = [], {}  # last: is Radiant -> when its lane creeps and a camp last killed each other
+    for time, radiant in sorted(kills):
+        if radiant not in last or time - last[radiant] >= PULL_GAP:
+            pullers = [slot for at, slot in drew if time - PULL_LEAD <= at <= time and log.radiant(slot) == radiant]
+            if pullers:
+                found.append((time, pullers[-1]))
+        last[radiant] = time
+    return found
+
+
 def minutes(log: Log) -> list[dict]:
-    collected = lotuses(log)
+    collected, pulled = lotuses(log), pulls(log)
     rows = []
     for slot, player_slot in sorted(log.player_slot.items()):
         for minute in range(log.end // 60 + 1):
@@ -141,6 +174,7 @@ def minutes(log: Log) -> list[dict]:
                         "player_slot": player_slot, "minute": minute, "gold": e["gold"], "xp": e["xp"],
                         "net_worth": e["networth"], "last_hits": e["lh"], "denies": e["denies"],
                         "camps_stacked": e.get("camps_stacked", 0),
+                        "camps_pulled": sum(who == slot and time <= minute * 60 for time, who in pulled),
                         "lotuses": sum(n for time, who, n in collected if who == slot and time <= minute * 60),
                     }  # fmt: skip
                 )

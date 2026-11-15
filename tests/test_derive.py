@@ -29,9 +29,14 @@ def test_per_minute_numbers(rows):
     assert max(r["minute"] for r in rows[PlayerMinute]) == 15  # the game ended at 15:11
 
 
-def test_stacks_and_lotuses(rows):
+def test_stacks_pulls_and_lotuses(rows):
     at = {(r["player_slot"], r["minute"]): r for r in rows[PlayerMinute]}
     assert [at[slot, 10]["camps_stacked"] for slot in (DAWNBREAKER, 1, PHOENIX)] == [0, 1, 6]  # the replay's own count
+    # Pulls. Dire's creeps killed kobolds at 2:35, a second after Rubick (slot 129) hit them. Radiant's creeps and
+    # the kobolds killed each other from 2:41 to 3:04, Phoenix having hit the camp at 2:30; at 3:40 they killed a
+    # creep of the next camp, which Legion Commander (slot 4) was fighting. Muerta pulled at 4:35
+    assert [at[PHOENIX, minute]["camps_pulled"] for minute in (2, 3, 10)] == [0, 1, 1]
+    assert [at[slot, 10]["camps_pulled"] for slot in (4, 129, MUERTA, 130, 2)] == [1, 1, 1, 0, 0]
     # Lotuses collected. Legion Commander (slot 4) stood at the top pool when its lotuses of 3:00, 9:00 and 12:00
     # were there (from 2:56, 9:25 and 12:30) and ate one at 3:02, 11:53 and 12:54. Muerta took the one of 6:00 at 6:10
     assert [at[4, minute]["lotuses"] for minute in (2, 3, 9, 10, 12, 13, 15)] == [0, 1, 1, 2, 2, 3, 3]

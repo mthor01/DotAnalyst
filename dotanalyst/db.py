@@ -123,6 +123,7 @@ class PlayerMinute(Derived):
     last_hits: Mapped[int]
     denies: Mapped[int]
     camps_stacked: Mapped[int]  # so far, like every column here
+    camps_pulled: Mapped[int]  # into the own lane creeps; worked out from creep deaths, see derive.pulls
     lotuses: Mapped[int]  # collected from the pools; worked out from the positions, see derive.lotuses
 
 
