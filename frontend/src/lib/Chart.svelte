@@ -53,8 +53,10 @@
     const css = getComputedStyle(el)
     const ink = Object.fromEntries(INK_KEYS.map((k) => [k, css.getPropertyValue(`--${k}`).trim()])) as Ink
     const made = option(ink) as { tooltip?: object }
-    // every chart shares the font and the look of its tooltip
+    // every chart shares the font and the look of its tooltip. It hangs on the page, not inside the chart: a list
+    // of ten heroes is taller than the room the chart leaves it, and inside it would be cut off at the card's edge
     const tooltip = made.tooltip && {
+      appendToBody: true,
       backgroundColor: ink.raised,
       borderColor: ink.axis,
       textStyle: { color: ink.text, fontFamily: FONT },
