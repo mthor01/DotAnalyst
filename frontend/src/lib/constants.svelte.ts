@@ -22,11 +22,14 @@ export function heroPortrait(id: number): string | undefined {
   return name && `${CDN}/heroes/${name}.png`
 }
 
+/** A point put into the attributes is named like a talent, but is spent like a skill point and has an icon. */
+export const ATTRIBUTES = 'special_bonus_attributes'
+
 /** What the game calls an ability; for a talent that is what it gives. Without a name, the replay's own, tidied. */
 export const abilityName = (name: string) =>
-  constants.abilities[name] ?? name.replace(/^special_bonus_(unique_)?/, '').replaceAll('_', ' ')
+  constants.abilities[name] ?? (name === ATTRIBUTES ? 'Attribute bonus' : name.replace(/^special_bonus_(unique_)?/, '').replaceAll('_', ' '))
 
-export const abilityIcon = (name: string) => `${CDN}/abilities/${name}.png`
+export const abilityIcon = (name: string) => `${CDN}/abilities/${name === ATTRIBUTES ? 'attribute_bonus' : name}.png`
 
 /** Icon for an item name as replays give it, without the item_ prefix. */
 export const itemIconByName = (name: string) => `${CDN}/items/${name}.png`

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { GAME_MODES, LOBBY_TYPES, clock, get, post, type MatchDetail, type MatchPlayer } from './lib/api'
   import Chart, { type Ink } from './lib/Chart.svelte'
-  import { abilityIcon, abilityName, constants, heroIcon, heroName, heroPortrait, itemIcon, itemIconByName } from './lib/constants.svelte'
+  import { ATTRIBUTES, abilityIcon, abilityName, constants, heroIcon, heroName, heroPortrait, itemIcon, itemIconByName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import MiniMap, { mapX, mapY, viewOf } from './lib/MiniMap.svelte'
   import Playback from './lib/Playback.svelte'
@@ -318,7 +318,7 @@
   }
 
   // ---- skill points: abilities as icons in the order they were levelled, talents as text
-  const isTalent = (ability: string) => ability.startsWith('special_bonus_')
+  const isTalent = (ability: string) => ability.startsWith('special_bonus_') && ability !== ATTRIBUTES
   const skillPoints = (slot: number) => match!.ability_upgrades.filter((u) => u.player_slot === slot)
 
   // ---- the two maps: the whole game, or ten minutes of it
