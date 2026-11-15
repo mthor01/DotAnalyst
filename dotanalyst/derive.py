@@ -3,6 +3,7 @@ import gzip
 import json
 import re
 from collections import Counter
+from math import hypot
 from pathlib import Path
 
 from sqlalchemy import delete, insert, select
@@ -18,10 +19,12 @@ from .metrics import METRICS
 USED = {
     "interval", "player_slot", "death_tick", "obs", "sen", "obs_left", "sen_left",
     "DOTA_COMBATLOG_DEATH", "DOTA_COMBATLOG_DAMAGE", "DOTA_COMBATLOG_HEAL", "DOTA_COMBATLOG_PURCHASE",
-    "DOTA_COMBATLOG_ITEM",
 }  # fmt: skip
-# a combined lotus counts as the lotuses it was made from
-LOTUSES = {"item_famango": 1, "item_great_famango": 3, "item_greater_famango": 6}
+# the two lotus pools, in map cells: where heroes stood at the moment three lotuses became a great one (240 replays)
+LOTUS_POOLS = ((70.3, 161.3), (186.0, 93.5))
+LOTUS_REACH = 3  # cells: the game's 350 units, and a little more because positions come once a second
+LOTUS_EVERY, LOTUS_MOST = 180, 6  # a pool grows one lotus every three minutes and holds six
+LOTUS_GREAT, LOTUS_GREATER = 2100, 3600  # from 35:00 it grows great lotuses (worth three), from 60:00 greater (six)
 TREADS_STAT = {"belt_of_strength", "boots_of_elves", "robe"}
 FIGHT_GAP = 15  # seconds without a death that end a fight; also how long before the first death it starts
 FIGHT_DEATHS = 3
@@ -99,12 +102,35 @@ class Log:
                     yield e["time"], healer, e["value"]
 
 
+def lotuses(log: Log) -> list[tuple[int, int, int]]:
+    """(time, slot, lotuses) for each lotus a hero collected; a great or greater one counts as the lotuses it is worth.
+
+    The replay has no event for it, so the pools' rules (since 7.38) are played through against the positions: a
+    hero standing at a pool takes its lotuses one after another. Checked on 240 replays against the lotuses each
+    hero ate or still had at the end: equal for 7 heroes in 10, within one for 9 in 10.
+    """
+    # shortcut: of two heroes at a pool the one there longer gets the lotus, a lotus handed to an ally stays with
+    # the hero who collected it, and Turbo's faster pools are not known here. Use a pick-up event if the parser
+    # ever reports one
+    found = []
+    for x, y in LOTUS_POOLS:
+        stock: list[int] = []
+        there = Counter()  # slot -> seconds in a row it has stood at the pool, alive
+        for time in range(log.end + 1):
+            if time and time % LOTUS_EVERY == 0 and len(stock) < LOTUS_MOST:
+                stock.append(6 if time >= LOTUS_GREATER else 3 if time >= LOTUS_GREAT else 1)
+            for slot in log.player_slot:
+                e = log.at.get((time, slot), {})
+                near = e.get("x") is not None and e.get("life_state") == 0
+                there[slot] = there[slot] + 1 if near and hypot(e["x"] - x, e["y"] - y) <= LOTUS_REACH else 0
+            for slot, seconds in there.most_common(1):
+                if stock and seconds >= 2:
+                    found.append((time, slot, stock.pop(0)))
+    return found
+
+
 def minutes(log: Log) -> list[dict]:
-    eaten = [
-        (e["time"], log.hero_slot[e["attackername"]], LOTUSES[e["inflictor"]])
-        for e in log.events
-        if e["type"] == "DOTA_COMBATLOG_ITEM" and e.get("inflictor") in LOTUSES and e.get("attackername") in log.hero_slot
-    ]
+    collected = lotuses(log)
     rows = []
     for slot, player_slot in sorted(log.player_slot.items()):
         for minute in range(log.end // 60 + 1):
@@ -115,7 +141,7 @@ def minutes(log: Log) -> list[dict]:
                         "player_slot": player_slot, "minute": minute, "gold": e["gold"], "xp": e["xp"],
                         "net_worth": e["networth"], "last_hits": e["lh"], "denies": e["denies"],
                         "camps_stacked": e.get("camps_stacked", 0),
-                        "lotuses": sum(n for time, who, n in eaten if who == slot and time <= minute * 60),
+                        "lotuses": sum(n for time, who, n in collected if who == slot and time <= minute * 60),
                     }  # fmt: skip
                 )
     return rows

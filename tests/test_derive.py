@@ -32,9 +32,14 @@ def test_per_minute_numbers(rows):
 def test_stacks_and_lotuses(rows):
     at = {(r["player_slot"], r["minute"]): r for r in rows[PlayerMinute]}
     assert [at[slot, 10]["camps_stacked"] for slot in (DAWNBREAKER, 1, PHOENIX)] == [0, 1, 6]  # the replay's own count
-    # Legion Commander (slot 4) ate a lotus at 3:02, 11:53 and 12:54, Luna (slot 1) one at 5:56, Dawnbreaker none
-    assert [at[4, minute]["lotuses"] for minute in (3, 4, 10, 12, 13, 15)] == [0, 1, 1, 2, 3, 3]
-    assert (at[1, 5]["lotuses"], at[1, 10]["lotuses"], at[DAWNBREAKER, 15]["lotuses"]) == (0, 1, 0)
+    # Lotuses collected. Legion Commander (slot 4) stood at the top pool when its lotuses of 3:00, 9:00 and 12:00
+    # were there (from 2:56, 9:25 and 12:30) and ate one at 3:02, 11:53 and 12:54. Muerta took the one of 6:00 at 6:10
+    assert [at[4, minute]["lotuses"] for minute in (2, 3, 9, 10, 12, 13, 15)] == [0, 1, 1, 2, 2, 3, 3]
+    assert (at[MUERTA, 6]["lotuses"], at[MUERTA, 7]["lotuses"], at[DAWNBREAKER, 15]["lotuses"]) == (0, 1, 0)
+    # the bottom pool at 3:00: Lich (slot 2) stood on it and Luna (slot 1) 3 cells away. Luna ate that lotus at 5:56;
+    # whether she took it or was handed it the replay does not say, so it counts for the hero on the pool
+    assert (at[2, 3]["lotuses"], at[1, 15]["lotuses"]) == (1, 0)
+    assert sum(at[slot, 15]["lotuses"] for slot in (0, 1, 2, 3, 4, 128, 129, 130, 131, 132)) == 6
 
 
 def test_purchases(rows):

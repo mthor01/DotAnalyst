@@ -510,7 +510,7 @@
         <thead>
           <tr>
             <th>Hero at {laneMinute}:00</th><th>Lane</th><th class="num">Last hits</th><th class="num">Denies</th>
-            <th class="num">Net worth</th><th class="num">Experience</th><th class="num">Camps stacked</th><th class="num">Lotuses used</th>
+            <th class="num">Net worth</th><th class="num">Experience</th><th class="num">Camps stacked</th><th class="num" title="Worked out from who stood at a lotus pool while it had lotuses: the replay does not record the pick-up">Lotuses collected</th>
           </tr>
         </thead>
         <tbody>

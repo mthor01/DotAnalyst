@@ -123,7 +123,7 @@ class PlayerMinute(Derived):
     last_hits: Mapped[int]
     denies: Mapped[int]
     camps_stacked: Mapped[int]  # so far, like every column here
-    lotuses: Mapped[int]  # eaten; the replay does not say who picked one up
+    lotuses: Mapped[int]  # collected from the pools; worked out from the positions, see derive.lotuses
 
 
 class Purchase(Derived):
