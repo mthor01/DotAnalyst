@@ -1,0 +1,120 @@
+{
+ "luna_lucent_beam": {
+  "dname": "Lucent Beam",
+  "behavior": "Unit Target",
+  "dmg_type": "Magical",
+  "bkbpierce": "No",
+  "dispellable": "Strong Dispels Only",
+  "target_team": "Enemy",
+  "target_type": [
+   "Hero",
+   "Basic"
+  ],
+  "desc": "Calls a beam of lunar energy down upon an enemy, damaging and briefly stunning them.",
+  "attrib": [
+   {
+    "key": "beam_damage",
+    "header": "BEAM DAMAGE:",
+    "value": [
+     "75",
+     "150",
+     "225",
+     "300"
+    ]
+   },
+   {
+    "key": "glaives_fired",
+    "header": "GLAIVES FIRED:",
+    "value": "0",
+    "generated": true
+   },
+   {
+    "key": "glaives_attack_radius",
+    "header": "GLAIVES ATTACK RADIUS:",
+    "value": "0",
+    "generated": true
+   },
+   {
+    "key": "stun_duration",
+    "header": "STUN DURATION:",
+    "value": "0.6"
+   },
+   {
+    "key": "damage_buff_duration",
+    "header": "DAMAGE BUFF DURATION:",
+    "value": "0"
+   },
+   {
+    "key": "damage_buff_per_beam",
+    "header": "DAMAGE BUFF PER BEAM:",
+    "value": "0"
+   },
+   {
+    "key": "abilitycastrange",
+    "header": "CAST RANGE:",
+    "value": "800",
+    "generated": true
+   },
+   {
+    "key": "abilitycastpoint",
+    "header": "CAST TIME:",
+    "value": "0.4",
+    "generated": true
+   }
+  ],
+  "lore": "Selemene smites those who encroach upon the Nightsilver Woods.",
+  "mc": [
+   "90",
+   "100",
+   "110",
+   "120"
+  ],
+  "cd": [
+   "9",
+   "8",
+   "7",
+   "6"
+  ],
+  "img": "/apps/dota2/images/dota_react/abilities/luna_lucent_beam.png"
+ },
+ "luna_lunar_blessing": {
+  "dname": "Lunar Blessing",
+  "is_innate": true,
+  "behavior": [
+   "Passive",
+   "Hidden"
+  ],
+  "bkbpierce": "Yes",
+  "target_team": "Friendly",
+  "desc": "Grants attack damage to Luna and nearby allied heroes within 1200 range, with Luna receiving double the attack damage bonuses. At night, Lunar Blessing is global, and Luna is blessed with bonus night vision.",
+  "attrib": [
+   {
+    "key": "radius",
+    "header": "RADIUS:",
+    "value": "1200",
+    "generated": true
+   },
+   {
+    "key": "bonus_night_vision",
+    "header": "BONUS NIGHT VISION:",
+    "value": "225"
+   }
+  ],
+  "lore": "The Goddess of the Moon smiles upon her kin.",
+  "img": "/apps/dota2/images/dota_react/abilities/luna_lunar_blessing.png"
+ },
+ "generic_hidden": {
+  "behavior": "Hidden",
+  "attrib": [],
+  "img": "/apps/dota2/images/dota_react/abilities/generic_hidden.png"
+ },
+ "special_bonus_unique_luna_7": {
+  "dname": "-5% Moon Glaives Damage Reduction"
+ },
+ "special_bonus_attack_speed_20": {
+  "dname": "+20 Attack Speed"
+ },
+ "special_bonus_unique_juggernaut_2": {
+  "dname": "+{s:bonus_healing_ward_bonus_health} Healing Ward Hits to Kill"
+ }
+}

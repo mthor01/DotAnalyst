@@ -100,6 +100,13 @@ class Item(Base):
     name: Mapped[str]  # without the item_ prefix
 
 
+class Ability(Base):
+    __tablename__ = "abilities"
+
+    name: Mapped[str] = mapped_column(primary_key=True)  # as in replay events; a talent is special_bonus_*
+    dname: Mapped[str]  # the name the game shows; for a talent that is what it gives
+
+
 class Recipe(Base):
     __tablename__ = "recipes"
 
@@ -192,6 +199,20 @@ class Ward(Derived):
     killed_by: Mapped[int | None]  # None when it expired, or a creep did it
 
 
+class AbilityUpgrade(Derived):
+    """A skill point spent, on an ability or on a talent."""
+
+    __tablename__ = "ability_upgrades"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    match_id: Mapped[int] = mapped_column(index=True)
+    player_slot: Mapped[int]
+    time: Mapped[int]
+    ability: Mapped[str]  # like Ability.name
+    level: Mapped[int]  # of the ability, after the point
+    hero_level: Mapped[int | None]  # of the hero at that second
+
+
 class Building(Derived):
     """A tower, a barracks or an Ancient that fell. A building without a row stood to the end."""
 
@@ -220,7 +241,9 @@ class Metric(Derived):
     value: Mapped[float]  # a metric that does not apply to a player has no row
 
 
-TABLES = (PlayerMinute, Purchase, Death, Teamfight, TeamfightPlayer, Ward, Building, Lane, Metric)
+TABLES = (
+    PlayerMinute, Purchase, AbilityUpgrade, Death, Teamfight, TeamfightPlayer, Ward, Building, Lane, Metric,
+)  # fmt: skip
 
 
 def open_engine() -> Engine:

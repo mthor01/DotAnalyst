@@ -1,7 +1,7 @@
 <script lang="ts">
   import { GAME_MODES, LOBBY_TYPES, clock, get, type MatchDetail, type MatchPlayer } from './lib/api'
   import Chart, { type Ink } from './lib/Chart.svelte'
-  import { constants, heroIcon, heroName, heroPortrait, itemIcon, itemIconByName } from './lib/constants.svelte'
+  import { abilityIcon, abilityName, constants, heroIcon, heroName, heroPortrait, itemIcon, itemIconByName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import MiniMap, { mapX, mapY, viewOf } from './lib/MiniMap.svelte'
   import Playback from './lib/Playback.svelte'
@@ -278,6 +278,10 @@
       })
     return { start: build.filter((b) => b.time < 0), placed, rows: Math.max(1, rowEnds.length) }
   }
+
+  // ---- skill points: abilities as icons in the order they were levelled, talents as text
+  const isTalent = (ability: string) => ability.startsWith('special_bonus_')
+  const skillPoints = (slot: number) => match!.ability_upgrades.filter((u) => u.player_slot === slot)
 
   // ---- the two maps: the whole game, or ten minutes of it
   type Ward = MatchDetail['wards'][number]
@@ -607,6 +611,42 @@
           {/each}
         </span>
       {/each}
+    </div>
+
+    <h2>Skills and talents</h2>
+    <p class="muted">
+      Every skill point in the order it was spent, with the hero's level under it; hover one for the ability, its level
+      and the time. Talents are listed apart, each with the level it was taken at.
+    </p>
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th>Hero</th><th>Skills</th><th>Talents</th></tr>
+        </thead>
+        <tbody>
+          {#each players as p (p.player_slot)}
+            {@const points = skillPoints(p.player_slot)}
+            <tr class={teamOf(p.player_slot)}>
+              <td><Hero id={p.hero_id} /></td>
+              <td>
+                <span class="skills">
+                  {#each points.filter((u) => !isTalent(u.ability)) as u}
+                    <span title="{abilityName(u.ability)}, level {u.level}, at {clock(u.time)}">
+                      <img src={abilityIcon(u.ability)} alt="{abilityName(u.ability)} {u.level}" width="26" height="26" loading="lazy" />
+                      {u.hero_level ?? ''}
+                    </span>
+                  {/each}
+                </span>
+              </td>
+              <td class="talents">
+                {#each points.filter((u) => isTalent(u.ability)) as u}
+                  <span title="at {clock(u.time)}"><b>{u.hero_level ?? '–'}</b> {abilityName(u.ability)}</span>
+                {/each}
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     </div>
 
   {:else if shown === 'map'}
@@ -1097,6 +1137,35 @@
   }
   .timeline img {
     border-radius: 2px;
+  }
+
+  /* one skill point: the ability, and under it the hero's level */
+  .skills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 3px;
+  }
+  .skills span {
+    display: grid;
+    justify-items: center;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .skills img {
+    border-radius: 3px;
+  }
+  .talents {
+    white-space: normal;
+  }
+  .talents span {
+    display: block;
+    color: var(--text-2);
+  }
+  .talents b {
+    display: inline-block;
+    min-width: 2.2ch;
+    color: var(--text);
   }
 
   .maps {

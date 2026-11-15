@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from . import queries
 from .db import (
-    DATA, TABLES, Building, Death, Derived, Lane, Match, Metric, PlayerMinute, Purchase, Recipe, Teamfight,
+    DATA, TABLES, AbilityUpgrade, Building, Death, Derived, Lane, Match, Metric, PlayerMinute, Purchase, Recipe, Teamfight,
     TeamfightPlayer, Ward,
 )  # fmt: skip
 from .metrics import METRICS
@@ -19,6 +19,7 @@ from .metrics import METRICS
 USED = {
     "interval", "player_slot", "death_tick", "obs", "sen", "obs_left", "sen_left",
     "DOTA_COMBATLOG_DEATH", "DOTA_COMBATLOG_DAMAGE", "DOTA_COMBATLOG_HEAL", "DOTA_COMBATLOG_PURCHASE",
+    "DOTA_ABILITY_LEVEL",
 }  # fmt: skip
 # the two lotus pools, in map cells: where heroes stood at the moment three lotuses became a great one (240 replays)
 LOTUS_POOLS = ((70.3, 161.3), (186.0, 93.5))
@@ -210,6 +211,29 @@ def purchases(log: Log, recipes: dict[str, list[str]]) -> list[dict]:
     return rows
 
 
+def ability_upgrades(log: Log) -> list[dict]:
+    """Every skill point in the order it was spent, talents (special_bonus_*) among them."""
+    rows = []
+    listed: dict[int, int] = {}  # slot -> the second the hero appeared
+    last: dict[int, tuple] = {}
+    for e in log.events:
+        slot = log.hero_slot.get(e.get("targetname")) if e["type"] == "DOTA_ABILITY_LEVEL" else None
+        # at the second a hero appears the log lists all its abilities, the innate ones at level 1: not a build
+        if slot is None or e["time"] == listed.setdefault(slot, e["time"]) or e["abilitylevel"] < 1:
+            continue
+        # Shadow Fiend's three Shadowrazes (shadowraze1 to 3) level as one: one point, one row
+        point = e["time"], e["valuename"].rstrip("0123456789")
+        if last.get(slot) != point:
+            last[slot] = point
+            rows.append(
+                {
+                    "player_slot": log.player_slot[slot], "time": e["time"], "ability": e["valuename"],
+                    "level": e["abilitylevel"], "hero_level": log.at.get((e["time"], slot), {}).get("level"),
+                }  # fmt: skip
+            )
+    return rows
+
+
 def fights(death_times: list[int]) -> list[tuple[int, int, int]]:
     """(start, end, deaths) of each teamfight: deaths less than FIGHT_GAP apart, at least FIGHT_DEATHS of them."""
     groups: list[list[int]] = []  # [first death, last death, count]
@@ -341,6 +365,7 @@ def derive(events: list[dict], recipes: dict[str, list[str]] | None = None) -> d
     return {
         PlayerMinute: minutes(log),
         Purchase: purchases(log, recipes or {}),
+        AbilityUpgrade: ability_upgrades(log),
         Death: death_rows,
         Teamfight: fight_rows,
         TeamfightPlayer: fight_player_rows,

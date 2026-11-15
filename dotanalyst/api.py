@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import derive, poll, queries
-from .db import DATA, Account, Hero, Item, open_engine
+from .db import DATA, Ability, Account, Hero, Item, open_engine
 from .metrics import NAMES
 from .poll import poll_forever
 from .steam import SteamError
@@ -50,6 +50,7 @@ def constants(session: Db) -> dict:
     return {
         "heroes": {h.id: {"name": h.name, "localized_name": h.localized_name} for h in session.scalars(select(Hero))},
         "items": {i.id: i.name for i in session.scalars(select(Item))},
+        "abilities": {a.name: a.dname for a in session.scalars(select(Ability))},
     }
 
 

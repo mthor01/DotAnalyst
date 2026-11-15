@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from dotanalyst import queries
 from dotanalyst.db import (
-    Base, Building, Death, Derived, Lane, Match, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Ward,
+    AbilityUpgrade, Base, Building, Death, Derived, Lane, Match, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Ward,
 )  # fmt: skip
 from dotanalyst.derive import TABLES, derive, fights, positions, read_log, recompute, zone
 
@@ -78,6 +78,23 @@ def test_parts_built_into_a_bigger_item():
     # Muerta bought gloves twice: the pair of 1:47 went into the treads at 3:55, the pair of 10:41 into Maelstrom
     muerta = [(r["time"], r["built_at"]) for r in bought if r["player_slot"] == MUERTA and r["item"] == "gloves"]
     assert muerta == [(107, 235), (641, 827)]
+
+
+def test_skill_points(rows):
+    spent = [(r["player_slot"], r["time"], r["ability"], r["level"], r["hero_level"]) for r in rows[AbilityUpgrade]]
+    # Luna (slot 1): Lunar Blessing, innate and listed at level 1 when she appeared at -1:29, is not a point spent
+    assert [r[1:] for r in spent if r[0] == 1] == [
+        (-49, "luna_lucent_beam", 1, 1), (106, "luna_moon_glaive", 1, 2), (228, "luna_lucent_beam", 2, 3),
+        (400, "luna_moon_glaive", 2, 4), (519, "luna_moon_glaive", 3, 5), (692, "luna_eclipse", 1, 6),
+        (795, "luna_moon_glaive", 4, 7),
+    ]  # fmt: skip
+    # a talent: Muerta's at level 10, four seconds before she put the level's point into The Calling
+    assert (MUERTA, 620, "special_bonus_attack_speed_20", 1, 10) in spent
+    assert (MUERTA, 624, "muerta_the_calling", 1, 10) in spent
+    # Shadow Fiend's three Shadowrazes level together and are one point: 14 points by level 13, a talent among them
+    fiend = [r for r in spent if r[0] == SHADOW_FIEND]
+    assert len(fiend) == 14 and fiend[0][1:] == (-81, "nevermore_shadowraze1", 1, 1)
+    assert [r[2] for r in fiend if r[1] == 108] == ["nevermore_shadowraze1"]
 
 
 def test_deaths_are_the_scoreboard_deaths(rows):

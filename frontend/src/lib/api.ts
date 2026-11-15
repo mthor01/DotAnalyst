@@ -76,6 +76,8 @@ export type MatchDetail = {
   players: MatchPlayer[]
   player_minute: { player_slot: number; minute: number; gold: number; xp: number; net_worth: number; last_hits: number; denies: number; hero_damage: number; healing: number; camps_stacked: number; camps_pulled: number; lotuses: number }[]
   purchases: { player_slot: number; time: number; item: string; built_at: number | null }[]
+  /** Skill points in the order they were spent; a talent's `ability` starts with special_bonus_. */
+  ability_upgrades: { player_slot: number; time: number; ability: string; level: number; hero_level: number | null }[]
   deaths: { player_slot: number; time: number; x: number | null; y: number | null; killer_slot: number | null; in_teamfight: boolean }[]
   teamfights: { n: number; start: number; end: number; deaths: number }[]
   teamfight_players: { n: number; player_slot: number; took_part: boolean; damage: number; healing: number; deaths: number; net_worth_gain: number; xp_gain: number }[]
@@ -123,6 +125,8 @@ export function queryFor(query: string, accountId: number, more: Record<string, 
 export type Constants = {
   heroes: Record<number, { name: string; localized_name: string }>
   items: Record<number, string>
+  /** Ability name as in replays -> the name the game shows. */
+  abilities: Record<string, string>
 }
 
 export async function get<T>(path: string, query = ''): Promise<T> {

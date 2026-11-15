@@ -3,7 +3,7 @@ import { get, type Constants } from './api'
 const CDN = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react'
 
 /** Hero and item names, shared by every page. Empty until loadConstants resolves. */
-export const constants: Constants = $state({ heroes: {}, items: {} })
+export const constants: Constants = $state({ heroes: {}, items: {}, abilities: {} })
 
 export async function loadConstants() {
   Object.assign(constants, await get<Constants>('constants'))
@@ -21,6 +21,12 @@ export function heroPortrait(id: number): string | undefined {
   const name = constants.heroes[id]?.name.replace('npc_dota_hero_', '')
   return name && `${CDN}/heroes/${name}.png`
 }
+
+/** What the game calls an ability; for a talent that is what it gives. Without a name, the replay's own, tidied. */
+export const abilityName = (name: string) =>
+  constants.abilities[name] ?? name.replace(/^special_bonus_(unique_)?/, '').replaceAll('_', ' ')
+
+export const abilityIcon = (name: string) => `${CDN}/abilities/${name}.png`
 
 /** Icon for an item name as replays give it, without the item_ prefix. */
 export const itemIconByName = (name: string) => `${CDN}/items/${name}.png`

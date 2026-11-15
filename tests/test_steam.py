@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 from dotanalyst import steam
-from dotanalyst.db import Account, Base, Hero, Item, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
+from dotanalyst.db import Ability, Account, Base, Hero, Item, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
 
 FIXTURES = Path(__file__).parent / "fixtures"
 ME = 314448639
@@ -24,6 +24,8 @@ PAGE1, PAGE2, DETAILS, HEROES = (
 )
 ITEM_IDS = load("item_ids.json")
 ITEMS = load("items.json")  # eleven items cut from dotaconstants' items.json
+ABILITIES = load("abilities.json")  # six abilities cut from dotaconstants' abilities.json
+CONSTANTS = {"item_ids.json": ITEM_IDS, "items.json": ITEMS, "abilities.json": ABILITIES}
 EMPTY_PAGE ={"result": {"status": 1, "num_results": 0, "results_remaining": 0, "matches": []}}
 NOT_EXPOSED = {"result": {"status": 15, "statusDetail": "Cannot get match history for a user that hasn't allowed it"}}
 HISTORY = PAGE1["result"]["matches"] + PAGE2["result"]["matches"]
@@ -47,7 +49,7 @@ class FakeSteam:
         params = request.url.params
         if request.url.host != "api.steampowered.com":
             assert "key" not in params  # the key must never go to another host
-            return httpx.Response(200, json=ITEMS if request.url.path.endswith("/items.json") else ITEM_IDS)
+            return httpx.Response(200, json=CONSTANTS[request.url.path.rsplit("/", 1)[-1]])
         assert params["key"] == KEY
         if "GetHeroes" in request.url.path:
             return httpx.Response(200, json=HEROES)
@@ -177,6 +179,11 @@ def test_sync_constants_stores_heroes_and_items(session):
     assert session.get(Recipe, "power_treads").components == ["boots", "gloves", "belt_of_strength"]
     assert session.get(Recipe, "sphere").components == ["pers", "ultimate_orb"]  # the scroll, listed as "", is dropped
     assert session.get(Recipe, "boots") is None  # bought whole
+    assert session.get(Ability, "luna_lucent_beam").dname == "Lucent Beam"
+    assert session.get(Ability, "special_bonus_attack_speed_20").dname == "+20 Attack Speed"
+    assert session.get(Ability, "generic_hidden") is None  # the game shows no name for it
+    # dotaconstants left this talent's number as {s:bonus_healing_ward_bonus_health}
+    assert session.get(Ability, "special_bonus_unique_juggernaut_2").dname == "+? Healing Ward Hits to Kill"
     assert steam.sync_constants(session, FakeSteam().client, KEY) == counts  # rerun replaces, no duplicates
     assert len(session.scalars(select(Recipe)).all()) == 5
 

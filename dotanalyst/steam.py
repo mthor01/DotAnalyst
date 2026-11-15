@@ -1,11 +1,12 @@
 import logging
+import re
 import time
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import Account, Hero, Item, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
+from .db import Ability, Account, Hero, Item, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
 
 BASE = "https://api.steampowered.com"
 HISTORY = "IDOTA2Match_570/GetMatchHistory/V001/"
@@ -18,6 +19,7 @@ STEAM_ID_BASE = 76561197960265728  # a 64-bit Steam id is this plus the 32-bit a
 LEAGUES = {18795: "Season 6", 19418: "Season 7", 20408: "Season 8"}
 ITEM_IDS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/item_ids.json"
 ITEMS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/items.json"
+ABILITIES = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/abilities.json"
 PAUSE = 1.0  # seconds before every request
 ANONYMOUS = 4294967295
 HISTORY_NOT_EXPOSED = 15
@@ -163,18 +165,23 @@ def sync_leagues(session: Session, client: httpx.Client, key: str) -> int:
 
 
 def sync_constants(session: Session, client: httpx.Client, key: str) -> tuple[int, int]:
-    """Store hero and item names, and what each item is built from. Returns how many heroes and items."""
+    """Store hero, item and ability names, and what each item is built from. Returns how many heroes and items."""
     heroes = call(client, key, HEROES, language="en")["heroes"]
     for h in heroes:
         session.merge(Hero(id=h["id"], name=h["name"], localized_name=h["localized_name"]))
-    # the Web API has no working item list; these files map item id to internal name, and item to its components
+    # the Web API has no working item list; these files map item id to internal name, item to its components, and
+    # ability to the name the game shows
     files = []
-    for url in (ITEM_IDS, ITEMS):
+    for url in (ITEM_IDS, ITEMS, ABILITIES):
         response = client.get(url, timeout=30)
         if response.status_code != 200:
-            raise SteamError(f"item names: HTTP {response.status_code}")
+            raise SteamError(f"{url.rsplit('/', 1)[-1]}: HTTP {response.status_code}")
         files.append(response.json())
-    items, details = files
+    items, details, abilities = files
+    for name, ability in abilities.items():
+        if ability.get("dname"):
+            # where dotaconstants could not fill in a talent's number it reads "+{s:bonus_duration}s ..."
+            session.merge(Ability(name=name, dname=re.sub(r"\{s:\w+\}", "?", ability["dname"])))
     for item_id, name in items.items():
         session.merge(Item(id=int(item_id), name=name))
     for name, detail in details.items():
