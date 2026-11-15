@@ -45,13 +45,24 @@
   const lastMinute = $derived(Math.max(0, ...(match?.player_minute ?? []).map((r) => r.minute)))
   const minuteRow = $derived(new Map((match?.player_minute ?? []).map((r) => [`${r.player_slot}:${r.minute}`, r])))
 
-  // ---- net worth: every hero in one chart. Ten lines need two signs each: the colour is the hero's place in its
-  // team, and Dire's lines are dashed. The heroes above the chart are its legend and switch lines off and on.
+  // ---- graphs: one chart at a time, chosen with the buttons above it. The first is the teams against each other,
+  // the others are a running total per hero
+  const GRAPHS = { lead: 'Team lead', net_worth: 'Net worth', hero_damage: 'Hero damage', healing: 'Healing' } as const
+  type PerHero = Exclude<keyof typeof GRAPHS, 'lead'>
+  const GRAPH_NOTES: Record<PerHero, string> = {
+    net_worth: '',
+    hero_damage: 'Damage dealt to enemy heroes so far. ',
+    healing: 'Healing of heroes on the own team so far, the healer included: regeneration from items and lifesteal count. ',
+  }
+  let graph = $state<keyof typeof GRAPHS>('lead')
+
+  // every hero in one chart. Ten lines need two signs each: the colour is the hero's place in its team, and Dire's
+  // lines are dashed. The heroes above the chart are its legend and switch lines off and on.
   let hidden = $state<number[]>([]) // player slots taken out of the chart
   /** The list without `n` if it is in it, with `n` if not. */
   const flip = (list: number[], n: number) => (list.includes(n) ? list.filter((o) => o !== n) : [...list, n])
   const pick = (slot: number) => (hidden = flip(hidden, slot))
-  function netWorth(ink: Ink) {
+  const heroChart = (key: PerHero) => (ink: Ink) => {
     const rows = match!.player_minute
     const radiant = new Set(teams[0].map((p) => heroName(p.hero_id)))
     const series = teams.flatMap((team, t) =>
@@ -61,7 +72,7 @@
         .map(({ p, color }) => ({
           type: 'line',
           name: heroName(p.hero_id),
-          data: rows.filter((r) => r.player_slot === p.player_slot).map((r) => [r.minute, r.net_worth]),
+          data: rows.filter((r) => r.player_slot === p.player_slot).map((r) => [r.minute, r[key]]),
           showSymbol: false,
           lineStyle: { width: 2, type: t ? 'dashed' : 'solid' },
           itemStyle: { color },
@@ -464,7 +475,14 @@
       </p>
     {/if}
   {:else if shown === 'graphs'}
-    <h2>Team lead</h2>
+    <p class="filters">
+      <span class="choice" role="group" aria-label="What the graph shows">
+        {#each Object.entries(GRAPHS) as [id, title]}
+          <button aria-pressed={graph === id} onclick={() => (graph = id as keyof typeof GRAPHS)}>{title}</button>
+        {/each}
+      </span>
+    </p>
+    {#if graph === 'lead'}
     <p class="legend">
       <span><i class="swatch radiant"></i>Radiant ahead</span>
       <span><i class="swatch dire"></i>Dire ahead</span>
@@ -472,9 +490,10 @@
     <div class="card chart">
       <Chart option={leadChart(leadOf(players, lastMinute))} height={320} label="Radiant's lead over Dire in net worth and in experience over time; above zero Radiant is ahead, below zero Dire" />
     </div>
-
-    <h2>Net worth by hero</h2>
-    <p class="muted">Click a hero to take its line out of the chart, and again to put it back. Dire's lines are dashed.</p>
+    {:else}
+    <p class="muted">
+      {GRAPH_NOTES[graph]}Click a hero to take its line out of the chart, and again to put it back. Dire's lines are dashed.
+    </p>
     <div class="pick">
       {#each teams as team, t}
         <div class={t ? 'dire' : 'radiant'} role="group" aria-label="{TEAMS[t]} heroes in the chart">
@@ -489,8 +508,9 @@
       {/each}
     </div>
     <div class="card chart">
-      <Chart option={netWorth} height={380} label="Net worth over time of the heroes chosen above; the table under Laning has the numbers at 10 minutes" />
+      <Chart option={heroChart(graph)} height={380} label="{GRAPHS[graph]} over time of the heroes chosen above" />
     </div>
+    {/if}
 
   {:else if shown === 'laning'}
     <h2>Laning, first {laneMinute} minutes</h2>

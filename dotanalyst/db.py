@@ -122,6 +122,8 @@ class PlayerMinute(Derived):
     net_worth: Mapped[int]
     last_hits: Mapped[int]
     denies: Mapped[int]
+    hero_damage: Mapped[int]  # dealt to enemy heroes, as the replay counts it
+    healing: Mapped[int]  # of heroes on the own team, the healer included
     camps_stacked: Mapped[int]  # so far, like every column here
     camps_pulled: Mapped[int]  # into the own lane creeps; worked out from creep deaths, see derive.pulls
     lotuses: Mapped[int]  # collected from the pools; worked out from the positions, see derive.lotuses

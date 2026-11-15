@@ -27,6 +27,13 @@ def test_per_minute_numbers(rows):
     assert len(ten) == 10
     assert (ten[DAWNBREAKER]["last_hits"], ten[DAWNBREAKER]["net_worth"], ten[DAWNBREAKER]["xp"]) == (46, 3188, 3697)
     assert max(r["minute"] for r in rows[PlayerMinute]) == 15  # the game ended at 15:11
+    # damage is the replay's own running count; healing is every heal of an own hero up to that minute, added up
+    # from the combat log: Muerta's is all her own regeneration
+    assert [(ten[slot]["hero_damage"], ten[slot]["healing"]) for slot in (DAWNBREAKER, PHOENIX, MUERTA)] == [
+        (2707, 1654), (4195, 724), (7477, 3055),
+    ]  # fmt: skip
+    fifteen = {r["player_slot"]: r for r in rows[PlayerMinute] if r["minute"] == 15}
+    assert (fifteen[MUERTA]["hero_damage"], fifteen[MUERTA]["healing"]) == (10667, 6812)
 
 
 def test_stacks_pulls_and_lotuses(rows):

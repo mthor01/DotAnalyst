@@ -163,7 +163,7 @@ def pulls(log: Log) -> list[tuple[int, int]]:
 
 
 def minutes(log: Log) -> list[dict]:
-    collected, pulled = lotuses(log), pulls(log)
+    collected, pulled, heals = lotuses(log), pulls(log), list(log.hero_heals())
     rows = []
     for slot, player_slot in sorted(log.player_slot.items()):
         for minute in range(log.end // 60 + 1):
@@ -173,6 +173,8 @@ def minutes(log: Log) -> list[dict]:
                     {
                         "player_slot": player_slot, "minute": minute, "gold": e["gold"], "xp": e["xp"],
                         "net_worth": e["networth"], "last_hits": e["lh"], "denies": e["denies"],
+                        "hero_damage": e.get("hero_damage", 0),
+                        "healing": sum(n for time, who, n in heals if who == slot and time <= minute * 60),
                         "camps_stacked": e.get("camps_stacked", 0),
                         "camps_pulled": sum(who == slot and time <= minute * 60 for time, who in pulled),
                         "lotuses": sum(n for time, who, n in collected if who == slot and time <= minute * 60),
