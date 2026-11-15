@@ -27,14 +27,17 @@
 <MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" layers={LAYERS}>
   {#snippet children(_, on)}
     <defs>
-      <filter id="ward-heat"><feGaussianBlur stdDeviation="0.5" /></filter>
+      <filter id="ward-heat"><feGaussianBlur stdDeviation="0.6" /></filter>
     </defs>
+    <!-- the map is darkened so that the glow stands out from its greens and greys -->
+    <rect class="veil" width="127" height="127" />
     <g filter="url(#ward-heat)">
       {#each squares(on) as s (`${s.type} ${s.x} ${s.y}`)}
-        <!-- the square root keeps a spot warded twice visible beside one warded twenty times -->
-        <rect class={s.type} x={s.x} y={s.y} width={SQUARE} height={SQUARE} opacity={0.3 + 0.7 * Math.sqrt(s.heat)}>
+        <!-- a glow wider than its square, so neighbouring squares run together; the square root keeps a spot
+             warded twice visible beside one warded twenty times -->
+        <circle class={s.type} cx={s.x + SQUARE / 2} cy={s.y + SQUARE / 2} r={SQUARE * 0.8} opacity={0.45 + 0.55 * Math.sqrt(s.heat)}>
           <title>{KIND[s.type]} placed here: {s.n}</title>
-        </rect>
+        </circle>
       {/each}
     </g>
   {/snippet}
@@ -54,6 +57,11 @@
   .sen {
     fill: var(--series-1);
     background: var(--series-1);
+  }
+  .veil {
+    fill: #000;
+    opacity: 0.5;
+    pointer-events: none;
   }
   .legend {
     margin: 8px 0 0;

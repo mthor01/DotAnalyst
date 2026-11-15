@@ -197,7 +197,7 @@ Each point is the mean of that match's value and of up to 19 parsed matches befo
 
 ### Ward heatmap (Profile, team players)
 
-`lib/WardHeat.svelte`. The map is cut into squares of 2 map cells. A square with a ward in it is coloured, observers and sentries apart; its strength is 0.3 + 0.7 × √(wards in the square / wards in the fullest square shown), so a spot warded twice stays visible beside one warded twenty times. The squares are blurred a little. The profile's map covers the matches the profile shows (the last 25 or 100).
+`lib/WardHeat.svelte`. The map is cut into squares of 2 map cells. A square with a ward in it glows, observers and sentries apart; its strength is 0.45 + 0.55 × √(wards in the square / wards in the fullest square shown), so a spot warded twice stays visible beside one warded twenty times. The glow is a blurred circle a little wider than the square, so neighbouring squares run together, and the map under it is darkened. The profile's map covers the matches the profile shows (the last 25 or 100).
 
 ### First moves (team page)
 
