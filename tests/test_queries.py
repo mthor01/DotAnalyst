@@ -204,7 +204,8 @@ def test_team_games_newest_first_from_the_teams_side(league):
     assert [g["match_id"] for g in found["games"]] == [3, 2, 1]
     assert found["games"][1] == {
         "match_id": 2, "start_time": LEAGUE_GAMES[1]["start_time"], "league": "Season 8", "radiant": False,
-        "win": False, "opponent_id": THEM, "opponent": "Them", "picks": [1, 2, 3, 4, 11], "bans": [51],
+        "win": False, "opponent_id": THEM, "opponent": "Them", "picks": [1, 2, 3, 4, 11],
+        "picks_against": [6, 7, 8, 9, 10], "bans": [51],
         "bans_against": [50], "replay": False,
     }  # fmt: skip
     assert [g["win"] for g in found["games"]] == [True, False, True]

@@ -276,7 +276,8 @@ def team(session: Session, team_id: int) -> dict | None:
             {
                 "match_id": g.match_id, "start_time": g.start_time, "league": LEAGUES.get(g.league_id, str(g.league_id)),
                 "radiant": radiant, "win": win, "opponent_id": opponent, "opponent": names.get(opponent),
-                "picks": [p["hero_id"] for p in side], "bans": own, "bans_against": against,
+                "picks": [p["hero_id"] for p in side], "picks_against": [p["hero_id"] for p in ten if p not in side],
+                "bans": own, "bans_against": against,
                 "replay": g.match_id in parsed,
             }
         )  # fmt: skip

@@ -121,7 +121,7 @@ export type TeamDetail = {
   team_id: number
   name: string | null
   /** Newest first. `picks` are in player slot order; `replay` says whether the game's replay is parsed. */
-  games: { match_id: number; start_time: number; league: string; radiant: boolean; win: boolean; opponent_id: number; opponent: string | null; picks: number[]; bans: number[]; bans_against: number[]; replay: boolean }[]
+  games: { match_id: number; start_time: number; league: string; radiant: boolean; win: boolean; opponent_id: number; opponent: string | null; picks: number[]; picks_against: number[]; bans: number[]; bans_against: number[]; replay: boolean }[]
   heroes: TeamHero[]
   /** `wards` are those of the `replays` games of the player whose replay is parsed. */
   players: { account_id: number; name: string | null; games: number; replays: number; heroes: TeamPlayerHero[]; wards: WardSpot[] }[]

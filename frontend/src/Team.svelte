@@ -178,6 +178,7 @@
           <th>Side</th>
           <th>Result</th>
           <th>Their picks</th>
+          <th>Enemy picks</th>
           <th>Banned against them</th>
           <th>Banned by them</th>
           <th>Replay</th>
@@ -198,6 +199,7 @@
             <td><span class="swatch {g.radiant ? 'radiant' : 'dire'}"></span>{g.radiant ? 'Radiant' : 'Dire'}</td>
             <td><span class="dot {g.win ? 'won' : 'lost'}"></span>{g.win ? 'Won' : 'Lost'}</td>
             <td>{@render icons(g.picks)}</td>
+            <td>{@render icons(g.picks_against)}</td>
             <td>{@render icons(g.bans_against)}</td>
             <td>{@render icons(g.bans)}</td>
             <td class="muted">{g.replay ? 'Parsed' : '–'}</td>
