@@ -59,13 +59,16 @@
     fallen?: { name: string; time: number }[]
     /** The game second the buildings are shown at: one that fell later still stands. Left out, the end of the game. */
     at?: number
-    /** What the reader can show and hide besides the buildings: key -> the name on its button. */
-    layers?: Record<string, string>
+    /** What the reader can show besides the buildings: one dropdown per group, key -> the name of its option. The
+     *  first option is chosen at first; the key '' shows every key of its group. */
+    layers?: Record<string, string>[]
+    /** More controls, in the row of the dropdowns */
+    controls?: Snippet
     /** Gets the width of the picture in map cells, to size its marks by so that they stay as large on the screen
      *  when the reader zooms, and which layers are shown. */
     children?: Snippet<[number, Record<string, boolean>]>
   }
-  let { label, view = WHOLE, fallen, at = Infinity, layers = {}, children }: Props = $props()
+  let { label, view = WHOLE, fallen, at = Infinity, layers = [], controls, children }: Props = $props()
 
   const box = (v: View) => `${v.x} ${v.y} ${v.size} ${v.size}`
   let moved = $state<View | null>(null) // where the reader has taken the picture; null is the view given
@@ -98,9 +101,13 @@
     grip = { x: e.clientX, y: e.clientY }
   }
 
-  let hidden = $state<string[]>([])
-  const all = $derived({ ...layers, ...(fallen ? { buildings: 'Buildings' } : {}) })
-  const on = $derived(Object.fromEntries(Object.keys(all).map((key) => [key, !hidden.includes(key)])))
+  let chosen = $state<string[]>([]) // the option of each group the reader picked
+  const groups = $derived([...layers, ...(fallen ? [{ buildings: 'Buildings shown', none: 'No buildings' }] : [])])
+  // an option no longer offered (another game list, say) falls back to the group's first
+  const picked = $derived(groups.map((g, i) => (chosen[i] in g ? chosen[i] : Object.keys(g)[0])))
+  const on = $derived(
+    Object.fromEntries(groups.flatMap((g, i) => Object.keys(g).map((key) => [key, picked[i] === '' || picked[i] === key]))),
+  )
 
   /** Side of a tower's square in cells: a share of the picture, but small enough on the whole map that a tier-3
    *  tower and the barracks behind it stay apart. */
@@ -119,11 +126,14 @@
 
 <div class="map">
   <p>
-    <span class="choice" role="group" aria-label="What the map shows">
-      {#each Object.entries(all) as [key, name] (key)}
-        <button aria-pressed={on[key]} onclick={() => (hidden = on[key] ? [...hidden, key] : hidden.filter((k) => k !== key))}>
-          {name}
-        </button>
+    <span class="controls">
+      {@render controls?.()}
+      {#each groups as group, i}
+        <select aria-label="What the map shows" value={picked[i]} onchange={(e) => (chosen[i] = e.currentTarget.value)}>
+          {#each Object.entries(group) as [key, name] (key)}
+            <option value={key}>{name}</option>
+          {/each}
+        </select>
       {/each}
     </span>
     <button class="action" disabled={!moved || box(moved) === given} onclick={() => (moved = null)}>Reset view</button>
@@ -175,6 +185,14 @@
     gap: 6px;
     margin: 0 0 6px;
     font-size: 13px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .controls :global(select) {
+    margin-left: 0;
   }
   p button:disabled {
     color: var(--muted);

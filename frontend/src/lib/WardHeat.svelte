@@ -2,12 +2,21 @@
   import type { WardSpot } from './api'
   import MiniMap, { mapX, mapY } from './MiniMap.svelte'
 
-  let { wards, label }: { wards: WardSpot[]; label: string } = $props()
+  /** byGame: the wards carry `league`, and a dropdown splits tournament games from the rest */
+  let { wards, label, byGame = false }: { wards: WardSpot[]; label: string; byGame?: boolean } = $props()
 
   const SQUARE = 2 // map cells to a side of the squares that tell, on hover, how many wards went there
   const SCALE = 2 // pixels of the heat picture per map cell
   const SPREAD = 1.5 // cells: wards on the same spot run into one hill, wards a few cells apart stay apart
-  const LAYERS = { obs: 'Observers', sen: 'Sentries', radiant: 'As Radiant', dire: 'As Dire' }
+  const KIND_NAMES = { obs: 'Observers', sen: 'Sentries' }
+  const LAYERS = [
+    { '': 'Observers and sentries', ...KIND_NAMES },
+    { '': 'Both sides', radiant: 'As Radiant', dire: 'As Dire' },
+    { '': 'Whole game', m0: '0–10 min', m10: '10–20 min', m20: '20–30 min', m30: '30–40 min', m40: '40 min on' },
+  ]
+  const GAMES = { '': 'All games', league: 'Tournament games', usual: 'Usual matches' }
+  /** The ten minutes a ward was placed in, as a key of the time dropdown; wards before the horn count to the first. */
+  const period = (w: WardSpot) => `m${Math.min(40, Math.floor(Math.max(0, w.time) / 600) * 10)}`
   // the heat colours of each kind, from a lone ward to its busiest spot: [where on the scale, red, green, blue, opacity]
   const RAMPS = {
     obs: [
@@ -30,7 +39,10 @@
   const strip = (ramp: number[][]) =>
     `linear-gradient(90deg, ${ramp.map(([t, r, g, b, a]) => `rgb(${r} ${g} ${b} / ${a}) ${t * 100}%`).join(', ')}), #000`
 
-  const shownOf = (on: Record<string, boolean>) => wards.filter((w) => on[w.type] && on[w.radiant ? 'radiant' : 'dire'])
+  const shownOf = (on: Record<string, boolean>) =>
+    wards.filter(
+      (w) => on[w.type] && on[w.radiant ? 'radiant' : 'dire'] && on[period(w)] && (!byGame || on[w.league ? 'league' : 'usual']),
+    )
 
   /** The heat picture of one kind: every ward adds a small Gaussian hill, and the height is coloured along the ramp. */
   function heat(shown: WardSpot[], RAMP: number[][]) {
@@ -83,7 +95,7 @@
   const count = (type: string) => wards.filter((w) => w.type === type).length
 </script>
 
-<MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" layers={LAYERS}>
+<MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" layers={byGame ? [GAMES, ...LAYERS] : LAYERS}>
   {#snippet children(_, on)}
     {@const shown = shownOf(on)}
     <!-- the map is darkened so that the heat stands out from its greens and greys -->
@@ -105,9 +117,9 @@
 <p class="legend">
   <span>{count('obs')} observers and {count('sen')} sentries.</span>
   {#each KINDS as kind}
-    <span class="scale">{LAYERS[kind]}: one <i class="ramp" style:background={strip(RAMPS[kind])}></i> the most</span>
+    <span class="scale">{KIND_NAMES[kind]}: one <i class="ramp" style:background={strip(RAMPS[kind])}></i> the most</span>
   {/each}
-  <span>The buttons choose which wards count; hover a spot for its numbers.</span>
+  <span>The dropdowns choose which wards count; hover a spot for its numbers.</span>
 </p>
 
 <style>

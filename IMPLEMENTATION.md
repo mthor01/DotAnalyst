@@ -183,7 +183,7 @@ Built from the drafts and scoreboards of the league games (`league_matches`).
 - **Games played** is the number of games the team picked the hero, **win rate** the share of those it won, and **picked when open** is games played divided by games open.
 - A team's **name** is the newest one Steam sent that is not empty.
 - A **player's averages on a hero** are the plain means of kills, deaths, assists, last hits, GPM and XPM over the player's league games for this team on that hero.
-- A **player's wards** are those of the player's games for this team whose replay is parsed.
+- A **player's wards** are those of the player's games for this team whose replay is parsed, and those of the player's matches outside the league that have a parsed replay (only a tracked account's matches are ever parsed), within the time and season filters. Each ward says whether it came from a league game, for the heatmap's "Tournament games / Usual matches" dropdown.
 
 ### A league player's games outside the league
 
@@ -221,7 +221,7 @@ Each point is the mean of that match's value and of up to 19 parsed matches befo
 
 ### Ward heatmap (Profile, team players)
 
-`lib/WardHeat.svelte`. A density heatmap of the wards the buttons let through (observers, sentries, as Radiant, as Dire). Observers and sentries are two separate pictures, sentries drawn on top: every ward adds a Gaussian hill with σ = 1.5 map cells (wards on one spot run into one hill, wards a few cells apart stay apart) to its kind's grid of half cells. The height h is coloured at √(h / highest h of that kind), observers along a ramp from dark red through orange and yellow to near white, sentries from dark blue through light blue to near white, so a spot warded once stays visible beside one warded thirty times; below h = 0.05 the map shows through, and up to h = 0.3 the colour fades in. The map under it is darkened. Hovering a 2-cell square tells how many observers and sentries were placed in it. The profile's map covers the matches the profile shows (the last 25 or 100).
+`lib/WardHeat.svelte`. A density heatmap of the wards the dropdowns let through: kind (observers, sentries or both), side (as Radiant, as Dire or both), and the ten minutes they were placed in (0–10 … 30–40, and 40 min on; a ward placed before the horn counts to 0–10). On a team player's map a further dropdown picks tournament games, usual matches or both. Observers and sentries are two separate pictures, sentries drawn on top: every ward adds a Gaussian hill with σ = 1.5 map cells (wards on one spot run into one hill, wards a few cells apart stay apart) to its kind's grid of half cells. The height h is coloured at √(h / highest h of that kind), observers along a ramp from dark red through orange and yellow to near white, sentries from dark blue through light blue to near white, so a spot warded once stays visible beside one warded thirty times; below h = 0.05 the map shows through, and up to h = 0.3 the colour fades in. The map under it is darkened. Hovering a 2-cell square tells how many observers and sentries were placed in it. The profile's map covers the matches the profile shows (the last 25 or 100).
 
 ### First moves (team page)
 

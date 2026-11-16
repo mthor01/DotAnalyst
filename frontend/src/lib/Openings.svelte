@@ -48,7 +48,9 @@
     return d
   }
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-  const layers = $derived(Object.fromEntries(games.map((g, n) => [`game${n}`, `${n + 1}: ${date(g.start_time)}`])))
+  const layers = $derived([
+    { '': 'All games', ...Object.fromEntries(games.map((g, n) => [`game${n}`, `${n + 1}: ${date(g.start_time)}`])) },
+  ])
 
   // ---- the replays that are not here yet: asked for one after the other, each about 15 seconds
   const missing = $derived(games.filter((g) => !g.replay))

@@ -141,7 +141,7 @@ def matchups(session: Session, where: list) -> list[dict]:
 def wards(session: Session, where: list) -> list[dict]:
     """Every ward the account placed in its parsed matches: the match, the kind, the place and the side played."""
     ward = and_(Ward.match_id == MatchPlayer.match_id, Ward.player_slot == MatchPlayer.player_slot)
-    columns = (Match.match_id, Ward.type, Ward.x, Ward.y, IS_RADIANT.label("radiant"))
+    columns = (Match.match_id, Ward.type, Ward.x, Ward.y, IS_RADIANT.label("radiant"), Ward.placed.label("time"))
     return _rows(session, _mine(*columns).join(Ward, ward).where(*where))
 
 
@@ -236,8 +236,9 @@ def team(
 
     A hero is open in a game when neither side banned it and the other side did not pick it, so banned_against +
     banned + picked_against + open is the number of games. A player's wards come from the games whose replay is
-    parsed (`replays` says how many of the player's games those are). The dates and the league narrow the games
-    counted; a team with no game in them has an empty answer, not None.
+    parsed (`replays` says how many of the player's games those are), and from their parsed games outside any
+    league (`usual_replays`, wards with `league` False). The dates and the league narrow the games counted; a team
+    with no game in them has an empty answer, not None.
     """
     names = {t["team_id"]: t["name"] for t in teams(session)}
     if team_id not in names:
@@ -281,7 +282,7 @@ def team(
             hero(p["hero_id"])["wins"] += win
             if p.get("account_id") in (None, ANONYMOUS):
                 continue
-            blank = {"account_id": p["account_id"], "games": 0, "replays": 0, "heroes": {}, "wards": []}
+            blank = {"account_id": p["account_id"], "games": 0, "replays": 0, "usual_replays": 0, "heroes": {}, "wards": []}
             player = players.setdefault(p["account_id"], blank)
             player["games"] += 1
             player["replays"] += g.match_id in parsed
@@ -302,12 +303,30 @@ def team(
         )  # fmt: skip
     for h in heroes.values():
         h["open"] = len(rows) - h["banned_against"] - h["banned"] - h["picked_against"]
+    # their parsed games outside any league, for the ward map's usual matches: only the dates narrow them
+    mp = MatchPlayer
+    usual = (
+        select(mp.account_id, mp.match_id, mp.player_slot)
+        .join(Match, Match.match_id == mp.match_id)
+        .where(
+            mp.account_id.in_(players), Match.replay_state == "parsed",
+            Match.match_id.not_in(select(LeagueMatch.match_id)), *between(Match.start_time, date_from, date_to),
+        )
+    )  # fmt: skip
+    for row in session.execute(usual):
+        players[row.account_id]["usual_replays"] += 1
+        placed_by[row.match_id, row.player_slot] = players[row.account_id]
     w = Ward
-    for ward in session.execute(select(w.match_id, w.player_slot, w.type, w.x, w.y).where(w.match_id.in_(ids))):
+    league_ids = set(ids)
+    placed_in = {match_id for match_id, _ in placed_by}
+    for ward in session.execute(select(w.match_id, w.player_slot, w.type, w.x, w.y, w.placed).where(w.match_id.in_(placed_in))):  # fmt: skip
         if (ward.match_id, ward.player_slot) in placed_by:
             placed_by[ward.match_id, ward.player_slot]["wards"].append(
-                {"type": ward.type, "x": ward.x, "y": ward.y, "radiant": ward.player_slot < 128}
-            )
+                {
+                    "type": ward.type, "x": ward.x, "y": ward.y, "radiant": ward.player_slot < 128, "time": ward.placed,
+                    "league": ward.match_id in league_ids,
+                }
+            )  # fmt: skip
     n = PlayerName
     known = dict(session.execute(select(n.account_id, n.name).where(n.account_id.in_(players))).all())
     # their games outside the league, for the role wheel: the time and season filters do not apply to them

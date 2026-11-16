@@ -91,7 +91,7 @@
 {:else if !spots}
   <p class="muted">Loading…</p>
 {:else}
-  <MiniMap label="Positions of the heroes at {clock(second)}, {label}" {view} {fallen} at={second} layers={{ radiant: 'Radiant', dire: 'Dire', wards: 'Wards' }}>
+  <MiniMap label="Positions of the heroes at {clock(second)}, {label}" {view} {fallen} at={second} layers={[{ '': 'Both sides', radiant: 'Radiant', dire: 'Dire' }, { wards: 'Wards shown', none: 'No wards' }]}>
     {#snippet children(size, on)}
       {@const icon = size * 0.085}
       {#if on.wards}{@render wards(second, size)}{/if}

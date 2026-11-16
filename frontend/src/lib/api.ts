@@ -111,7 +111,8 @@ export type QueueStatus = {
   events: QueueEvent[]
 }
 /** A ward as a heatmap needs it: its kind, its place in map cells, and the side its owner played. */
-export type WardSpot = { type: 'obs' | 'sen'; x: number; y: number; radiant: boolean }
+/** time: game second placed; league: on team pages, whether the game is one of the team's tournament games */
+export type WardSpot = { type: 'obs' | 'sen'; x: number; y: number; radiant: boolean; time: number; league?: boolean }
 /** One hero in a team's league drafts. `open` counts the games in which neither side banned it and the other side
  *  did not pick it (`picked_against`). */
 export type TeamHero = { hero_id: number; banned_against: number; banned: number; picked_against: number; open: number; picked: number; wins: number }
@@ -126,7 +127,7 @@ export type TeamDetail = {
   /** `wards` are those of the `replays` games of the player whose replay is parsed. `outside` are the player's last
    *  games outside the league, newest first, whatever the filters; `outside_listed` is false until they were asked for. */
   players: {
-    account_id: number; name: string | null; games: number; replays: number; heroes: TeamPlayerHero[]; wards: WardSpot[]
+    account_id: number; name: string | null; games: number; replays: number; usual_replays: number; heroes: TeamPlayerHero[]; wards: WardSpot[]
     outside_listed: boolean
     outside: { match_id: number; hero_id: number; win: boolean; role: 'safe' | 'mid' | 'off' | 'jungle' | 'none'; kills: number | null; deaths: number | null; assists: number | null }[]
   }[]

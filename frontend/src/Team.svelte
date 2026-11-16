@@ -149,9 +149,12 @@
         </table>
         <section class="wards">
           <h3>Wards placed</h3>
-          {#if p.replays}
-            <WardHeat wards={p.wards} label="Heatmap of the wards {p.name ?? p.account_id} placed" />
-            <p class="muted">From the {p.replays} of their {p.games} games whose replay is parsed.</p>
+          {#if p.replays || p.usual_replays}
+            <WardHeat wards={p.wards} label="Heatmap of the wards {p.name ?? p.account_id} placed" byGame />
+            <p class="muted">
+              From the {p.replays} of their {p.games} tournament games whose replay is parsed, and {p.usual_replays} of
+              their usual matches with a parsed replay.
+            </p>
           {:else}
             <p class="muted">
               None of their games has a parsed replay yet, and wards are only in replays. Request the replays under
