@@ -46,9 +46,11 @@ def call(client: httpx.Client, key: str, path: str, **params) -> dict:
     return body["result"] if "result" in body else body["response"]  # ISteamUser answers under "response"
 
 
-def match_history(client: httpx.Client, key: str, account_id: int) -> list[dict] | None:
-    """Up to 500 most recent matches, or None when the account does not expose its history."""
-    # shortcut: every sync pages through all 500 (5 requests per account), stop at known matches if that gets costly
+def match_history(client: httpx.Client, key: str, account_id: int, known: set[int] = frozenset()) -> list[dict] | None:
+    """Up to 500 most recent matches, or None when the account does not expose its history.
+
+    Paging stops early at a page whose matches are all in known: everything older was read before.
+    """
     matches: list[dict] = []
     params = {"account_id": account_id, "matches_requested": 100}
     while True:
@@ -58,7 +60,7 @@ def match_history(client: httpx.Client, key: str, account_id: int) -> list[dict]
         page = result.get("matches", [])
         matches += page
         # results_remaining can stay above 0 forever (omitted high-rank matches), so an empty page also ends it
-        if not page or result.get("results_remaining", 0) <= 0:
+        if not page or result.get("results_remaining", 0) <= 0 or all(e["match_id"] in known for e in page):
             return matches
         params["start_at_match_id"] = page[-1]["match_id"] - 1
 
@@ -97,11 +99,16 @@ def store_match(session: Session, m: dict) -> None:
     session.add_all([match, *players])
 
 
-def sync(session: Session, client: httpx.Client, key: str) -> dict[int, int | None]:
-    """Store new matches of every active account. Returns new matches per account, None if not exposed."""
+def sync(session: Session, client: httpx.Client, key: str, newest_only: bool = False) -> dict[int, int | None]:
+    """Store new matches of every active account. Returns new matches per account, None if not exposed.
+
+    newest_only reads an account's history only down to a page that is all stored (1 request instead of 5 when
+    nothing is new); a full read also finds what an interrupted sync left out further down.
+    """
+    known = set(session.scalars(select(Match.match_id))) if newest_only else frozenset()
     result: dict[int, int | None] = {}
     for account in session.scalars(select(Account).where(Account.active)).all():
-        history = match_history(client, key, account.account_id)
+        history = match_history(client, key, account.account_id, known)
         account.history_exposed = history is not None
         session.commit()
         if history is None:
@@ -132,10 +139,11 @@ def store_league_match(session: Session, m: dict) -> None:
     )
 
 
-def sync_leagues(session: Session, client: httpx.Client, key: str) -> int:
+def sync_leagues(session: Session, client: httpx.Client, key: str, newest_only: bool = False) -> int:
     """Store the games of LEAGUES that are not stored yet, and their players' Steam names. Returns the new games.
 
-    Only the newest 500 games of a league can be listed, see the shortcut below.
+    Only the newest 500 games of a league can be listed, see the shortcut below. newest_only stops reading a league
+    at a page whose games are all stored.
     """
     new = 0
     for league_id in LEAGUES:
@@ -143,7 +151,7 @@ def sync_leagues(session: Session, client: httpx.Client, key: str) -> int:
         while True:
             # read until a page is empty: results_remaining counts series and reaches 0 with games still to come
             page = call(client, key, HISTORY, **params).get("matches", [])
-            if not page:
+            if not page or newest_only and all(session.get(LeagueMatch, e["match_id"]) for e in page):
                 break
             for entry in page:
                 if session.get(LeagueMatch, entry["match_id"]) is not None:
@@ -158,6 +166,8 @@ def sync_leagues(session: Session, client: httpx.Client, key: str) -> int:
             # falls between two pages; both measured against dota2.com's GetLeagueData. An older game can still be
             # listed with account_id of one of its players next to league_id, if the missing ones are ever wanted
             params["start_at_match_id"] = page[-1]["match_id"] - 1
+    if newest_only and not new:
+        return 0  # no new players to name, and reading every stored game each minute is not free
     players = {p.get("account_id") for raw in session.scalars(select(LeagueMatch.raw_json)) for p in raw["players"]}
     unnamed = sorted(players - {None, ANONYMOUS} - set(session.scalars(select(PlayerName.account_id))))
     for i in range(0, len(unnamed), 100):  # Steam takes 100 ids in one request

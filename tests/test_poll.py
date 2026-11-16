@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from dotanalyst.db import Base, Derived, Match, MatchPlayer, PlayerMinute
 from dotanalyst.poll import poll_once, request_replay
+from dotanalyst.replay import replay_complete
 from dotanalyst.steam import store_league_match
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -21,7 +22,9 @@ GOOD = 8810606282
 LOG = gzip.decompress((FIXTURES / f"{GOOD}.jsonl.gz").read_bytes())
 OPENDOTA = (FIXTURES / "opendota_match.json").read_bytes()  # a real response; its replay_salt is 519105714
 WRONG_LOG, STILL_DOWNLOADING, NOT_STORED = 11, 22, 33
-REPLAY = b"replay"
+# the smallest whole replay: magic, the offset of the file info record (16), 4 bytes, then the record itself:
+# kind 0x42, tick 0, a body of 3 bytes
+REPLAY = b"PBDEMS2\0" + (16).to_bytes(4, "little") + bytes(4) + bytes([0x42, 0, 3]) + b"abc"
 CLUSTER = 444
 DAY = 86400
 
@@ -70,11 +73,9 @@ def test_poll_parses_downloaded_replays_of_stored_matches(session, tmp_path):
         add_match(session, match_id)
     replays = tmp_path / "replays"
     replays.mkdir()
-    an_hour_ago = time.time() - 3600
     for name in (GOOD, WRONG_LOG, NOT_STORED, "notes"):
         (replays / f"{name}.dem").write_bytes(REPLAY)
-        os.utime(replays / f"{name}.dem", (an_hour_ago, an_hour_ago))
-    (replays / f"{STILL_DOWNLOADING}.dem").write_bytes(b"half a replay")
+    (replays / f"{STILL_DOWNLOADING}.dem").write_bytes(REPLAY[:-1])  # the Dota client is still writing it
     calls = []
     client = network(calls)
 
@@ -83,10 +84,24 @@ def test_poll_parses_downloaded_replays_of_stored_matches(session, tmp_path):
     assert session.get(Match, GOOD).replay_state == "parsed"
     assert session.get(Match, WRONG_LOG).replay_state == "failed"
     assert session.get(Match, STILL_DOWNLOADING).replay_state == "pending"  # no replay online either
-    assert len(to("localhost", calls)) == 2  # not the unknown match, the fresh file or the non-numeric name
+    assert len(to("localhost", calls)) == 2  # not the unknown match, the unfinished file or the non-numeric name
 
     assert poll_once(session, client, "", replays, tmp_path) == (0, 0)
     assert len(to("localhost", calls)) == 2  # parsed and failed replays are not sent again
+
+    (replays / f"{STILL_DOWNLOADING}.dem").write_bytes(REPLAY)  # the download finished
+    poll_once(session, client, "", replays, tmp_path)
+    assert len(to("localhost", calls)) == 3
+
+
+@pytest.mark.parametrize(
+    "content, whole",
+    [(REPLAY, True), (REPLAY[:-1], False), (REPLAY + b"x", False), (b"PBDEMS1\0" + REPLAY[8:], False), (b"", False)],
+    ids=["whole", "cut short", "longer than its header says", "not Source 2", "empty"],
+)
+def test_a_replay_is_whole_when_it_ends_where_its_header_says(tmp_path, content, whole):
+    (tmp_path / "1.dem").write_bytes(content)
+    assert replay_complete(tmp_path / "1.dem") is whole
 
 
 def test_poll_survives_a_missing_replay_folder(session, tmp_path):
@@ -133,16 +148,37 @@ def test_a_requested_replay_is_fetched_whatever_the_age_of_the_match(session, tm
     assert request_replay(session, client, NOT_STORED, tmp_path) is None
 
 
-def test_a_requested_replay_of_a_league_game_makes_it_a_match(session, tmp_path):
+def league_game(session: Session, match_id: int, age_days: float) -> dict:
     game = json.loads((FIXTURES / "league_details.json").read_text(encoding="utf-8"))["result"]["matches"][0]
-    game.update(match_id=GOOD, cluster=CLUSTER)  # the parser of these tests answers with the log of GOOD
+    game.update(match_id=match_id, cluster=CLUSTER, start_time=int(time.time() - age_days * DAY))
     store_league_match(session, game)
     session.commit()
-    assert session.get(Match, GOOD) is None  # a league game is not a match until its replay is asked for
+    return game
+
+
+def test_poll_downloads_the_replays_of_recent_league_games(session, tmp_path):
+    league_game(session, GOOD, age_days=2)  # the parser of these tests answers with the log of GOOD
+    league_game(session, 1, age_days=60)  # outside the download window
+    calls = []
+    client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
+
+    assert poll_once(session, client, "", tmp_path / "nowhere", tmp_path) == (0, 1)
+    assert session.get(Match, GOOD).replay_state == "parsed"
+    assert {row.match_id for row in session.query(PlayerMinute)} == {GOOD}  # with its stats
+    assert session.get(Match, 1) is None
+    assert to("valve.net", calls) == [f"http://replay{CLUSTER}.valve.net/570/{GOOD}_519105714.dem.bz2"]
+
+    calls.clear()
+    poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
+    assert calls == []  # copied once, fetched once
+
+
+def test_a_requested_replay_of_a_league_game_makes_it_a_match(session, tmp_path):
+    game = league_game(session, GOOD, age_days=60)
     calls = []
     client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
-    assert calls == []  # and no poll fetches its replay
+    assert calls == [] and session.get(Match, GOOD) is None  # too old for a poll to fetch
 
     assert request_replay(session, client, GOOD, tmp_path) == "parsed"
     assert to("valve.net", calls) == [f"http://replay{CLUSTER}.valve.net/570/{GOOD}_519105714.dem.bz2"]

@@ -135,6 +135,13 @@ def test_second_sync_fetches_no_details(session):
     assert fake.count("GetMatchHistoryBySequenceNum") == 0
 
 
+def test_a_newest_only_sync_stops_at_a_page_that_is_all_stored(session):
+    steam.sync(session, FakeSteam().client, KEY)
+    fake = FakeSteam()
+    assert steam.sync(session, fake.client, KEY, newest_only=True) == {ME: 0}
+    assert fake.count("GetMatchHistory/") == 1  # a full sync reads all 3 pages again
+
+
 def test_unexposed_history_is_flagged_not_an_error(session):
     fake = FakeSteam(history_exposed=False)
     assert steam.sync(session, fake.client, KEY) == {ME: None}
@@ -246,7 +253,7 @@ def test_league_sync_reads_on_past_a_page_that_says_nothing_remains(session):
 
 
 def test_league_games_stay_out_of_the_accounts_matches(session):
-    """A row in `matches` would join the accounts' stats and have its replay downloaded."""
+    """The poller decides which league games become matches (recent ones, for their replays); the sync adds none."""
     steam.sync_leagues(session, FakeLeague().client, KEY)
     assert session.scalar(select(func.count()).select_from(Match)) == 0
 
@@ -256,6 +263,14 @@ def test_second_league_sync_fetches_no_details(session):
     fake = FakeLeague()
     assert steam.sync_leagues(session, fake.client, KEY) == 0
     assert fake.count("GetMatchHistoryBySequenceNum") == 0
+
+
+def test_a_newest_only_league_sync_stops_at_a_page_that_is_all_stored(session):
+    steam.sync_leagues(session, FakeLeague().client, KEY)
+    fake = FakeLeague()
+    assert steam.sync_leagues(session, fake.client, KEY, newest_only=True) == 0
+    assert fake.count("GetMatchHistory/") == len(steam.LEAGUES)  # one page each; a full sync reads 2 more
+    assert fake.count("GetPlayerSummaries") == 0  # no new game, no new player
 
 
 def test_league_sync_stores_the_players_steam_names(session):

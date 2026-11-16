@@ -13,9 +13,9 @@ How it works:
 
 ## Scouting league teams
 
-The Teams page shows, for every team of the Reincarnation league (seasons 6 to 8), which heroes are banned against it, whether it picks them when they are open, and who plays what. A game's replay is fetched when you ask for it on the page; with replays a team page also shows where each player wards and where the team walks in the first seconds of a game.
+The Teams page shows, for every team of the Reincarnation league (seasons 6 to 8), which heroes are banned against it, whether it picks them when they are open, and who plays what. The replays of games from the last 30 days are fetched by the running server; an older game's when you ask for it on the page; with replays a team page also shows where each player wards and where the team walks in the first seconds of a game.
 
-`uv run --env-file .env python -m dotanalyst sync-leagues` fetches the league's games; the first run takes about half an hour. After that, the button "Check for new league games" on the Teams page gets the newest ones.
+`uv run --env-file .env python -m dotanalyst sync-leagues` fetches the league's games; the first run takes about half an hour. After that, the running server gets the newest ones every minute, and the button "Check for new league games" on the Teams page at once.
 
 ## Replay salts from a second Steam account
 

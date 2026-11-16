@@ -22,6 +22,29 @@ class ReplayError(Exception):
     pass
 
 
+def replay_complete(dem: Path) -> bool:
+    """Whether a .dem file is whole. Its header points at the file info record, the last thing in a replay: a file
+    that ends exactly where that record ends is complete, one still being written stops short of it."""
+    with dem.open("rb") as f:
+        head = f.read(12)
+        if len(head) < 12 or head[:8] != b"PBDEMS2\0":
+            return False
+        offset = int.from_bytes(head[8:12], "little")
+        f.seek(offset)
+        record = f.read(16)
+    values, value, shift = [], 0, 0  # the record starts with three varints: kind, tick, length of its body
+    for i, byte in enumerate(record):
+        value |= (byte & 0x7F) << shift
+        shift += 7
+        if byte < 0x80:
+            values.append(value)
+            value = shift = 0
+            if len(values) == 3:
+                kind, _, length = values
+                return kind == 0x42 and offset + i + 1 + length == dem.stat().st_size  # 0x42: file info, compressed
+    return False
+
+
 def epilogue_match_id(log: bytes) -> int | None:
     """Match id from the epilogue line, or None if the parse did not complete."""
     for line in reversed(log.splitlines()):

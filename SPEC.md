@@ -15,7 +15,7 @@ Stack and rules are in [CLAUDE.md](CLAUDE.md). This file says what to build and 
 | First custom metrics | Lane CS differential, vision habits, fight participation |
 | Replay URLs | `replay_salt` comes from Valve's game coordinator through a second Steam account, or else from the OpenDota API; the site downloads from Valve itself |
 | Fetching | The backend polls while it is running |
-| Out of scope | Logins and multi-user, hosting beyond this PC, live-game tracking, pro matches, fetching the replays of league games on their own (their drafts and scoreboards are in since November 2026, and one replay is fetched when asked for, see Teams), global percentiles, MMR tracking, mobile layout, own Game Coordinator client |
+| Out of scope | Logins and multi-user, hosting beyond this PC, live-game tracking, pro matches, league games older than 30 days without being asked for (their drafts and scoreboards are in since November 2026; younger ones get their replays like any match, see Teams), global percentiles, MMR tracking, mobile layout, own Game Coordinator client |
 
 Defaults chosen without asking — change any of them before the milestone that uses it:
 
@@ -79,7 +79,7 @@ Raw data is fetched once and never refetched:
 - `data/opendota/{match_id}.json.gz` — the OpenDota response that supplied the replay salt.
 - `data/salts.json` — the replay salts the second Steam account got from Valve, by match id.
 - `data/steam/` — that account's login token and the Steam library's own files. Never committed.
-- `league_matches` — one row per league game: league, start time, both team ids and names, winner, and the full API response as JSON (the draft is its `picks_bans`). Kept out of `matches` so that league games neither join the accounts' stats nor have their replays downloaded by the poller. A league game whose replay is asked for is copied into `matches` and `match_players` then.
+- `league_matches` — one row per league game: league, start time, both team ids and names, winner, and the full API response as JSON (the draft is its `picks_bans`). A league game younger than 30 days is copied into `matches` and `match_players` by the poller, and an older one when its replay is asked for; it joins no account's stats either way, since those select on the tracked account's rows.
 - `player_names` — Steam name per account of a league player, as it was when first asked for.
 - `heroes`, `items` — id-to-name lookups.
 - `recipes` — for each item that is built from others, the names of its components.
@@ -108,7 +108,8 @@ No Game Coordinator and no OpenDota.
 - Run with `uv run --env-file .env uvicorn dotanalyst.api:app`, then open `http://localhost:8000/`.
 - FastAPI: `GET /api/accounts`, `/api/constants`, `/api/matches`, `/api/heroes`, `/api/teammates`, `/api/matchups`. The last four take `account_id`, `date_from`, `date_to`, `game_mode` and `lobby_type`.
 - `sync-constants` also stores item names, taken from `odota/dotaconstants` because the Web API has no working item list. Hero and item icons load from Valve's CDN.
-- Polling: a background task in the FastAPI process runs `sync` every `POLL_MINUTES` (default 15). It also parses any new `.dem` in the Dota client folder whose match is stored.
+- Polling: a background task in the FastAPI process runs `sync` every `POLL_MINUTES` (default 1 since 2026-11-16, 15 before). It also parses any new `.dem` in the Dota client folder whose match is stored, once the file is whole: its header points at the file info record that ends every replay, and a file that does not end exactly there is still being written (checked on 50 replays; before 2026-11-16 a file was left alone for 2 minutes instead).
+- The first poll after a start reads each account's whole history (500 matches, 5 requests) and every league's whole list, so whatever an interrupted run missed is picked up. Later polls stop at the first page whose matches are all stored: about 1 request per account and per league when nothing is new. With 7 accounts and 3 leagues that is about 10 Steam requests a minute, 14,000 a day, against the Web API's 100,000.
 - Svelte pages:
   - **Matches** — filterable table: hero, result, K/D/A, GPM/XPM, duration, items.
   - **Heroes** — sortable table plus a bar chart of win rate and games per hero.
@@ -128,7 +129,8 @@ No Game Coordinator and no OpenDota.
 This comes before the replay stats because replays expire: raw output collected now can be turned into stats later, but a missed replay is gone.
 
 - Each poll, for stored matches with replay state `none` or `pending`: get the `replay_salt` (see below), build the URL from the stored `cluster` and that salt, download from Valve, decompress with the standard library (Zstandard or bz2, told apart by the first bytes), parse, store, delete the `.dem`.
-- At most 10 matches per poll, never-tried matches first, newest first. With the default 15-minute poll that is 40 an hour.
+- At most 10 matches per poll, never-tried matches first, newest first. With the default 1-minute poll a backlog drains at up to 600 an hour, held back by the downloads themselves (about 40 MB and 10 seconds of parsing each).
+- League games younger than 30 days are copied into `matches` each poll (since 2026-11-16) and so are downloaded like any match.
 - Matches older than 30 days are not downloaded (chosen on 2026-11-11; `MAX_AGE_DAYS` in `poll.py`). They keep state `none`.
 - A match is tried at most once per hour. A try that finds no salt or no file leaves it `pending`; once the match is 14 days old such a try makes it `unavailable`, and it is never tried again.
 - An OpenDota response with a salt is stored, so a salt is never requested twice.
@@ -200,10 +202,10 @@ Known limit: the lane differences describe the lane, not the player, and a lane 
 
 ## Teams: scouting a league team (November 2026)
 
-For preparing a tournament match: what do other teams ban against this team, and does the team pick those heroes when they are left open? Built from drafts and scoreboards. The replay of a league game is downloaded only when asked for on the site (changed in November 2026; before, never): the wards and the first moves below need it.
+For preparing a tournament match: what do other teams ban against this team, and does the team pick those heroes when they are left open? Built from drafts and scoreboards. The replay of a league game younger than 30 days is downloaded by the poller (since 2026-11-16), an older one only when asked for on the site: the wards and the first moves below need it.
 
 - **Which games**: the leagues in `LEAGUES` in `steam.py`, for now seasons 6 to 8 of "REINCARNATION - D/A/CH Dota 2 by BEING ESPORTS" (league ids 18795, 19418, 20408). Adding a league is one entry there.
-- **Fetching**: the button in the top bar (see below) or `dotanalyst sync-leagues`; the poller does not do it. `GetMatchHistory` with `league_id` lists a league's games, each with both team ids; every game not stored yet is fetched once through `GetMatchHistoryBySequenceNum`, like an account's match. The first run took half an hour (1,130 games); a later run only fetches new games. The players' Steam names come last, from `GetPlayerSummaries`, 100 per request.
+- **Fetching**: the button in the top bar (see below) or `dotanalyst sync-leagues`, and every poll (since 2026-11-16). `GetMatchHistory` with `league_id` lists a league's games, each with both team ids; every game not stored yet is fetched once through `GetMatchHistoryBySequenceNum`, like an account's match. The first run took half an hour (1,130 games); a later run only fetches new games. The players' Steam names come last, from `GetPlayerSummaries`, 100 per request.
 - **Facts about the league list**: Steam has no query for a team's games, only for a league's. The list is paged by series, about 40 games a page, and `results_remaining` reaches 0 with games still to come, so pages are read until one is empty. Checked against dota2.com's `GetLeagueData`, which lists every series of a league without a key: all 198 games of season 8 came back, and 423 of 424 of season 6.
 - **Known limit**: the list reaches back 500 games per league and no further, whatever `start_at_match_id` says. Season 7 has 561 games, so its oldest 67 (the first weeks, March 2026) are not stored. Asking with `account_id` of a player next to `league_id` does list that player's older league games; that route is not built.
 - **Teams page** (`#teams`): every team with a game in those leagues, with games, wins and last game, and a name search.
@@ -214,14 +216,14 @@ For preparing a tournament match: what do other teams ban against this team, and
   - Games, newest first: season, opponent (a link to that team), side, result, their picks, the bans against them, their own bans, and whether the replay is parsed. The date opens the game as a match page, where a game without a replay has the button that requests it.
 - Picks are read from the ten players of a game, bans from `picks_bans`. A team's name is the newest one Steam sent that is not empty.
 
-Not built: a season filter, fetching league replays without being asked, automatic fetching of league games by the poller, leagues chosen in the UI.
+Not built: a season filter, fetching the replays of league games older than 30 days without being asked, leagues chosen in the UI.
 
 ## The check button (November 2026)
 
 The top bar ends in a button that fetches now instead of at the next poll. The page shows what was found and loads its data again.
 
 - On the Teams pages it reads "Check for new league games": `POST /api/teams/refresh` runs `sync-leagues`, about 50 seconds.
-- Everywhere else it reads "Check for new games": `POST /api/refresh` runs one poll (new matches of every account, then replays), about half a minute plus 10 seconds per replay. Unlike the timed poll it tries every waiting replay again, whenever it was last tried: someone who presses it after starting Docker expects the replays that failed a minute ago. It answers with the new matches, the replays parsed, and how many matches still have none.
+- Everywhere else it reads "Check for new games": `POST /api/refresh` runs one poll (new matches of every account and league games, then replays), about half a minute plus 10 seconds per replay. Unlike the timed poll it tries every waiting replay again, whenever it was last tried: someone who presses it after starting Docker expects the replays that failed a minute ago. It answers with the new matches, the replays parsed, and how many matches still have none.
 - The timed poll and both checks share one lock, so they never fetch at the same time; a check started during a poll waits for it.
 
 ## Design and profile page (November 2026)

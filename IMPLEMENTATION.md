@@ -179,7 +179,7 @@ Built from the drafts and scoreboards of the league games (`league_matches`).
 
 ### League games as matches
 
-A league game is not in `matches`, so it joins no account's stats and the poller does not fetch its replay. Its match page is built from the answer Steam gave for it. When its replay is asked for (the button on its page, or under "First moves" on a team page), the game is copied into `matches` and is from then on a match like any other.
+A league game starts out in `league_matches` only; its match page is built from the answer Steam gave for it. It is copied into `matches` when it is younger than 30 days (`MAX_AGE_DAYS`, each poll, so the poller downloads its replay and computes its stats like any match's) or when its replay is asked for (the button on its page, or under "First moves" on a team page). From then on it is a match like any other. No tracked account plays in it, so it joins no account's stats: those only count rows where the account itself played.
 
 ## On the site
 
