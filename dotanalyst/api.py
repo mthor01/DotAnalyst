@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
@@ -144,6 +145,18 @@ def refresh_leagues() -> dict:
         return poll.refresh_leagues(engine)
     except SteamError as error:
         raise HTTPException(502, f"Steam: {error}") from None
+
+
+@app.post("/api/teams/{team_id}/players/refresh")
+def refresh_team_players(session: Db, team_id: int) -> dict:
+    """The games outside the league of the team's league players, for their role wheels, of those never asked for."""
+    found = queries.team(session, team_id, None, None, None)
+    if found is None:
+        raise HTTPException(404, f"no league games of team {team_id} are stored")
+    try:
+        return {"players": poll.refresh_players(engine, [p["account_id"] for p in found["players"]])}
+    except httpx.HTTPError as error:
+        raise HTTPException(502, f"OpenDota: {error}") from None
 
 
 @app.get("/api/teams")

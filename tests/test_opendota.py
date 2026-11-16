@@ -76,6 +76,19 @@ def test_a_failed_answer_leaves_the_player_unlisted(session, status, body):
     assert session.get(PlayerGameList, PLAYER) is None
 
 
+def test_refresh_asks_at_once_for_the_players_never_asked_for(session, monkeypatch):
+    from dotanalyst import poll
+
+    calls = []
+    client = opendota_sends(calls)
+    monkeypatch.setattr(poll.httpx, "Client", lambda: client)
+    session.add(PlayerGameList(account_id=PLAYER, fetched_at=0))
+    session.commit()
+    assert poll.refresh_players(session.get_bind(), [PLAYER, 1002]) == 1
+    assert [c.url.path for c in calls] == ["/api/players/1002/matches"]
+    assert session.get(PlayerGameList, 1002) is not None
+
+
 def test_unlisted_players_come_from_the_newest_league_games(session):
     # the fixture's players are 1001 to 1010; in the newer game the first is anonymous and the second is 3001
     league_game(session, 1, start_time=1763000000)

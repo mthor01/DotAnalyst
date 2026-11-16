@@ -11,7 +11,7 @@ import httpx
 from sqlalchemy import Engine, and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from .db import DATA, LeagueMatch, Match, PlayerMinute
+from .db import DATA, LeagueMatch, Match, PlayerGameList, PlayerMinute
 from .derive import derive_match
 from .opendota import fetch_player_games, unlisted_players
 from .replay import PARSER_URL, ReplayError, fetch_replay, parse_replay, replay_complete, steam_salts
@@ -272,6 +272,20 @@ def refresh_leagues(engine: Engine) -> dict:
     """New league games, asked for from the site."""
     with BUSY, Session(engine) as session, httpx.Client() as client:
         return {"league_games": sync_leagues(session, client, os.environ.get("STEAM_API_KEY", ""))}
+
+
+def refresh_players(engine: Engine, account_ids: list[int]) -> int:
+    """The games outside the league of those of these players never asked for, now rather than at the poller's pace.
+    Returns how many players were asked for; an OpenDota failure raises httpx.HTTPError, keeping those before it."""
+    with BUSY, Session(engine) as session, httpx.Client() as client:
+        unlisted = [a for a in account_ids if session.get(PlayerGameList, a) is None]
+        try:
+            for i, account_id in enumerate(unlisted, 1):
+                doing(f"asking OpenDota for the last games of player {account_id} ({i} of {len(unlisted)}), for the site")
+                fetch_player_games(session, client, account_id)
+        finally:
+            doing("waiting for the next poll")
+        return len(unlisted)
 
 
 async def poll_forever(engine: Engine) -> None:

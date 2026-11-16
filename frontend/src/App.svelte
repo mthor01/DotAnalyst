@@ -65,6 +65,11 @@
       if (league) {
         const found = await post<{ league_games: number }>('teams/refresh')
         checked = some(found.league_games, 'new league game')
+        if (teamId) {
+          // then their players' games outside the league, for the role wheels, rather than at the poller's pace
+          const asked = await post<{ players: number }>(`teams/${teamId}/players/refresh`)
+          checked += `, the games of ${some(asked.players, 'player')} loaded`
+        }
       } else {
         const found = await post<{ matches: number; replays: number; waiting: number }>('refresh')
         checked = `${some(found.matches, 'new match', 'new matches')}, ${some(found.replays, 'replay')} parsed`
@@ -99,7 +104,7 @@
       </label>
       <span class="muted" role="status">{checked}</span>
       <button class="action" onclick={check} disabled={checking}>
-        {checking ? 'Checking…' : league ? 'Check for new league games' : 'Check for new games'}
+        {checking ? 'Checking…' : teamId ? 'Refresh' : league ? 'Check for new league games' : 'Check for new games'}
       </button>
     </div>
   </header>

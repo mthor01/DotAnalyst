@@ -170,7 +170,7 @@
           {:else if p.outside_listed}
             <p class="muted">OpenDota lists no games of theirs outside the league; their match history may be private.</p>
           {:else}
-            <p class="muted">Not asked for yet. The poller asks OpenDota for five players a minute.</p>
+            <p class="muted">Not asked for yet. The poller asks OpenDota for five players a minute; Refresh asks for all of them now.</p>
           {/if}
         </section>
       </div>
