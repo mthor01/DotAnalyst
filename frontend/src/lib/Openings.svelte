@@ -5,12 +5,16 @@
 
   type Game = TeamDetail['games'][number]
   type Spot = { time: number; player_slot: number; x: number; y: number }
-  /** The team's newest games, newest first, and what to do once a replay asked for here has arrived. */
-  let { games, onfetched }: { games: Game[]; onfetched: () => void } = $props()
+  /** The team's games, newest first, and what to do once a replay asked for here has arrived. */
+  let { games: all, onfetched }: { games: Game[]; onfetched: () => void } = $props()
 
   const FROM = -90 // the heroes appear 89 seconds before the horn
   const UNTIL = 30
   const LEAP = 8 // cells in one second: a teleport, not a walk (as in Playback)
+  const GAMES = 6 // per side, one colour each
+  let picked = $state<boolean>() // the side chosen in the dropdown; until then the side of their newest game
+  const radiant = $derived(picked ?? all[0]?.radiant ?? true)
+  const games = $derived(all.filter((g) => g.radiant === radiant).slice(0, GAMES))
   let spots = $state.raw<Record<number, Spot[]>>({}) // match id -> where its heroes were, second by second
   let error = $state('')
   let at = $state(UNTIL)
@@ -73,7 +77,14 @@
   }
 </script>
 
-<MiniMap label="Where the team's heroes walked from {clock(FROM)} to {clock(at)} in their last {games.length} games" {layers}>
+<MiniMap label="Where the team's heroes walked from {clock(FROM)} to {clock(at)} in their last {games.length} games as {radiant ? 'Radiant' : 'Dire'}" {layers}>
+  {#snippet controls()}
+    <select aria-label="Side the games were played on" value={radiant ? 'radiant' : 'dire'}
+      onchange={(e) => (picked = e.currentTarget.value === 'radiant')}>
+      <option value="radiant">As Radiant</option>
+      <option value="dire">As Dire</option>
+    </select>
+  {/snippet}
   {#snippet children(size, on)}
     {#each ways.filter((w) => on[`game${w.n}`] && w.way.length) as w (w.key)}
       {@const here = w.way.findLast((s) => s.time <= at)}
@@ -99,8 +110,10 @@
     <li class:none={!g.replay}>
       <i class="swatch" style:background="var(--series-{n + 1})"></i>
       <a href="#match/{g.match_id}">{date(g.start_time)}</a>
-      against {g.opponent || 'a side without a team'}, as {g.radiant ? 'Radiant' : 'Dire'}, {g.win ? 'won' : 'lost'}{g.replay ? '' : ': no replay'}
+      against {g.opponent || 'a side without a team'}, {g.win ? 'won' : 'lost'}{g.replay ? '' : ': no replay'}
     </li>
+  {:else}
+    <li>No games of theirs as {radiant ? 'Radiant' : 'Dire'} in this season and time frame.</li>
   {/each}
 </ol>
 {#if error}<p class="error" role="alert">{error}</p>{/if}

@@ -50,7 +50,6 @@
     for (const g of team?.games ?? []) games[g.league] = (games[g.league] ?? 0) + 1
     return Object.entries(games).map(([league, n]) => `${league}: ${n} games`).join(', ')
   })
-  const OPENINGS = 5 // games on the map of the first moves: one colour each
   const one = (n: number) => n.toFixed(1)
 </script>
 
@@ -182,10 +181,10 @@
 
   <h2>First moves</h2>
   <p class="muted">
-    Where their five heroes walked from the start of the pre-game to 0:30, in their last {Math.min(OPENINGS, games)}
-    games. One colour per game; the buttons above the map show and hide a game, the slider moves the clock.
+    Where their five heroes walked from the start of the pre-game to 0:30, in their last six games on one side. One
+    colour per game; the dropdowns above the map pick the side and one game or all, the slider moves the clock.
   </p>
-  <Openings games={team.games.slice(0, OPENINGS)} onfetched={() => (fetched += 1)} />
+  <Openings games={team.games} onfetched={() => (fetched += 1)} />
 
   <h2>Games</h2>
   <p class="muted">The date opens the game like any match. One without a replay has a button there that requests it.</p>
