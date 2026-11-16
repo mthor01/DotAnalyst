@@ -6,21 +6,34 @@
 
   const SQUARE = 2 // map cells to a side of the squares that tell, on hover, how many wards went there
   const SCALE = 2 // pixels of the heat picture per map cell
-  const SPREAD = 2.5 // cells: wide enough that wards for one area (a cliff, a camp's edge) run into one hill
+  const SPREAD = 1.5 // cells: wards on the same spot run into one hill, wards a few cells apart stay apart
   const LAYERS = { obs: 'Observers', sen: 'Sentries', radiant: 'As Radiant', dire: 'As Dire' }
-  // the heat colours, from a lone ward to the busiest spot: [where on the scale, red, green, blue, opacity]
-  const RAMP = [
-    [0, 140, 0, 20, 0.45],
-    [0.25, 210, 30, 30, 0.7],
-    [0.5, 245, 110, 20, 0.85],
-    [0.75, 255, 200, 40, 0.92],
-    [1, 255, 255, 210, 0.97],
-  ] // prettier-ignore
+  // the heat colours of each kind, from a lone ward to its busiest spot: [where on the scale, red, green, blue, opacity]
+  const RAMPS = {
+    obs: [
+      [0, 140, 0, 20, 0.45],
+      [0.25, 210, 30, 30, 0.7],
+      [0.5, 245, 110, 20, 0.85],
+      [0.75, 255, 200, 40, 0.92],
+      [1, 255, 255, 210, 0.97],
+    ],
+    sen: [
+      [0, 10, 30, 140, 0.45],
+      [0.25, 20, 80, 220, 0.7],
+      [0.5, 40, 150, 250, 0.85],
+      [0.75, 110, 210, 255, 0.92],
+      [1, 225, 245, 255, 0.97],
+    ],
+  } // prettier-ignore
+  const KINDS = ['obs', 'sen'] as const
+  /** The legend's strip of a ramp, on black like the darkened map */
+  const strip = (ramp: number[][]) =>
+    `linear-gradient(90deg, ${ramp.map(([t, r, g, b, a]) => `rgb(${r} ${g} ${b} / ${a}) ${t * 100}%`).join(', ')}), #000`
 
   const shownOf = (on: Record<string, boolean>) => wards.filter((w) => on[w.type] && on[w.radiant ? 'radiant' : 'dire'])
 
-  /** The heat picture: every ward adds a small Gaussian hill, and the height is coloured along RAMP. */
-  function heat(shown: WardSpot[]) {
+  /** The heat picture of one kind: every ward adds a small Gaussian hill, and the height is coloured along the ramp. */
+  function heat(shown: WardSpot[], RAMP: number[][]) {
     const size = 127 * SCALE
     const grid = new Float32Array(size * size)
     const sigma = SPREAD * SCALE
@@ -75,9 +88,13 @@
     {@const shown = shownOf(on)}
     <!-- the map is darkened so that the heat stands out from its greens and greys -->
     <rect class="veil" width="127" height="127" />
-    {#if shown.length}
-      <image href={heat(shown)} width="127" height="127" class="heat" />
-    {/if}
+    <!-- one picture per kind, each scaled to its own busiest spot; sentries on top, as there are fewer -->
+    {#each KINDS as kind}
+      {@const these = shown.filter((w) => w.type === kind)}
+      {#if these.length}
+        <image href={heat(these, RAMPS[kind])} width="127" height="127" class="heat" />
+      {/if}
+    {/each}
     {#each squares(shown) as s (`${s.x} ${s.y}`)}
       <rect class="spot" x={s.x} y={s.y} width={SQUARE} height={SQUARE}>
         <title>Placed here: {s.obs} {s.obs === 1 ? 'observer' : 'observers'}, {s.sen} {s.sen === 1 ? 'sentry' : 'sentries'}</title>
@@ -87,7 +104,9 @@
 </MiniMap>
 <p class="legend">
   <span>{count('obs')} observers and {count('sen')} sentries.</span>
-  <span class="scale">One ward <i class="ramp"></i> the most wards</span>
+  {#each KINDS as kind}
+    <span class="scale">{LAYERS[kind]}: one <i class="ramp" style:background={strip(RAMPS[kind])}></i> the most</span>
+  {/each}
   <span>The buttons choose which wards count; hover a spot for its numbers.</span>
 </p>
 
@@ -116,15 +135,10 @@
     align-items: center;
     gap: 6px;
   }
-  /* the RAMP of the script, on black like the darkened map */
   .ramp {
     display: inline-block;
-    width: 110px;
+    width: 90px;
     height: 10px;
     border-radius: 2px;
-    background:
-      linear-gradient(90deg, rgb(140 0 20 / 0.45), rgb(210 30 30 / 0.7) 25%, rgb(245 110 20 / 0.85) 50%,
-        rgb(255 200 40 / 0.92) 75%, rgb(255 255 210 / 0.97)),
-      #000;
   }
 </style>
