@@ -202,12 +202,12 @@
     <div class="muted">
       <h3>Wards placed</h3>
       <p>
-        Where the wards went in the {parsed} of these {recent.length} matches that have a parsed replay. The map is cut
-        into squares of two map cells; a square is coloured when a ward was placed in it, stronger the more often.
+        Where the wards went in the {parsed} of these {recent.length} matches that have a parsed replay. Every ward
+        warms the map around its spot; red is a spot warded now and then, yellow to white the spots warded most.
       </p>
       <p>
         Radiant and Dire ward different places, so the buttons above the map show one side's games alone, or one kind
-        of ward. Scroll over the map to zoom, drag to move it, hover a square for its count.
+        of ward. Scroll over the map to zoom, drag to move it, hover a spot for its count.
       </p>
     </div>
   </section>
