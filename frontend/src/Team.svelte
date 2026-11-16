@@ -193,7 +193,6 @@
           <th>Date</th>
           <th>Season</th>
           <th>Against</th>
-          <th>Side</th>
           <th>Result</th>
           <th>Their picks</th>
           <th>Enemy picks</th>
@@ -214,7 +213,6 @@
                 <span class="muted">No team</span>
               {/if}
             </td>
-            <td><span class="swatch {g.radiant ? 'radiant' : 'dire'}"></span>{g.radiant ? 'Radiant' : 'Dire'}</td>
             <td><span class="dot {g.win ? 'won' : 'lost'}"></span>{g.win ? 'Won' : 'Lost'}</td>
             <td>{@render icons(g.picks)}</td>
             <td>{@render icons(g.picks_against)}</td>
@@ -234,6 +232,9 @@
     display: flex;
     flex-wrap: wrap;
     gap: 3px;
+  }
+  td .icons {
+    flex-wrap: nowrap; /* a game's five picks read as one row */
   }
   .player {
     margin-bottom: 6px;
