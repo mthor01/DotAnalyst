@@ -88,6 +88,28 @@ export type MatchDetail = {
 }
 
 export type TeamRow = { team_id: number; name: string | null; games: number; wins: number; last_played: number }
+/** Something the poller did to one match's replay, or to none (`match_id` null). Times are unix seconds. */
+export type QueueEvent = { at: number; match_id: number | null; message: string }
+/** What the poller has to do: every match whose replay it still wants, in the order it takes them. */
+export type QueueStatus = {
+  doing: string
+  since: number
+  busy: boolean
+  now: number
+  last_poll: { at: number; seconds: number; new?: number; parsed?: number; error?: string } | null
+  next_poll: number | null
+  parser: boolean
+  alt: boolean
+  salts_from_steam: number
+  per_poll: number
+  retry_seconds: number
+  max_age_days: number
+  states: Record<string, number>
+  without_stats: number
+  folder: { ready: number; downloading: number }
+  queue: { match_id: number; start_time: number; league: boolean; state: string; tried_at: number | null; next_try: number; last: QueueEvent | null }[]
+  events: QueueEvent[]
+}
 /** A ward as a heatmap needs it: its kind, its place in map cells, and the side its owner played. */
 export type WardSpot = { type: 'obs' | 'sen'; x: number; y: number; radiant: boolean }
 /** One hero in a team's league drafts. `open` counts the games in which neither side banned it and the other side

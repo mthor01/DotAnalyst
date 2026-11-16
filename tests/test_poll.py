@@ -13,6 +13,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from dotanalyst.db import Base, Derived, Match, MatchPlayer, PlayerMinute
+from dotanalyst import poll
 from dotanalyst.poll import poll_once, request_replay
 from dotanalyst.replay import replay_complete
 from dotanalyst.steam import store_league_match
@@ -218,6 +219,30 @@ def test_match_without_a_replay_is_retried_hourly_and_given_up_after_14_days(ses
         match.replay_tried_at -= 3601
     session.commit()
     assert poll() == 1  # the pending one again; the unavailable one never
+
+
+def test_the_queue_shows_the_order_the_poller_takes_matches_in(session, tmp_path, monkeypatch):
+    def parser_down(*args, **kwargs):
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(poll.httpx, "get", parser_down)
+    poll.EVENTS.clear()
+    now = time.time()
+    for match_id, age, tried in [(1, 2, None), (2, 1, None), (3, 3, now - 7200), (4, 0, now - 600), (5, 31, None)]:
+        add_match(session, match_id, age_days=age)
+        session.get(Match, match_id).replay_tried_at = tried
+    session.get(Match, 3).replay_state = session.get(Match, 4).replay_state = "pending"
+    session.commit()
+
+    shown = poll.queue(session, tmp_path / "nowhere", tmp_path, now)
+    assert [row["match_id"] for row in shown["queue"]] == [2, 1, 3, 4]  # 5 is outside the download window
+    assert [row["next_try"] for row in shown["queue"]] == [now, now, now, now - 600 + 3600]
+    assert shown["parser"] is False
+
+    poll_once(session, network([]), "", tmp_path / "nowhere", tmp_path)  # OpenDota knows none of them
+    assert [e["match_id"] for e in poll.EVENTS] == [2, 1, 3]  # 4 was tried 10 minutes ago
+    shown = poll.queue(session, tmp_path / "nowhere", tmp_path)
+    assert shown["queue"][-1]["last"]["message"] == "no replay yet (no salt: OpenDota does not know it), now pending"
 
 
 def test_a_refresh_by_hand_does_not_wait_the_hour(session, tmp_path):

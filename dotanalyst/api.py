@@ -129,6 +129,11 @@ def refresh() -> dict:
         raise HTTPException(502, f"Steam: {error}") from None
 
 
+@app.get("/api/queue")
+def queue(session: Db) -> dict:
+    return poll.queue(session, poll.replay_dir())
+
+
 @app.post("/api/teams/refresh")
 def refresh_leagues() -> dict:
     if not os.environ.get("STEAM_API_KEY"):

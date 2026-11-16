@@ -6,12 +6,13 @@
   import Matches from './Matches.svelte'
   import Group from './Group.svelte'
   import Profile from './Profile.svelte'
+  import Queue from './Queue.svelte'
   import Team from './Team.svelte'
   import Teammates from './Teammates.svelte'
   import Teams from './Teams.svelte'
   import Trends from './Trends.svelte'
 
-  const PAGES = { profile: 'Profile', matches: 'Matches', heroes: 'Heroes', teammates: 'Teammates & matchups', trends: 'Trends', group: 'Group', teams: 'Teams' }
+  const PAGES = { profile: 'Profile', matches: 'Matches', heroes: 'Heroes', teammates: 'Teammates & matchups', trends: 'Trends', group: 'Group', teams: 'Teams', queue: 'Queue' }
   const ALL_ACCOUNTS: Page[] = ['trends', 'group'] // these pages show every tracked account at once
   type Page = keyof typeof PAGES
   let hash = $state(location.hash.slice(1))
@@ -76,7 +77,7 @@
       {/each}
     </nav>
     <div class="side">
-      <label hidden={!!matchId || league || ALL_ACCOUNTS.includes(page)}>
+      <label hidden={!!matchId || league || ALL_ACCOUNTS.includes(page) || page === 'queue'}>
         Account
         <select bind:value={filters.account_id}>
           {#each accounts as a}
@@ -91,7 +92,7 @@
     </div>
   </header>
 
-  <div class="filters" hidden={!!matchId || league}>
+  <div class="filters" hidden={!!matchId || league || page === 'queue'}>
     <label>
       Lobby
       <select bind:value={filters.lobby_type}>
@@ -121,6 +122,8 @@
     <Team id={teamId} />
   {:else if page === 'teams'}
     <Teams />
+  {:else if page === 'queue'}
+    <Queue />
   {:else if !filters.account_id}
     <p class="muted">No tracked accounts yet. Add one with <code>dotanalyst add-account</code>.</p>
   {:else if page === 'profile'}

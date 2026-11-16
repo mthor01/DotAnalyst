@@ -1,8 +1,10 @@
 import asyncio
+import json
 import logging
 import os
 import threading
 import time
+from collections import deque
 from pathlib import Path
 
 import httpx
@@ -11,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .db import DATA, LeagueMatch, Match, PlayerMinute
 from .derive import derive_match
-from .replay import ReplayError, fetch_replay, parse_replay, replay_complete, steam_salts
+from .replay import PARSER_URL, ReplayError, fetch_replay, parse_replay, replay_complete, steam_salts
 from .steam import store_match, sync, sync_leagues
 
 log = logging.getLogger("uvicorn.error")  # the logger uvicorn already prints
@@ -20,6 +22,37 @@ RETRY_SECONDS = 3600
 MAX_AGE_DAYS = 30  # how far back replays are downloaded; Valve keeps them about 100 days
 DOWNLOADS_PER_POLL = 10  # about 40 MB each; also keeps OpenDota calls far below its 60 a minute
 BUSY = threading.Lock()  # the timed poll and a refresh from the site never fetch at the same time
+# for the queue page; kept in memory only, so a restart starts them empty
+NOW = {"doing": "starting", "since": time.time(), "last_poll": None, "next_poll": None}
+EVENTS: deque[dict] = deque(maxlen=200)
+
+
+def doing(what: str) -> None:
+    NOW.update(doing=what, since=time.time())
+
+
+def event(match_id: int | None, message: str, warn: bool = True) -> None:
+    if warn:
+        log.warning("match %s: %s", match_id, message)
+    EVENTS.append({"at": time.time(), "match_id": match_id, "message": message})
+
+
+def wanted(now: float):
+    """Matches whose replay the poller still wants, whenever it next tries them."""
+    return or_(
+        Match.replay_state == "pending",
+        and_(Match.replay_state == "none", Match.start_time > now - MAX_AGE_DAYS * 86400),
+    )
+
+
+def folder_replays(session: Session, replay_dir: Path) -> list[Path]:
+    """The .dem files in the Dota client folder of stored matches that have no parse yet."""
+    found = []
+    for dem in sorted(replay_dir.glob("*.dem")) if replay_dir.is_dir() else []:
+        match = session.get(Match, int(dem.stem)) if dem.stem.isdigit() else None
+        if match is not None and match.replay_state not in ("parsed", "failed"):
+            found.append(dem)
+    return found
 
 
 def poll_once(
@@ -34,7 +67,9 @@ def poll_once(
     """
     new = 0
     if key:
+        doing("asking Steam for new matches of the accounts")
         new = sum(count or 0 for count in sync(session, client, key, newest_only).values())
+        doing("asking Steam for new league games")
         new += sync_leagues(session, client, key, newest_only)
     else:
         log.warning("STEAM_API_KEY is not set, skipping sync")
@@ -49,63 +84,107 @@ def poll_once(
     session.commit()
 
     parsed = 0
-    for dem in sorted(replay_dir.glob("*.dem")) if replay_dir.is_dir() else []:
-        if not dem.stem.isdigit():
-            continue
-        match = session.get(Match, int(dem.stem))
-        if match is None or match.replay_state in ("parsed", "failed"):
-            continue
+    for dem in folder_replays(session, replay_dir):
         # a file the Dota client is still writing would parse as truncated and be marked failed for good
         if not replay_complete(dem):
             continue
+        doing(f"parsing {dem.name} from the Dota client folder")
         try:
             parse_replay(session, dem, client, data / "raw")
             parsed += 1
+            event(int(dem.stem), "parsed from the Dota client folder", warn=False)
         except (ReplayError, OSError, httpx.HTTPError) as error:
-            log.warning("replay %s: %s", dem.name, error)
+            event(int(dem.stem), f"{dem.name} from the Dota client folder: {error!r}")
 
     # never tried first, so a new match is not stuck behind retries; each group newest first
     now = time.time()
     due = (
         select(Match)
-        .where(
-            # a match already tried is followed up whatever its age, so it cannot stay pending for ever
-            or_(
-                Match.replay_state == "pending",
-                and_(Match.replay_state == "none", Match.start_time > now - MAX_AGE_DAYS * 86400),
-            ),
-            or_(Match.replay_tried_at.is_(None), Match.replay_tried_at < now - retry_seconds),
-        )
+        # a match already tried is followed up whatever its age, so it cannot stay pending for ever
+        .where(wanted(now), or_(Match.replay_tried_at.is_(None), Match.replay_tried_at < now - retry_seconds))
         .order_by(Match.replay_tried_at.is_not(None), Match.start_time.desc())
         .limit(DOWNLOADS_PER_POLL)
     )
     matches = session.scalars(due).all()
     salts = {}
     if alt and matches:  # the second Steam account asks Valve; OpenDota is asked for what that leaves open
+        doing(f"asking Valve for {len(matches)} replay salts with the second Steam account")
         try:
             salts = steam_salts([match.match_id for match in matches], data)
         except ReplayError as error:
-            log.warning("replay salts from Steam: %s; asking OpenDota instead", error)
-    for match in matches:
+            event(None, f"replay salts from Steam: {error}; asking OpenDota instead")
+    for i, match in enumerate(matches, 1):
+        doing(f"downloading and parsing match {match.match_id} ({i} of {len(matches)})")
         try:
-            parsed += fetch_replay(session, match, client, data, salts.get(match.match_id))
+            if fetch_replay(session, match, client, data, salts.get(match.match_id)):
+                parsed += 1
+                event(match.match_id, "downloaded and parsed", warn=False)
+            else:
+                salted = match.match_id in salts or (data / "opendota" / f"{match.match_id}.json.gz").exists()
+                why = "Valve has no file for it" if salted else "no salt: OpenDota does not know it"
+                event(match.match_id, f"no replay yet ({why}), now {match.replay_state}", warn=False)
         except ReplayError as error:
-            log.warning("replay download: %s", error)
+            event(match.match_id, str(error))
         except (OSError, httpx.HTTPError) as error:
             # a server or the disk is in trouble: leave the rest for the next poll
-            log.warning("replay download of match %s stopped: %r", match.match_id, error)
+            event(match.match_id, f"download stopped, the rest waits for the next poll: {error!r}")
             break
 
     without_stats = select(Match.match_id).where(
         Match.replay_state == "parsed", Match.match_id.not_in(select(PlayerMinute.match_id))
     )
     for match_id in session.scalars(without_stats).all():
+        doing(f"computing the stats of match {match_id}")
         try:
             derive_match(session, match_id, data / "raw")
-        except Exception:  # a log one derivation cannot handle must not stop polling
+        except Exception as error:  # a log one derivation cannot handle must not stop polling
             session.rollback()
             log.exception("replay stats of match %s failed", match_id)
+            event(match_id, f"stats failed: {error!r}", warn=False)
     return new, parsed
+
+
+def queue(session: Session, replay_dir: Path, data: Path = DATA, now: float | None = None) -> dict:
+    """What the poller has to do, for the queue page: every match whose replay it still wants, in the order it will
+    take them, and what it is doing and did lately."""
+    now = now or time.time()
+    waiting = session.scalars(select(Match).where(wanted(now))).all()
+    league = set(session.scalars(select(LeagueMatch.match_id).where(LeagueMatch.match_id.in_(m.match_id for m in waiting))))
+    last = {e["match_id"]: e for e in EVENTS}
+
+    def next_try(m: Match) -> float:
+        return now if m.replay_tried_at is None else max(now, m.replay_tried_at + RETRY_SECONDS)
+
+    # due first, in the poller's order (never tried, then newest); the rest by when they are due
+    waiting = sorted(waiting, key=lambda m: (next_try(m), m.replay_tried_at is not None, -m.start_time))
+    states = dict(session.execute(select(Match.replay_state, func.count()).group_by(Match.replay_state)).all())
+    without_stats = select(func.count()).select_from(Match).where(
+        Match.replay_state == "parsed", Match.match_id.not_in(select(PlayerMinute.match_id))
+    )
+    in_folder = folder_replays(session, replay_dir)
+    ready = sum(map(replay_complete, in_folder))
+    salts = data / "salts.json"
+    try:
+        httpx.get(PARSER_URL, timeout=1)  # any answer will do: it shows the container is up
+        parser = True
+    except httpx.HTTPError:
+        parser = False
+    return {
+        **NOW, "busy": BUSY.locked(), "now": now, "parser": parser, "alt": bool(os.environ.get("STEAM_ALT_USER")),
+        "salts_from_steam": len(json.loads(salts.read_text())) if salts.exists() else 0,
+        "per_poll": DOWNLOADS_PER_POLL, "retry_seconds": RETRY_SECONDS, "max_age_days": MAX_AGE_DAYS,
+        "states": states, "without_stats": session.scalar(without_stats),
+        "folder": {"ready": ready, "downloading": len(in_folder) - ready},
+        "queue": [
+            {
+                "match_id": m.match_id, "start_time": m.start_time, "league": m.match_id in league,
+                "state": m.replay_state, "tried_at": m.replay_tried_at, "next_try": next_try(m),
+                "last": last.get(m.match_id),
+            }
+            for m in waiting
+        ],
+        "events": list(reversed(EVENTS))[:100],
+    }  # fmt: skip
 
 
 def request_replay(
@@ -148,12 +227,24 @@ def refresh_replay(engine: Engine, match_id: int) -> str | None:
 
 
 def _run(engine: Engine, retry_seconds: int = RETRY_SECONDS, newest_only: bool = True) -> tuple[int, int]:
-    replay_dir = Path(os.environ.get("DOTA_REPLAY_DIR", REPLAY_DIR))
     with BUSY, Session(engine) as session, httpx.Client() as client:
-        return poll_once(
-            session, client, os.environ.get("STEAM_API_KEY", ""), replay_dir,
-            alt=bool(os.environ.get("STEAM_ALT_USER")), retry_seconds=retry_seconds, newest_only=newest_only,
-        )  # fmt: skip
+        start = time.time()
+        try:
+            new, parsed = poll_once(
+                session, client, os.environ.get("STEAM_API_KEY", ""), replay_dir(),
+                alt=bool(os.environ.get("STEAM_ALT_USER")), retry_seconds=retry_seconds, newest_only=newest_only,
+            )  # fmt: skip
+            NOW["last_poll"] = {"at": start, "seconds": time.time() - start, "new": new, "parsed": parsed}
+            return new, parsed
+        except Exception as error:
+            NOW["last_poll"] = {"at": start, "seconds": time.time() - start, "error": repr(error)}
+            raise
+        finally:
+            doing("waiting for the next poll")
+
+
+def replay_dir() -> Path:
+    return Path(os.environ.get("DOTA_REPLAY_DIR", REPLAY_DIR))
 
 
 def refresh(engine: Engine) -> dict:
@@ -180,4 +271,5 @@ async def poll_forever(engine: Engine) -> None:
             log.info("poll: %s new matches, %s replays parsed, next in %g min", new, parsed, minutes)
         except Exception:  # one bad poll must not end polling
             log.exception("poll failed, next in %g min", minutes)
+        NOW["next_poll"] = time.time() + minutes * 60
         await asyncio.sleep(minutes * 60)

@@ -181,6 +181,12 @@ Built from the drafts and scoreboards of the league games (`league_matches`).
 
 A league game starts out in `league_matches` only; its match page is built from the answer Steam gave for it. It is copied into `matches` when it is younger than 30 days (`MAX_AGE_DAYS`, each poll, so the poller downloads its replay and computes its stats like any match's) or when its replay is asked for (the button on its page, or under "First moves" on a team page). From then on it is a match like any other. No tracked account plays in it, so it joins no account's stats: those only count rows where the account itself played.
 
+### Replay queue (Queue page)
+
+The queue is every match the poller still wants a replay for: `pending`, or `none` and younger than 30 days (`wanted` in `poll.py`, the same condition the poller uses). Each match's next try is now if it was never tried, else an hour (`RETRY_SECONDS`) after its last try, and never earlier than now. The queue is sorted by next try; among matches due now, never-tried ones come first, then the newest. That is the poller's own order, so the first 10 (`DOWNLOADS_PER_POLL`) due matches are the ones the next poll takes. A check by hand ignores the hour and takes the first 10 waiting matches at once.
+
+A replay that is not there yet is put down to one of two causes. "Valve has no file for it" means a salt is known, from the second Steam account or from a cached OpenDota answer. "No salt" means neither source knew the match.
+
 ## On the site
 
 Rules that live in the frontend (`frontend/src`), applied to what the API sends.

@@ -226,6 +226,19 @@ The top bar ends in a button that fetches now instead of at the next poll. The p
 - Everywhere else it reads "Check for new games": `POST /api/refresh` runs one poll (new matches of every account and league games, then replays), about half a minute plus 10 seconds per replay. Unlike the timed poll it tries every waiting replay again, whenever it was last tried: someone who presses it after starting Docker expects the replays that failed a minute ago. It answers with the new matches, the replays parsed, and how many matches still have none.
 - The timed poll and both checks share one lock, so they never fetch at the same time; a check started during a poll waits for it.
 
+## Queue page, for debugging (November 2026)
+
+`#queue` (`GET /api/queue`, reloaded every 5 seconds while open) shows what the poller does with replays:
+
+- What it is doing now, and since when. Its last poll: when it ran, how long it took, and what it found or why it failed. When the next poll is due.
+- Whether the parser answers on port 5600, and where replay salts come from.
+- How many `.dem` files in the Dota client folder are waiting to be parsed or are still being written.
+- The number of matches in each replay state, and how many parsed matches have no stats yet.
+- The queue: every match whose replay the poller still wants, in the order it will take them, each with its last message. That is every pending match, and every never-tried match from the last 30 days.
+- The last 100 events: replays parsed, replays not there yet (no salt, or Valve has no file), download and stats errors.
+
+The events and the last poll are kept in memory only: a restart empties them, and nothing about them is stored per match.
+
 ## Design and profile page (November 2026)
 
 - **Look**: dark only. The page is slate; the two strong colours are the teams, Radiant green (`--radiant`) and Dire red (`--dire`), and wins and losses use the same green and red. Colour blindness is deliberately not considered. All colours are CSS variables in `frontend/src/app.css`; charts read them through `Chart.svelte`.
