@@ -123,8 +123,13 @@ export type TeamDetail = {
   /** Newest first. `picks` are in player slot order; `replay` says whether the game's replay is parsed. */
   games: { match_id: number; start_time: number; league: string; radiant: boolean; win: boolean; opponent_id: number; opponent: string | null; picks: number[]; picks_against: number[]; bans: number[]; bans_against: number[]; replay: boolean }[]
   heroes: TeamHero[]
-  /** `wards` are those of the `replays` games of the player whose replay is parsed. */
-  players: { account_id: number; name: string | null; games: number; replays: number; heroes: TeamPlayerHero[]; wards: WardSpot[] }[]
+  /** `wards` are those of the `replays` games of the player whose replay is parsed. `outside` are the player's last
+   *  games outside the league, newest first, whatever the filters; `outside_listed` is false until they were asked for. */
+  players: {
+    account_id: number; name: string | null; games: number; replays: number; heroes: TeamPlayerHero[]; wards: WardSpot[]
+    outside_listed: boolean
+    outside: { match_id: number; hero_id: number; win: boolean; role: 'safe' | 'mid' | 'off' | 'jungle' | 'none'; kills: number | null; deaths: number | null; assists: number | null }[]
+  }[]
 }
 
 export type MetricPoint ={ match_id: number; start_time: number; value: number }

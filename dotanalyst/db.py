@@ -85,6 +85,34 @@ class PlayerName(Base):
     name: Mapped[str]
 
 
+class PlayerGameList(Base):
+    """A league player whose games outside the league were asked of OpenDota, even when it had none to give."""
+
+    __tablename__ = "player_game_lists"
+
+    account_id: Mapped[int] = mapped_column(primary_key=True)
+    fetched_at: Mapped[int]
+
+
+class PlayerGame(Base):
+    """One of a league player's last games outside the league, as OpenDota lists it. Its replay is never fetched."""
+
+    __tablename__ = "player_games"
+
+    account_id: Mapped[int] = mapped_column(primary_key=True)
+    match_id: Mapped[int] = mapped_column(primary_key=True)
+    start_time: Mapped[int]
+    hero_id: Mapped[int]
+    player_slot: Mapped[int]
+    radiant_win: Mapped[bool]
+    lobby_type: Mapped[int | None]
+    game_mode: Mapped[int | None]
+    kills: Mapped[int | None]
+    deaths: Mapped[int | None]
+    assists: Mapped[int | None]
+    lane_role: Mapped[int | None]  # OpenDota's: 1 safe, 2 mid, 3 off, 4 jungle; None when it did not parse the game
+
+
 class Hero(Base):
     __tablename__ = "heroes"
 

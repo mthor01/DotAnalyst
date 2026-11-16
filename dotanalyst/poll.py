@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from .db import DATA, LeagueMatch, Match, PlayerMinute
 from .derive import derive_match
+from .opendota import fetch_player_games, unlisted_players
 from .replay import PARSER_URL, ReplayError, fetch_replay, parse_replay, replay_complete, steam_salts
 from .steam import store_match, sync, sync_leagues
 
@@ -21,6 +22,7 @@ REPLAY_DIR = Path(r"C:\Program Files (x86)\Steam\steamapps\common\dota 2 beta\ga
 RETRY_SECONDS = 3600
 MAX_AGE_DAYS = 30  # how far back replays are downloaded; Valve keeps them about 100 days
 DOWNLOADS_PER_POLL = 10  # about 40 MB each; also keeps OpenDota calls far below its 60 a minute
+PLAYERS_PER_POLL = 5  # league players whose own games are asked of OpenDota, one call each
 BUSY = threading.Lock()  # the timed poll and a refresh from the site never fetch at the same time
 # for the queue page; kept in memory only, so a restart starts them empty
 NOW = {"doing": "starting", "since": time.time(), "last_poll": None, "next_poll": None}
@@ -128,6 +130,17 @@ def poll_once(
         except (OSError, httpx.HTTPError) as error:
             # a server or the disk is in trouble: leave the rest for the next poll
             event(match.match_id, f"download stopped, the rest waits for the next poll: {error!r}")
+            break
+
+    # the league players' own games, for their role wheel on the team page: the list only, never a replay
+    players = unlisted_players(session, PLAYERS_PER_POLL)
+    for i, account_id in enumerate(players, 1):
+        doing(f"asking OpenDota for the last games of player {account_id} ({i} of {len(players)})")
+        try:
+            fetch_player_games(session, client, account_id)
+        except httpx.HTTPError as error:
+            session.rollback()
+            event(None, f"games of player {account_id}, the rest waits for the next poll: {error!r}")
             break
 
     without_stats = select(Match.match_id).where(

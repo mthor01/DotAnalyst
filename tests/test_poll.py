@@ -69,6 +69,11 @@ def to(host: str, calls: list[str]) -> list[str]:
     return [url for url in calls if host in url]
 
 
+def for_replays(calls: list[str]) -> list[str]:
+    """Leaves out the lists of the league players' own games, which test_opendota covers."""
+    return [url for url in calls if "/players/" not in url]
+
+
 def test_poll_parses_downloaded_replays_of_stored_matches(session, tmp_path):
     for match_id in (GOOD, WRONG_LOG, STILL_DOWNLOADING):
         add_match(session, match_id)
@@ -171,7 +176,7 @@ def test_poll_downloads_the_replays_of_recent_league_games(session, tmp_path):
 
     calls.clear()
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
-    assert calls == []  # copied once, fetched once
+    assert for_replays(calls) == []  # copied once, fetched once
 
 
 def test_a_requested_replay_of_a_league_game_makes_it_a_match(session, tmp_path):
@@ -179,7 +184,7 @@ def test_a_requested_replay_of_a_league_game_makes_it_a_match(session, tmp_path)
     calls = []
     client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
-    assert calls == [] and session.get(Match, GOOD) is None  # too old for a poll to fetch
+    assert for_replays(calls) == [] and session.get(Match, GOOD) is None  # too old for a poll to fetch
 
     assert request_replay(session, client, GOOD, tmp_path) == "parsed"
     assert to("valve.net", calls) == [f"http://replay{CLUSTER}.valve.net/570/{GOOD}_519105714.dem.bz2"]

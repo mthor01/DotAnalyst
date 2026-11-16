@@ -3,6 +3,7 @@
   import { heroIcon, heroName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import Openings from './lib/Openings.svelte'
+  import RoleWheel from './lib/RoleWheel.svelte'
   import WardHeat from './lib/WardHeat.svelte'
 
   let { id, query }: { id: string; query: string } = $props()
@@ -146,7 +147,7 @@
             {/each}
           </tbody>
         </table>
-        <section>
+        <section class="wards">
           <h3>Wards placed</h3>
           {#if p.replays}
             <WardHeat wards={p.wards} label="Heatmap of the wards {p.name ?? p.account_id} placed" />
@@ -156,6 +157,20 @@
               None of their games has a parsed replay yet, and wards are only in replays. Request the replays under
               "First moves" below, or with the button on a game's page.
             </p>
+          {/if}
+        </section>
+        <section class="outside">
+          <h3>Their last {p.outside.length || ''} games outside the league</h3>
+          {#if p.outside.length}
+            <RoleWheel games={p.outside} none="Lane unknown" />
+            <p class="muted">
+              From OpenDota's list of their games, without league and lobby games, whatever the filters above. The lane
+              is OpenDota's, known only for the games it parsed.
+            </p>
+          {:else if p.outside_listed}
+            <p class="muted">OpenDota lists no games of theirs outside the league; their match history may be private.</p>
+          {:else}
+            <p class="muted">Not asked for yet. The poller asks OpenDota for five players a minute.</p>
           {/if}
         </section>
       </div>
@@ -240,13 +255,21 @@
   .profile {
     display: grid;
     grid-template-columns: minmax(420px, 1fr) minmax(280px, 520px);
+    grid-template-rows: auto 1fr; /* the tall ward map takes the spare height, so the wheel sits right under the table */
     gap: 12px 24px;
     align-items: start;
     padding: 4px 12px 14px;
   }
+  .wards {
+    grid-row: span 2;
+  }
   @media (max-width: 1000px) {
     .profile {
       grid-template-columns: 1fr;
+      grid-template-rows: none;
+    }
+    .wards {
+      grid-row: auto;
     }
   }
   .profile h3 {

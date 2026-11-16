@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from dotanalyst import queries
-from dotanalyst.db import Account, Base, Derived, Lane, Match, Metric, PlayerName, Ward
+from dotanalyst.db import Account, Base, Derived, Lane, Match, Metric, PlayerGame, PlayerGameList, PlayerName, Ward
 from dotanalyst.steam import ANONYMOUS, store_league_match, store_match
 
 TEMPLATE = json.loads((Path(__file__).parent / "fixtures" / "details_by_seq.json").read_text(encoding="utf-8"))[
@@ -265,6 +265,25 @@ def test_team_players_wards_come_from_the_games_with_a_parsed_replay(league):
     assert players[1000]["replays"] == 1
     assert players[1000]["wards"] == [{"type": "obs", "x": 150.0, "y": 140.0, "radiant": False}]
     assert players[1001]["wards"] == []
+
+
+def test_team_players_games_outside_the_league_whatever_the_filters(league):
+    game = {"start_time": 1, "game_mode": 22, "lobby_type": 7, "kills": 4, "deaths": 2, "assists": 9}
+    league.add_all(
+        [
+            PlayerGameList(account_id=1000, fetched_at=0),
+            PlayerGame(account_id=1000, match_id=91, hero_id=8, player_slot=129, radiant_win=False, lane_role=3, **game),
+            PlayerGame(account_id=1000, match_id=92, hero_id=8, player_slot=0, radiant_win=False, lane_role=None,
+                       **{**game, "start_time": 2}),
+        ]
+    )  # fmt: skip
+    players = {p["account_id"]: p for p in queries.team(league, US, league_id=19418)["players"]}
+    assert players[1000]["outside_listed"]
+    assert players[1000]["outside"] == [  # newest first; a Dire player wins when Radiant loses
+        {"match_id": 92, "hero_id": 8, "win": False, "role": "none", "kills": 4, "deaths": 2, "assists": 9},
+        {"match_id": 91, "hero_id": 8, "win": True, "role": "off", "kills": 4, "deaths": 2, "assists": 9},
+    ]
+    assert (players[1001]["outside_listed"], players[1001]["outside"]) == (False, [])
 
 
 def test_a_league_game_is_a_match_page_before_its_replay_was_asked_for(league):

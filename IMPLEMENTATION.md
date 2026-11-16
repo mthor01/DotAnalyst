@@ -185,6 +185,16 @@ Built from the drafts and scoreboards of the league games (`league_matches`).
 - A **player's averages on a hero** are the plain means of kills, deaths, assists, last hits, GPM and XPM over the player's league games for this team on that hero.
 - A **player's wards** are those of the player's games for this team whose replay is parsed.
 
+### A league player's games outside the league
+
+Shown on the team page under each player, as the same role wheel as a profile's (`dotanalyst/opendota.py`).
+
+- **Source:** OpenDota's list of the player's matches (`/players/{id}/matches`), basic numbers only: hero, side, result, K/D/A, mode, lobby and OpenDota's `lane_role`. The replays of these games are never downloaded or parsed; the poller only wants replays of league games and of tracked accounts' matches.
+- **Which games:** the newest 100 (`GAMES`) of the 150 asked for (`ASKED`), after leaving out practice and tournament lobbies (lobby type 1 and 2, league games of any league) and any match stored in `league_matches`. A row without an integer match id, start time, hero and slot, or a true/false result, is dropped.
+- **Role:** `lane_role` 1 is the safe lane, 2 mid, 3 the off lane, 4 jungle. OpenDota has it only for games it parsed itself; the others count as "lane unknown".
+- **When:** after the replay downloads of each poll, for up to 5 players (`PLAYERS_PER_POLL`) not asked for yet, those of the newest league games first. A player is asked for once and never again, so the list does not grow with the player's later games. A private match history gives an empty list, which still counts as asked. A failed answer leaves the player for the next poll.
+- The time and season filters do not apply to these games.
+
 ### League games as matches
 
 A league game starts out in `league_matches` only; its match page is built from the answer Steam gave for it. It is copied into `matches` when it is younger than 30 days (`MAX_AGE_DAYS`, each poll, so the poller downloads its replay and computes its stats like any match's) or when its replay is asked for (the button on its page, or under "First moves" on a team page). From then on it is a match like any other. No tracked account plays in it, so it joins no account's stats: those only count rows where the account itself played.

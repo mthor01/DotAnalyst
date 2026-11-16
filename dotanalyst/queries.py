@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
-from .db import TABLES, Account, Lane, LeagueMatch, Match, MatchPlayer, Metric, PlayerName, Ward
+from .db import TABLES, Account, Lane, LeagueMatch, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerName, Ward
 from .steam import ANONYMOUS, LEAGUES, match_rows
 
 OTHER = aliased(MatchPlayer)
@@ -16,6 +16,7 @@ SCOREBOARD = (
     "xp_per_min", "net_worth", "level", "hero_damage", "tower_damage", "hero_healing", "items",
 )  # fmt: skip
 AVERAGED = ("kills", "deaths", "assists", "last_hits", "gold_per_min", "xp_per_min")  # of a league player on a hero
+LANE_ROLES = {1: "safe", 2: "mid", 3: "off", 4: "jungle"}  # OpenDota's lane_role, as the role wheel names them
 
 
 def between(start_time, date_from: date | None, date_to: date | None) -> list:
@@ -309,8 +310,21 @@ def team(
             )
     n = PlayerName
     known = dict(session.execute(select(n.account_id, n.name).where(n.account_id.in_(players))).all())
+    # their games outside the league, for the role wheel: the time and season filters do not apply to them
+    listed = set(session.scalars(select(PlayerGameList.account_id).where(PlayerGameList.account_id.in_(players))))
+    outside = {account_id: [] for account_id in players}
+    pg = PlayerGame
+    for g in session.scalars(select(pg).where(pg.account_id.in_(players)).order_by(pg.start_time.desc())):
+        outside[g.account_id].append(
+            {
+                "match_id": g.match_id, "hero_id": g.hero_id, "win": (g.player_slot < 128) == g.radiant_win,
+                "role": LANE_ROLES.get(g.lane_role, "none"), "kills": g.kills, "deaths": g.deaths, "assists": g.assists,
+            }
+        )  # fmt: skip
     for player in players.values():
         player["name"] = known.get(player["account_id"])
+        player["outside_listed"] = player["account_id"] in listed
+        player["outside"] = outside[player["account_id"]]
         player["heroes"] = sorted(player["heroes"].values(), key=lambda h: -h["games"])
         for h in player["heroes"]:
             h.update({stat: h[stat] / h["games"] for stat in AVERAGED})

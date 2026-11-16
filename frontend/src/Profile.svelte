@@ -2,6 +2,7 @@
   import { get, percent, type Account, type MatchRow, type WardSpot } from './lib/api'
   import { heroIcon, heroName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
+  import RoleWheel, { tally, type Role } from './lib/RoleWheel.svelte'
   import WardHeat from './lib/WardHeat.svelte'
 
   let { query, account }: { query: string; account: Account | undefined } = $props()
@@ -28,50 +29,12 @@
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
 
   // ---- roles: the lane seen from the player's side. Radiant's safe lane is bottom, Dire's is top.
-  const ROLES = {
-    safe: { title: 'Safe lane', color: 'series-1' },
-    mid: { title: 'Mid lane', color: 'series-2' },
-    off: { title: 'Off lane', color: 'series-4' },
-    jungle: { title: 'Jungle', color: 'series-3' },
-    none: { title: 'No replay', color: 'axis' },
-  }
-  type Role = keyof typeof ROLES
   function roleOf(r: MatchRow): Role {
     if (r.lane === 'top' || r.lane === 'bot') return (r.lane === 'bot') === r.radiant ? 'safe' : 'off'
     return r.lane ?? 'none'
   }
-  type Tally = { hero_id: number; games: number; wins: number; kills: number; deaths: number; assists: number }
-  /** Games per hero, most played first. */
-  function tally(matches: MatchRow[]): Tally[] {
-    const found = new Map<number, Tally>()
-    for (const r of matches) {
-      const t = found.get(r.hero_id) ?? { hero_id: r.hero_id, games: 0, wins: 0, kills: 0, deaths: 0, assists: 0 }
-      found.set(r.hero_id, { ...t, games: t.games + 1, wins: t.wins + r.win, kills: t.kills + r.kills, deaths: t.deaths + r.deaths, assists: t.assists + r.assists })
-    }
-    return [...found.values()].sort((a, b) => b.games - a.games || b.wins - a.wins)
-  }
   const heroes = $derived(tally(recent))
-  /** The wheel: each role's share of the matches, and inside it the heroes played there. `from` and `to` are turns. */
-  const wheel = $derived.by(() => {
-    let at = 0
-    return (Object.keys(ROLES) as Role[]).flatMap((id) => {
-      const mine = recent.filter((r) => roleOf(r) === id)
-      if (!mine.length) return []
-      const from = at
-      const slices = tally(mine).map((t) => ({ ...t, from: at, to: (at += t.games / recent.length) }))
-      return [{ id, ...ROLES[id], games: mine.length, wins: mine.filter((r) => r.win).length, from, to: at, slices }]
-    })
-  })
-  const point = (r: number, turn: number) => `${r * Math.sin(2 * Math.PI * turn)} ${-r * Math.cos(2 * Math.PI * turn)}`
-  /** A ring segment between two radii, clockwise from the top. */
-  function segment(inner: number, outer: number, from: number, to: number): string {
-    to = Math.min(to, from + 0.9999) // a full circle has no direction to draw in
-    const large = to - from > 0.5 ? 1 : 0
-    return `M${point(outer, from)}A${outer} ${outer} 0 ${large} 1 ${point(outer, to)}L${point(inner, to)}A${inner} ${inner} 0 ${large} 0 ${point(inner, from)}Z`
-  }
-  const ICON = 15 // in the wheel's units; a slice shorter than this along its arc gets no hero icon
-  const ICON_AT = 78
-  const record = (wins: number, games: number) => `${games} ${games === 1 ? 'match' : 'matches'}, ${percent(wins, games)}% won`
+  const roles = $derived(recent.map((r) => ({ ...r, role: roleOf(r) })))
 
   // ---- the strip: one column per match, oldest on the left
   const strip = $derived([...recent].reverse())
@@ -113,40 +76,7 @@
 
   <div class="overview">
     <section class="card roles">
-      <svg viewBox="-100 -100 200 200" role="img" aria-label="Roles and heroes of the last {recent.length} matches; the lists beside it have the numbers">
-        {#each wheel as role (role.id)}
-          <path class="role" d={segment(36, 56, role.from, role.to)} style:fill="var(--{role.color})">
-            <title>{role.title}: {record(role.wins, role.games)}</title>
-          </path>
-          {#each role.slices as s (s.hero_id)}
-            {@const middle = (s.from + s.to) / 2}
-            <g class="slice">
-              <title>{heroName(s.hero_id)}, {role.title.toLowerCase()}: {record(s.wins, s.games)}</title>
-              <path d={segment(59, 97, s.from, s.to)} class:winning={s.wins * 2 >= s.games} class:losing={s.wins * 2 < s.games} />
-              {#if (s.to - s.from) * 2 * Math.PI * ICON_AT >= ICON + 2}
-                <image
-                  href={heroIcon(s.hero_id)}
-                  x={ICON_AT * Math.sin(2 * Math.PI * middle) - ICON / 2}
-                  y={-ICON_AT * Math.cos(2 * Math.PI * middle) - ICON / 2}
-                  width={ICON}
-                  height={ICON}
-                />
-              {/if}
-            </g>
-          {/each}
-        {/each}
-        <text class="count" y="2">{recent.length}</text>
-        <text class="unit" y="15">matches</text>
-      </svg>
-      <ul>
-        {#each wheel as role (role.id)}
-          <li>
-            <i class="swatch" style:background="var(--{role.color})"></i>{role.title}
-            <span class="muted">{record(role.wins, role.games)}</span>
-          </li>
-        {/each}
-        <li class="muted key">Outer ring: the heroes played there, green when winning at least half, red when losing more.</li>
-      </ul>
+      <RoleWheel games={roles} none="No replay" />
     </section>
 
     <section class="card">
@@ -269,68 +199,9 @@
     }
   }
   .roles {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 12px 24px;
-    padding: 18px;
-  }
-  .roles svg {
-    flex: 0 1 270px;
-    min-width: 200px;
-  }
-  .role,
-  .slice path {
-    stroke: var(--surface);
-    stroke-width: 1.2;
-  }
-  /* a hero's slice is tinted by its win rate: green from half up, red below */
-  .slice path {
-    fill: var(--muted);
-    fill-opacity: 0.25;
-  }
-  .slice .winning {
-    fill: var(--good);
-  }
-  .slice .losing {
-    fill: var(--critical);
-  }
-  .slice:hover path {
-    fill-opacity: 0.5;
-  }
-  .slice image {
-    pointer-events: none;
-  }
-  text {
-    text-anchor: middle;
-    fill: var(--text);
-  }
-  .count {
-    font-size: 22px;
-    font-weight: 800;
-    font-stretch: 125%;
-  }
-  .unit {
-    font-size: 8px;
-    fill: var(--muted);
-  }
-  .roles ul {
-    flex: 0 1 170px;
-    list-style: none;
-    margin: 0;
-    padding: 0;
     display: grid;
-    gap: 8px;
-  }
-  .roles li .muted {
-    display: block;
-    padding-left: 16px;
-    font-size: 13px;
-  }
-  .roles .key {
-    max-width: 24ch;
-    font-size: 13px;
+    align-content: center;
+    padding: 18px;
   }
   .rate {
     display: inline-block;
