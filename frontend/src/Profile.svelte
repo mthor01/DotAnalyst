@@ -122,7 +122,7 @@
             {@const middle = (s.from + s.to) / 2}
             <g class="slice">
               <title>{heroName(s.hero_id)}, {role.title.toLowerCase()}: {record(s.wins, s.games)}</title>
-              <path d={segment(59, 97, s.from, s.to)} class:winning={s.wins * 2 > s.games} class:losing={s.wins * 2 < s.games} />
+              <path d={segment(59, 97, s.from, s.to)} class:winning={s.wins * 2 >= s.games} class:losing={s.wins * 2 < s.games} />
               {#if (s.to - s.from) * 2 * Math.PI * ICON_AT >= ICON + 2}
                 <image
                   href={heroIcon(s.hero_id)}
@@ -145,7 +145,7 @@
             <span class="muted">{record(role.wins, role.games)}</span>
           </li>
         {/each}
-        <li class="muted key">Outer ring: the heroes played there, green when winning more than half, red when losing more.</li>
+        <li class="muted key">Outer ring: the heroes played there, green when winning at least half, red when losing more.</li>
       </ul>
     </section>
 
@@ -285,7 +285,7 @@
     stroke: var(--surface);
     stroke-width: 1.2;
   }
-  /* a hero's slice is tinted by its win rate: green above half, red below, plain at exactly half */
+  /* a hero's slice is tinted by its win rate: green from half up, red below */
   .slice path {
     fill: var(--muted);
     fill-opacity: 0.25;
