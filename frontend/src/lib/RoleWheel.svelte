@@ -26,6 +26,8 @@
 </script>
 
 <script lang="ts">
+  import { cubicInOut } from 'svelte/easing'
+  import { prefersReducedMotion, Tween } from 'svelte/motion'
   import { heroIcon, heroName } from './constants.svelte'
 
   /** `none` names the games without a known lane. */
@@ -58,20 +60,46 @@
   }
   const ICON = 15 // in the wheel's units; a slice shorter than this along its arc gets no hero icon
   const ICON_AT = 78
+
+  // ---- a lane clicked in the middle ring fills the whole wheel: 0 shows all lanes, 1 that lane alone
+  let focus = $state<Role>() // kept while the wheel widens back, so it unfolds the way it folded
+  const zoom = new Tween(0, { easing: cubicInOut })
+  const show = (id?: Role) => {
+    if (id) focus = id
+    zoom.set(id ? 1 : 0, { duration: prefersReducedMotion.current ? 0 : 700 })
+  }
+  const alone = $derived(zoom.target === 1 ? wheel.find((r) => r.id === focus) : undefined)
+  /** Where a turn of the full wheel is drawn: `zoom` of the way to its place once the focused lane fills the ring. */
+  function turn(t: number) {
+    const r = wheel.find((r) => r.id === focus)
+    if (!r) return t
+    return t + zoom.current * (Math.min(1, Math.max(0, (t - r.from) / (r.to - r.from))) - t)
+  }
 </script>
 
 <div class="roles">
-  <svg viewBox="-100 -100 200 200" role="img" aria-label="Roles and heroes of the last {games.length} matches; the lists beside it have the numbers">
+  <svg viewBox="-100 -100 200 200" role="group" aria-label="Roles and heroes of the last {games.length} matches; click a lane in the middle ring to see it alone; the lists beside it have the numbers">
     {#each wheel as role (role.id)}
-      <path class="role" d={segment(36, 56, role.from, role.to)} style:fill="var(--{role.color})">
+      <path
+        class="role"
+        class:pick={!alone}
+        d={segment(36, 56, turn(role.from), turn(role.to))}
+        style:fill="var(--{role.color})"
+        role="button"
+        tabindex={alone ? -1 : 0}
+        onclick={() => !alone && show(role.id)}
+        onkeydown={(e) => !alone && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), show(role.id))}
+      >
         <title>{role.title}: {record(role.wins, role.games)}</title>
       </path>
       {#each role.slices as s (s.hero_id)}
-        {@const middle = (s.from + s.to) / 2}
+        {@const from = turn(s.from)}
+        {@const to = turn(s.to)}
+        {@const middle = (from + to) / 2}
         <g class="slice">
           <title>{heroName(s.hero_id)}, {role.title.toLowerCase()}: {record(s.wins, s.games)}</title>
-          <path d={segment(59, 97, s.from, s.to)} class:winning={s.wins * 2 >= s.games} class:losing={s.wins * 2 < s.games} />
-          {#if (s.to - s.from) * 2 * Math.PI * ICON_AT >= ICON + 2}
+          <path d={segment(59, 97, from, to)} class:winning={s.wins * 2 >= s.games} class:losing={s.wins * 2 < s.games} />
+          {#if (to - from) * 2 * Math.PI * ICON_AT >= ICON + 2}
             <image
               href={heroIcon(s.hero_id)}
               x={ICON_AT * Math.sin(2 * Math.PI * middle) - ICON / 2}
@@ -83,8 +111,8 @@
         </g>
       {/each}
     {/each}
-    <text class="count" y="2">{games.length}</text>
-    <text class="unit" y="15">matches</text>
+    <text class="count" y="2">{alone ? alone.games : games.length}</text>
+    <text class="unit" y="15">{alone ? alone.title.toLowerCase() : 'matches'}</text>
   </svg>
   <ul>
     {#each wheel as role (role.id)}
@@ -93,7 +121,11 @@
         <span class="muted">{record(role.wins, role.games)}</span>
       </li>
     {/each}
-    <li class="muted key">Outer ring: the heroes played there, green when winning at least half, red when losing more.</li>
+    <li class="muted key">
+      Outer ring: the heroes played there, green when winning at least half, red when losing more. Click a lane in the
+      middle ring to see its heroes alone.
+    </li>
+    {#if alone}<li><button class="action" onclick={() => show()}>Show all lanes</button></li>{/if}
   </ul>
 </div>
 
@@ -113,6 +145,16 @@
   .slice path {
     stroke: var(--surface);
     stroke-width: 1.2;
+  }
+  .role.pick {
+    cursor: pointer;
+  }
+  .role.pick:hover {
+    filter: brightness(1.2);
+  }
+  .role:focus-visible {
+    outline: none;
+    stroke: var(--text);
   }
   /* a hero's slice is tinted by its win rate: green from half up, red below */
   .slice path {
