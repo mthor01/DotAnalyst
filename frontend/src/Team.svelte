@@ -5,7 +5,7 @@
   import Openings from './lib/Openings.svelte'
   import WardHeat from './lib/WardHeat.svelte'
 
-  let { id }: { id: string } = $props()
+  let { id, query }: { id: string; query: string } = $props()
   let team = $state<TeamDetail>()
   let error = $state('')
   let fetched = $state(0) // goes up when a replay asked for on this page has arrived: the team is read again
@@ -13,7 +13,7 @@
   $effect(() => {
     fetched
     let current = true // a slower, older request must not overwrite a newer one
-    get<TeamDetail>(`teams/${id}`).then(
+    get<TeamDetail>(`teams/${id}?${query}`).then(
       (found) => current && ((team = found), (error = '')),
       (e) => current && (error = e.message),
     )
@@ -71,6 +71,9 @@
   <p class="error" role="alert">{error}</p>
 {:else if team}
   <h2>{team.name || `Team ${team.team_id}`}</h2>
+  {#if !games}
+    <p class="muted">No league games of theirs in this season and time frame. <a href="#teams">All teams</a></p>
+  {:else}
   <p class="muted">{games} league games, {wins} won ({percent(wins, games)}%). {seasons}. <a href="#teams">All teams</a></p>
 
   <h2>Heroes in their drafts</h2>
@@ -208,6 +211,7 @@
       </tbody>
     </table>
   </div>
+  {/if}
 {/if}
 
 <style>

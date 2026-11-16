@@ -156,6 +156,8 @@ export type Constants = {
   items: Record<number, string>
   /** Ability name as in replays -> the name the game shows. */
   abilities: Record<string, string>
+  /** The tracked leagues, one per season: league id -> "Season 8". */
+  leagues: Record<number, string>
 }
 
 export async function get<T>(path: string, query = ''): Promise<T> {

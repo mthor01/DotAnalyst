@@ -2,6 +2,7 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
@@ -15,7 +16,7 @@ from .db import DATA, Ability, Account, Hero, Item, open_engine
 from .metrics import NAMES
 from .poll import poll_forever
 from .replay import ReplayError
-from .steam import SteamError
+from .steam import LEAGUES, SteamError
 
 engine = open_engine()
 FRONTEND = Path("frontend/dist")
@@ -52,6 +53,7 @@ def constants(session: Db) -> dict:
         "heroes": {h.id: {"name": h.name, "localized_name": h.localized_name} for h in session.scalars(select(Hero))},
         "items": {i.id: i.name for i in session.scalars(select(Item))},
         "abilities": {a.name: a.dname for a in session.scalars(select(Ability))},
+        "leagues": LEAGUES,
     }
 
 
@@ -150,8 +152,10 @@ def teams(session: Db) -> list[dict]:
 
 
 @app.get("/api/teams/{team_id}")
-def team(session: Db, team_id: int) -> dict:
-    found = queries.team(session, team_id)
+def team(
+    session: Db, team_id: int, date_from: date | None = None, date_to: date | None = None, league_id: int | None = None
+) -> dict:
+    found = queries.team(session, team_id, date_from, date_to, league_id)
     if found is None:
         raise HTTPException(404, f"no league games of team {team_id} are stored")
     return found

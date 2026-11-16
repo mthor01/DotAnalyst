@@ -18,19 +18,28 @@ SCOREBOARD = (
 AVERAGED = ("kills", "deaths", "assists", "last_hits", "gold_per_min", "xp_per_min")  # of a league player on a hero
 
 
+def between(start_time, date_from: date | None, date_to: date | None) -> list:
+    """Conditions on a start_time column for local days, both inclusive."""
+    found = []
+    if date_from is not None:
+        found.append(start_time >= datetime.combine(date_from, time.min).timestamp())
+    if date_to is not None:
+        found.append(start_time < datetime.combine(date_to + timedelta(days=1), time.min).timestamp())
+    return found
+
+
 def conditions(
     account_id: int,
     date_from: date | None = None,
     date_to: date | None = None,
     game_mode: int | None = None,
     lobby_type: int | None = None,
+    league_id: int | None = None,
 ) -> list:
     """SQL conditions for the filters every view shares. Dates are local days, both inclusive."""
-    found = [MatchPlayer.account_id == account_id]
-    if date_from is not None:
-        found.append(Match.start_time >= datetime.combine(date_from, time.min).timestamp())
-    if date_to is not None:
-        found.append(Match.start_time < datetime.combine(date_to + timedelta(days=1), time.min).timestamp())
+    found = [MatchPlayer.account_id == account_id, *between(Match.start_time, date_from, date_to)]
+    if league_id is not None:
+        found.append(Match.match_id.in_(select(LeagueMatch.match_id).where(LeagueMatch.league_id == league_id)))
     if game_mode is not None:
         found.append(Match.game_mode == game_mode)
     if lobby_type is not None:
@@ -215,19 +224,28 @@ def teams(session: Session) -> list[dict]:
     return sorted(found.values(), key=lambda t: (t["name"] or "").lower())
 
 
-def team(session: Session, team_id: int) -> dict | None:
+def team(
+    session: Session,
+    team_id: int,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    league_id: int | None = None,
+) -> dict | None:
     """One team's league games, newest first, and what they add up to. None for a team without a stored game.
 
     A hero is open in a game when neither side banned it and the other side did not pick it, so banned_against +
     banned + picked_against + open is the number of games. A player's wards come from the games whose replay is
-    parsed (`replays` says how many of the player's games those are).
+    parsed (`replays` says how many of the player's games those are). The dates and the league narrow the games
+    counted; a team with no game in them has an empty answer, not None.
     """
-    m = LeagueMatch
-    played = or_(m.radiant_team_id == team_id, m.dire_team_id == team_id)
-    rows = session.scalars(select(m).where(played).order_by(m.start_time.desc())).all() if team_id else []
-    if not rows:
-        return None
     names = {t["team_id"]: t["name"] for t in teams(session)}
+    if team_id not in names:
+        return None
+    m = LeagueMatch
+    where = [or_(m.radiant_team_id == team_id, m.dire_team_id == team_id), *between(m.start_time, date_from, date_to)]
+    if league_id is not None:
+        where.append(m.league_id == league_id)
+    rows = session.scalars(select(m).where(*where).order_by(m.start_time.desc())).all()
     games = []
     heroes: dict[int, dict] = {}
     players: dict[int, dict] = {}

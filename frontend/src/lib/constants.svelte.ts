@@ -3,7 +3,7 @@ import { get, type Constants } from './api'
 const CDN = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react'
 
 /** Hero and item names, shared by every page. Empty until loadConstants resolves. */
-export const constants: Constants = $state({ heroes: {}, items: {}, abilities: {} })
+export const constants: Constants = $state({ heroes: {}, items: {}, abilities: {}, leagues: {} })
 
 export async function loadConstants() {
   Object.assign(constants, await get<Constants>('constants'))

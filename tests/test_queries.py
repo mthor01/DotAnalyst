@@ -94,6 +94,9 @@ def test_filters(session):
     assert found(date_to=date(2026, 7, 10)) == [2, 1]  # the end day is included
     assert found(date_from=date(2026, 7, 11), date_to=date(2026, 8, 9)) == []
     assert ids(queries.matches(session, queries.conditions(FRIEND))) == [3, 2, 1]
+    store_league_match(session, {**MATCHES[1], "leagueid": 19418})  # match 2 was a league game
+    assert found(league_id=19418) == [2]
+    assert found(league_id=20408) == []
 
 
 def test_heroes_counts_and_averages(session):
@@ -175,6 +178,7 @@ LEAGUE_GAMES = [
     league_game(5, 5, OTHER, NO_TEAM, False, radiant_bans=[], dire_bans=[]),  # the Dire side has no team
 ]  # fmt: skip
 LEAGUE_GAMES[3]["dire_name"] = LEAGUE_GAMES[4]["radiant_name"] = ""  # Steam sends some games with an empty team name
+LEAGUE_GAMES[0]["leagueid"] = 19418  # the first game is of the season before
 
 
 @pytest.fixture
@@ -283,3 +287,17 @@ def test_team_name_is_the_newest_one_that_is_not_empty(league):
 
 def test_team_without_games_is_none(league):
     assert queries.team(league, 99) is None
+
+
+def test_team_games_narrowed_by_dates_and_season(league):
+    def games(**filters):
+        return [g["match_id"] for g in queries.team(league, US, **filters)["games"]]
+
+    assert games(date_from=date(2026, 11, 2)) == [3, 2]
+    assert games(date_to=date(2026, 11, 2)) == [2, 1]  # the end day is included
+    assert games(league_id=20408) == [3, 2]
+    assert games(league_id=19418) == [1]
+    empty = queries.team(league, US, date_from=date(2026, 12, 1))  # a known team without a game in the time frame
+    assert (empty["name"], empty["games"], empty["heroes"], empty["players"]) == ("Us", [], [], [])
+    heroes = {h["hero_id"]: h for h in queries.team(league, US, league_id=20408)["heroes"]}
+    assert heroes[50]["banned_against"] == 1  # game 1, where Them banned it too, is not counted

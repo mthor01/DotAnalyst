@@ -1,6 +1,6 @@
 <script lang="ts">
   import { GAME_MODES, LOBBY_TYPES, get, post, type Account } from './lib/api'
-  import { loadConstants } from './lib/constants.svelte'
+  import { constants, loadConstants } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
   import Match from './Match.svelte'
   import Matches from './Matches.svelte'
@@ -23,10 +23,22 @@
   const league = $derived(!!teamId || (!matchId && page === 'teams'))
   let accounts = $state<Account[]>([])
   let error = $state('')
-  let filters = $state({ account_id: '', lobby_type: '', game_mode: '', date_from: '', date_to: '' })
+  let filters = $state({ account_id: '', lobby_type: '', game_mode: '', league_id: '', date_from: '', date_to: '' })
+  // a number is that many months back from today; only "dates" uses the From and To days
+  const SPANS = { '1': 'Last month', '3': 'Last 3 months', '6': 'Last 6 months', '12': 'Last year', all: 'All time', dates: 'Dates…' }
+  let span = $state('all')
+  function monthsAgo(n: number) {
+    const day = new Date()
+    day.setMonth(day.getMonth() - n)
+    return day.toLocaleDateString('en-CA') // YYYY-MM-DD in local time, what the API takes
+  }
 
   // every view takes the same filters, so they travel as one query string
-  const query = $derived(new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== '')).toString())
+  const query = $derived.by(() => {
+    const sent = { ...filters }
+    if (span !== 'dates') [sent.date_from, sent.date_to] = [span === 'all' ? '' : monthsAgo(Number(span)), '']
+    return new URLSearchParams(Object.entries(sent).filter(([, v]) => v !== '')).toString()
+  })
 
   Promise.all([get<Account[]>('accounts'), loadConstants()]).then(
     ([found]) => {
@@ -92,15 +104,16 @@
     </div>
   </header>
 
-  <div class="filters" hidden={!!matchId || league || page === 'queue'}>
-    <label>
+  <!-- a team page takes the time and the season; lobby and mode are the same in every league game -->
+  <div class="filters" hidden={!!matchId || (league && !teamId) || page === 'queue'}>
+    <label hidden={league}>
       Lobby
       <select bind:value={filters.lobby_type}>
         <option value="">All</option>
         {#each Object.entries(LOBBY_TYPES) as [id, name]}<option value={id}>{name}</option>{/each}
       </select>
     </label>
-    <label>
+    <label hidden={league}>
       Mode
       <select bind:value={filters.game_mode}>
         <option value="">All</option>
@@ -109,8 +122,23 @@
         {/each}
       </select>
     </label>
-    <label>From <input type="date" bind:value={filters.date_from} /></label>
-    <label>To <input type="date" bind:value={filters.date_to} /></label>
+    <label>
+      Season
+      <select bind:value={filters.league_id}>
+        <option value="">All games</option>
+        {#each Object.entries(constants.leagues).reverse() as [id, name]}<option value={id}>{name}</option>{/each}
+      </select>
+    </label>
+    <label>
+      Time
+      <select bind:value={span}>
+        {#each Object.entries(SPANS) as [id, name]}<option value={id}>{name}</option>{/each}
+      </select>
+    </label>
+    {#if span === 'dates'}
+      <label>From <input type="date" bind:value={filters.date_from} /></label>
+      <label>To <input type="date" bind:value={filters.date_to} /></label>
+    {/if}
   </div>
 
   {#key version}
@@ -119,7 +147,7 @@
   {:else if matchId}
     <Match id={matchId} />
   {:else if teamId}
-    <Team id={teamId} />
+    <Team id={teamId} {query} />
   {:else if page === 'teams'}
     <Teams />
   {:else if page === 'queue'}
