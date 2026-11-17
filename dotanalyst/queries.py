@@ -4,7 +4,10 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
-from .db import TABLES, Account, Lane, LeagueMatch, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerName, Ward
+from .db import (
+    TABLES, Account, Lane, LeagueMatch, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerName, Tormentor,
+    Ward, WisdomRune,
+)  # fmt: skip
 from .steam import ANONYMOUS, LEAGUES, match_rows
 
 OTHER = aliased(MatchPlayer)
@@ -79,7 +82,11 @@ def positions(team: list[dict]) -> dict[int, int]:
 
 def _positions(session: Session, where: list) -> dict[tuple[int, int], int]:
     """Position of every player in the matches `where` finds, by (match_id, player_slot)."""
-    played = _mine(MatchPlayer.match_id).where(*where)
+    return _positions_in(session, _mine(MatchPlayer.match_id).where(*where))
+
+
+def _positions_in(session: Session, played) -> dict[tuple[int, int], int]:
+    """Position of every player in the matches `played` lists, by (match_id, player_slot)."""
     rows = session.execute(
         select(OTHER.match_id, OTHER.player_slot, OTHER.last_hits, OTHER.net_worth, Lane.lane)
         .outerjoin(Lane, and_(Lane.match_id == OTHER.match_id, Lane.player_slot == OTHER.player_slot))
@@ -398,8 +405,70 @@ def team(
         player["heroes"] = sorted(player["heroes"].values(), key=lambda h: -h["games"])
         for h in player["heroes"]:
             h.update({stat: h[stat] / h["games"] for stat in AVERAGED})
+    side_of = {g.match_id: g.radiant_team_id == team_id for g in rows if g.match_id in parsed}  # True: Radiant
     return {
         "team_id": team_id, "name": names[team_id], "games": games,
         "heroes": sorted(heroes.values(), key=lambda h: (-h["banned_against"], -h["picked"])),
         "players": sorted(players.values(), key=lambda p: -p["games"]),
+        "tormentors": _team_tormentors(session, side_of), "wisdom": _team_wisdom(session, side_of),
+        "draft": _team_draft(session, [g for g in rows if g.match_id in parsed], side_of),
     }  # fmt: skip
+
+
+def _mean(values: list) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def _team_tormentors(session: Session, side_of: dict[int, bool]) -> dict:
+    """The Tormentors of the team's parsed games, every one and each game's first, from the team's side: how many it
+    took and the other side took, and when it took one, the enemies dead and its net worth lead (negative: behind)."""
+    kills = session.scalars(select(Tormentor).where(Tormentor.match_id.in_(side_of)).order_by(Tormentor.time, Tormentor.id))
+    kills = kills.all()
+    first: dict[int, Tormentor] = {}
+    for k in kills:
+        first.setdefault(k.match_id, k)
+
+    def summary(found: list[Tormentor]) -> dict:
+        taken = [k for k in found if k.radiant == side_of[k.match_id]]
+        return {
+            "taken": len(taken), "against": len(found) - len(taken), "enemies_dead": _mean([k.enemies_dead for k in taken]),
+            "lead": _mean([k.radiant_lead if k.radiant else -k.radiant_lead for k in taken]),
+        }  # fmt: skip
+
+    return {"games": len(side_of), "all": summary(kills), "first": summary(list(first.values()))}
+
+
+def _team_wisdom(session: Session, side_of: dict[int, bool]) -> dict:
+    """The wisdom runes of the team's parsed games, its own (in its half of the map) and the enemy's: how many
+    appeared, how many it came for, with how many heroes and what net worth lead, and how many it took."""
+    found: dict[str, list[WisdomRune]] = {"own": [], "enemy": []}
+    for r in session.scalars(select(WisdomRune).where(WisdomRune.match_id.in_(side_of))):
+        found["own" if (r.rune == "radiant") == side_of[r.match_id] else "enemy"].append(r)
+
+    def summary(runes: list[WisdomRune]) -> dict:
+        def heroes(r: WisdomRune) -> int:
+            return r.radiant_heroes if side_of[r.match_id] else r.dire_heroes
+
+        came = [r for r in runes if heroes(r)]
+        return {
+            "spawns": len(runes), "contested": len(came), "heroes": _mean([heroes(r) for r in came]),
+            "taken": sum(r.taken_by_radiant is side_of[r.match_id] for r in runes),
+            "lead": _mean([r.radiant_lead if side_of[r.match_id] else -r.radiant_lead for r in came]),
+        }  # fmt: skip
+
+    return {side: summary(runes) for side, runes in found.items()}
+
+
+def _team_draft(session: Session, games: list[LeagueMatch], side_of: dict[int, bool]) -> list[list[int]]:
+    """For the team's 1st to 5th pick in its parsed games, how often the hero played position 1, 2, 3, 4 and 5."""
+    counts = [[0] * 5 for _ in range(5)]
+    if not games:
+        return counts
+    position = _positions_in(session, list(side_of))
+    for g in games:
+        slot_of = {p["hero_id"]: p["player_slot"] for p in g.raw_json["players"]}
+        picks = [b for b in g.raw_json.get("picks_bans") or [] if b["is_pick"] and (b["team"] == 0) == side_of[g.match_id]]
+        for k, b in enumerate(sorted(picks, key=lambda b: b["order"])[:5]):
+            if n := position.get((g.match_id, slot_of.get(b["hero_id"]))):
+                counts[k][n - 1] += 1
+    return counts

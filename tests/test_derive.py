@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 
 from dotanalyst import queries
 from dotanalyst.db import (
-    AbilityUpgrade, Base, Building, Death, Derived, Lane, Match, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Ward,
+    AbilityUpgrade, Base, Building, Death, Derived, Lane, Match, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Tormentor, Ward,
+    WisdomRune,
 )  # fmt: skip
-from dotanalyst.derive import TABLES, derive, fights, positions, read_log, recompute, zone
+from dotanalyst.derive import TABLES, Log, derive, fights, positions, read_log, recompute, tormentors, zone
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MATCH_ID = 8810606282
@@ -180,6 +181,33 @@ def test_lanes(rows):
         assert Counter(lane[slot] for slot in team) == {"top": 2, "mid": 1, "bot": 2}
 
 
+def test_wisdom_runes(rows):
+    """The game ended at 15:11: two spawns. Muerta (Dire) took Radiant's rune at 7:03 with Phoenix standing by."""
+    found = {(r["time"], r["rune"]): r for r in rows[WisdomRune]}
+    assert set(found) == {(420, "radiant"), (420, "dire"), (840, "radiant"), (840, "dire")}
+    lead = {"radiant_lead": -4601}
+    assert found[420, "radiant"] == {"time": 420, "rune": "radiant", "radiant_heroes": 1, "dire_heroes": 1, "taken_by_radiant": False, **lead}
+    assert found[420, "dire"] == {"time": 420, "rune": "dire", "radiant_heroes": 1, "dire_heroes": 1, "taken_by_radiant": False, **lead}
+    lead = {"radiant_lead": -11765}
+    assert found[840, "radiant"] == {"time": 840, "rune": "radiant", "radiant_heroes": 1, "dire_heroes": 0, "taken_by_radiant": True, **lead}
+    assert found[840, "dire"] == {"time": 840, "rune": "dire", "radiant_heroes": 0, "dire_heroes": 0, "taken_by_radiant": None, **lead}
+
+
+def test_tormentors():
+    """The fixture has none: a made-up log of two heroes a side, with the Dire hero in slot 2 dead at 25:00."""
+    events = [{"type": "player_slot", "key": str(k), "value": v} for k, v in enumerate((0, 1, 128, 129))]
+    for slot, (networth, life) in enumerate(((5000, 0), (4000, 0), (3000, 1), (2500, 0))):
+        events.append({"type": "interval", "time": 1500, "slot": slot, "networth": networth, "life_state": life})
+    events += [
+        {"type": "CHAT_MESSAGE_MINIBOSS_KILL", "time": 1500, "value": 2, "player1": 0},
+        {"type": "CHAT_MESSAGE_MINIBOSS_KILL", "time": 1500, "value": 3, "player1": -1},  # a summon's blow
+    ]
+    assert tormentors(Log(events)) == [
+        {"time": 1500, "radiant": True, "enemies_dead": 1, "radiant_lead": 3500},
+        {"time": 1500, "radiant": False, "enemies_dead": 0, "radiant_lead": 3500},
+    ]
+
+
 def test_recompute_is_repeatable_and_feeds_the_match_query():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
@@ -200,7 +228,7 @@ def test_recompute_is_repeatable_and_feeds_the_match_query():
         done, problems = recompute(session, FIXTURES)
         assert done == 1 and len(problems) == 1 and "match 1" in problems[0]
         first = counts()
-        assert all(first)
+        assert all(n for model, n in zip(TABLES, first) if model is not Tormentor)  # the game ended before 20:00
         recompute(session, FIXTURES)
         assert counts() == first
 

@@ -138,6 +138,23 @@ Read from: the combat log's deaths of units named `npc_dota_goodguys_…` or `np
 
 The two tier-4 towers of a side share one name. The first of them to fall is drawn as the one listed first in `MiniMap.svelte`; the log does not say which it was.
 
+### Tormentors
+
+Read from: `CHAT_MESSAGE_MINIBOSS_KILL`, the game's own message, whose `value` names the side that killed it (2 Radiant, 3 Dire). The combat log is not used: it names a summon or an illusion when one landed the blow.
+
+- **Enemies dead:** heroes of the other side whose life state is dying or dead (1 or 2) in the interval of that second.
+- **Lead:** Radiant's net worth minus Dire's in the interval of that second (`Log.lead`).
+
+### Wisdom runes
+
+Read from: `CHAT_MESSAGE_RUNE_PICKUP` with `value` 8, and the positions of the intervals. The replay has no event for a rune appearing, so a rune is assumed at each spot every 7:00 of game time (`WISDOM_EVERY`), from 7:00 to the end. The two spots are fixed (`WISDOM_SPOTS`, in replay cells): the one in Radiant's half and the one in Dire's.
+
+- **Taken:** the first wisdom pickup from the rune's time until the next rune's, by a hero alive within 10 cells (`WISDOM_REACH`) of that spot then. A rune nobody picked up stays untaken.
+- **Heroes who came:** every hero alive within 10 cells of the spot at any second from 20 seconds before the rune (`WISDOM_BEFORE`) until its pickup, or for 30 seconds (`WISDOM_WAIT`) when nobody took it.
+- **Lead:** Radiant's net worth minus Dire's at the second the rune appeared.
+
+Known limits: a hero who passes the spot in those seconds counts as coming for the rune. The 10 cells are a guess at "at the rune", not checked against how teams play it.
+
 ### Positions
 
 Not stored. `positions()` reads the intervals of a time span from the raw log when a page asks (`GET /api/matches/{id}/positions`): ten rows a second for every match would be too much to keep for views that are rarely opened.
@@ -197,6 +214,10 @@ Built from the drafts and scoreboards of the league games (`league_matches`).
 - A team's **name** is the newest one Steam sent that is not empty.
 - A **player's averages on a hero** are the plain means of kills, deaths, assists, last hits, GPM and XPM over the player's league games for this team on that hero.
 - A **player's wards** are those of the player's games for this team whose replay is parsed, and those of the player's matches outside the league that have a parsed replay (only a tracked account's matches are ever parsed), within the time and season filters. Each ward says whether it came from a league game, for the heatmap's "Tournament games / Usual matches" dropdown.
+- **Tormentor**, **wisdom runes** and **roles in their draft** only count the team's league games whose replay is parsed. They are seen from the team's side, so a lead is the team's net worth minus the enemy's.
+  - **Tormentor:** how many the team took and the enemy took, over every Tormentor and over each game's first one (the earliest kill). Enemies dead and the lead are averaged over the ones the team took.
+  - **Wisdom runes:** split into the rune in the team's half and the one in the enemy's. The team **contested** a rune when at least one of its heroes came to it (see *Wisdom runes* above). Heroes and lead are averaged over the contested ones; taken counts every rune the team picked up.
+  - **Roles in their draft:** the team's picks from `picks_bans` in draft order, 1st to 5th. Each hero is matched to the team's player on it, and the count goes to that player's position in the game (*Position 1–5 of a player*). In Captains Mode a team picks once in the first phase, three times in the second and once in the last (checked on the stored drafts, November 2026). A game without a recorded draft adds nothing.
 
 ### A league player's games outside the league
 

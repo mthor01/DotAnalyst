@@ -137,7 +137,16 @@ export type TeamDetail = {
     outside_listed: boolean
     outside: { match_id: number; hero_id: number; win: boolean; role: 'safe' | 'mid' | 'off' | 'jungle' | 'none'; kills: number | null; deaths: number | null; assists: number | null }[]
   }[]
+  /** From the parsed games, seen from their side: a lead is their net worth minus the enemy's, null with nothing to
+   *  average. `first` counts only each game's first Tormentor. */
+  tormentors: { games: number; all: TeamTormentors; first: TeamTormentors }
+  /** `own` is the wisdom rune in their half of the map. Contested: at least one of their heroes came to it. */
+  wisdom: { own: TeamWisdom; enemy: TeamWisdom }
+  /** draft[k][p]: how often their (k+1)-th pick played position p+1, in their parsed Captains Mode games */
+  draft: number[][]
 }
+export type TeamTormentors = { taken: number; against: number; enemies_dead: number | null; lead: number | null }
+export type TeamWisdom = { spawns: number; contested: number; heroes: number | null; taken: number; lead: number | null }
 
 export type MetricPoint ={ match_id: number; start_time: number; value: number }
 export type MetricAverage = { name: string; average: number; matches: number }

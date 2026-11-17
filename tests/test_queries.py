@@ -8,7 +8,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from dotanalyst import queries
-from dotanalyst.db import Account, Base, Derived, Lane, Match, Metric, PlayerGame, PlayerGameList, PlayerName, Ward
+from dotanalyst.db import (
+    Account, Base, Derived, Lane, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerName, Tormentor, Ward,
+    WisdomRune,
+)  # fmt: skip
 from dotanalyst.steam import ANONYMOUS, store_league_match, store_match
 
 TEMPLATE = json.loads((Path(__file__).parent / "fixtures" / "details_by_seq.json").read_text(encoding="utf-8"))[
@@ -270,6 +273,42 @@ def test_team_players_wards_come_from_the_games_with_a_parsed_replay(league):
     ]
     assert players[1000]["parsed"] == [{"radiant": False, "league": True, "win": False}]  # its games, wards or none
     assert players[1001]["wards"] == []
+
+
+def test_team_tormentors_wisdom_runes_and_draft_from_its_side(league):
+    for m in LEAGUE_GAMES[:2]:  # Us play Radiant in game 1, Dire in game 2
+        store_match(league, m)
+        league.get(Match, m["match_id"]).replay_state = "parsed"
+    league.add_all(
+        [
+            Tormentor(match_id=1, time=1250, radiant=False, enemies_dead=1, radiant_lead=0),  # Them take the first
+            Tormentor(match_id=1, time=1400, radiant=True, enemies_dead=3, radiant_lead=2000),
+            Tormentor(match_id=2, time=1300, radiant=False, enemies_dead=2, radiant_lead=-1000),  # Us, 1000 ahead
+            Tormentor(match_id=2, time=1900, radiant=True, enemies_dead=0, radiant_lead=500),
+            WisdomRune(match_id=1, time=420, rune="radiant", radiant_heroes=2, dire_heroes=1, taken_by_radiant=True, radiant_lead=300),
+            WisdomRune(match_id=1, time=420, rune="dire", radiant_heroes=0, dire_heroes=1, taken_by_radiant=False, radiant_lead=300),
+            WisdomRune(match_id=2, time=420, rune="dire", radiant_heroes=1, dire_heroes=1, taken_by_radiant=False, radiant_lead=-600),
+            WisdomRune(match_id=2, time=420, rune="radiant", radiant_heroes=1, dire_heroes=1, taken_by_radiant=True, radiant_lead=-600),
+        ]
+    )  # fmt: skip
+    # Us pick into slots in slot order, and the slots farm in that order. Game 1 (Radiant, safe lane bot): the
+    # 1st pick is mid, 2nd and 5th safe lane, 3rd and 4th off lane. Game 2 (Dire, safe lane top): positions 1-5
+    lanes = {1: ("mid", "bot", "top", "top", "bot"), 2: ("top", "mid", "bot", "bot", "top")}
+    for match_id, slots in ((1, SLOTS[:5]), (2, SLOTS[5:])):
+        for i, (slot, lane) in enumerate(zip(slots, lanes[match_id])):
+            league.add(Lane(match_id=match_id, player_slot=slot, lane=lane))
+            league.get(MatchPlayer, (match_id, slot)).last_hits = 500 - 100 * i
+    found = queries.team(league, US)
+    assert found["tormentors"] == {
+        "games": 2,
+        "all": {"taken": 2, "against": 2, "enemies_dead": 2.5, "lead": 1500},
+        "first": {"taken": 1, "against": 1, "enemies_dead": 2, "lead": 1000},
+    }
+    assert found["wisdom"] == {
+        "own": {"spawns": 2, "contested": 2, "heroes": 1.5, "taken": 2, "lead": 450},
+        "enemy": {"spawns": 2, "contested": 1, "heroes": 1, "taken": 0, "lead": 600},
+    }
+    assert found["draft"] == [[1, 1, 0, 0, 0], [1, 1, 0, 0, 0], [0, 0, 2, 0, 0], [0, 0, 0, 2, 0], [0, 0, 0, 0, 2]]
 
 
 def test_team_players_wards_also_come_from_their_parsed_games_outside_the_league(league):

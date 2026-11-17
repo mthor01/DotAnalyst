@@ -51,6 +51,9 @@
     return Object.entries(games).map(([league, n]) => `${league}: ${n} games`).join(', ')
   })
   const one = (n: number) => n.toFixed(1)
+  /** An average net worth lead from their side: +1234, -560, or – with none to average */
+  const lead = (n: number | null) => (n === null ? '–' : `${n > 0 ? '+' : ''}${Math.round(n)}`)
+  const PICKS = ['1st pick (first phase)', '2nd pick (second phase)', '3rd pick (second phase)', '4th pick (second phase)', '5th pick (last phase)']
 </script>
 
 {#snippet icons(ids: number[])}
@@ -111,6 +114,88 @@
       </button>
     </p>
   {/if}
+
+  <h2>Roles in their draft</h2>
+  <p class="muted">
+    Which position the hero of each of their picks went on to play, in the {team.draft[0].reduce((a, b) => a + b, 0)} of
+    their games whose replay is parsed. In Captains Mode a team picks once in the first phase, three times in the second
+    and once in the last. The percentages are of the row.
+  </p>
+  <div class="card">
+    <table class="draft">
+      <thead>
+        <tr><th>Pick</th>{#each [1, 2, 3, 4, 5] as p}<th class="num">Position {p}</th>{/each}</tr>
+      </thead>
+      <tbody>
+        {#each team.draft as row, k}
+          {@const total = row.reduce((a, b) => a + b, 0)}
+          <tr>
+            <td>{PICKS[k]}</td>
+            {#each row as n}
+              <td class="num" style:--share="{percent(n, total)}%">{n ? `${n} (${percent(n, total)}%)` : '–'}</td>
+            {/each}
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Tormentor</h2>
+  <p class="muted">
+    The Tormentors killed in the {team.tormentors.games} of their games whose replay is parsed. Enemies dead and the net
+    worth lead (theirs minus the enemy's, negative when behind) are averages over the ones they took, at the moment they
+    took it.
+  </p>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th></th><th class="num">Taken by them</th><th class="num">Taken by the enemy</th>
+          <th class="num">Enemies dead when they took it</th><th class="num">Net worth lead when they took it</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each [{ title: 'Every Tormentor', t: team.tormentors.all }, { title: "A game's first Tormentor", t: team.tormentors.first }] as { title, t }}
+          <tr>
+            <td>{title}</td>
+            <td class="num">{t.taken} ({percent(t.taken, t.taken + t.against)}%)</td>
+            <td class="num">{t.against}</td>
+            <td class="num">{t.enemies_dead === null ? '–' : one(t.enemies_dead)}</td>
+            <td class="num">{lead(t.lead)}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Wisdom runes</h2>
+  <p class="muted">
+    Every wisdom rune of their parsed games, from 7:00 on. They contested one when at least one of their heroes came within
+    ten cells of it between 20 seconds before it appeared and its pickup; heroes and the net worth lead are averages over
+    the ones they contested.
+  </p>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th></th><th class="num">Runes</th><th class="num">Contested</th><th class="num">Heroes they brought</th>
+          <th class="num">Taken by them</th><th class="num">Net worth lead when contested</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each [{ title: 'In their half', w: team.wisdom.own }, { title: 'In the enemy half', w: team.wisdom.enemy }] as { title, w }}
+          <tr>
+            <td>{title}</td>
+            <td class="num">{w.spawns}</td>
+            <td class="num">{w.contested} ({percent(w.contested, w.spawns)}%)</td>
+            <td class="num">{w.heroes === null ? '–' : one(w.heroes)}</td>
+            <td class="num">{w.taken} ({percent(w.taken, w.spawns)}%)</td>
+            <td class="num">{lead(w.lead)}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
 
   <h2>Players</h2>
   <p class="muted">
@@ -241,6 +326,10 @@
   }
   .player {
     margin-bottom: 6px;
+  }
+  /* the busier a role is for that pick, the deeper the cell: a pick that is always mid stands out */
+  .draft td.num {
+    background: color-mix(in srgb, var(--series-1) calc(var(--share) * 0.6), transparent);
   }
   summary {
     display: flex;

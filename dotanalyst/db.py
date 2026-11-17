@@ -261,6 +261,33 @@ class Lane(Derived):
     lane: Mapped[str | None]  # top | mid | bot | jungle; None when the player never left the base
 
 
+class Tormentor(Derived):
+    """A Tormentor killed."""
+
+    __tablename__ = "tormentors"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    match_id: Mapped[int] = mapped_column(index=True)
+    time: Mapped[int]
+    radiant: Mapped[bool]  # the side that killed it
+    enemies_dead: Mapped[int]  # heroes of the other side dead at that second
+    radiant_lead: Mapped[int]  # Radiant's net worth minus Dire's at that second
+
+
+class WisdomRune(Derived):
+    """A wisdom rune that appeared, and who came for it; see derive.wisdom_runes."""
+
+    __tablename__ = "wisdom_runes"
+
+    match_id: Mapped[int] = mapped_column(primary_key=True)
+    time: Mapped[int] = mapped_column(primary_key=True)  # when it appeared: 420, 840, ...
+    rune: Mapped[str] = mapped_column(primary_key=True)  # radiant | dire: the half of the map it is in
+    radiant_heroes: Mapped[int]
+    dire_heroes: Mapped[int]
+    taken_by_radiant: Mapped[bool | None]  # None when nobody took it before the next one appeared
+    radiant_lead: Mapped[int]  # Radiant's net worth minus Dire's when it appeared
+
+
 class Metric(Derived):
     __tablename__ = "metrics"
 
@@ -271,7 +298,7 @@ class Metric(Derived):
 
 
 TABLES = (
-    PlayerMinute, Purchase, AbilityUpgrade, Death, Teamfight, TeamfightPlayer, Ward, Building, Lane, Metric,
+    PlayerMinute, Purchase, AbilityUpgrade, Death, Teamfight, TeamfightPlayer, Ward, Building, Lane, Tormentor, WisdomRune, Metric,
 )  # fmt: skip
 
 

@@ -12,14 +12,14 @@ from sqlalchemy.orm import Session
 from . import queries
 from .db import (
     DATA, TABLES, AbilityUpgrade, Building, Death, Derived, Lane, Match, Metric, PlayerMinute, Purchase, Recipe,
-    Teamfight, TeamfightPlayer, Ward,
+    Teamfight, TeamfightPlayer, Tormentor, Ward, WisdomRune,
 )  # fmt: skip
 from .metrics import METRICS
 
 USED = {
     "interval", "player_slot", "death_tick", "obs", "sen", "obs_left", "sen_left",
     "DOTA_COMBATLOG_DEATH", "DOTA_COMBATLOG_DAMAGE", "DOTA_COMBATLOG_HEAL", "DOTA_COMBATLOG_PURCHASE",
-    "DOTA_ABILITY_LEVEL",
+    "DOTA_ABILITY_LEVEL", "CHAT_MESSAGE_RUNE_PICKUP", "CHAT_MESSAGE_MINIBOSS_KILL",
 }  # fmt: skip
 # the two lotus pools, in map cells: where heroes stood at the moment three lotuses became a great one (240 replays)
 LOTUS_POOLS = ((70.3, 161.3), (186.0, 93.5))
@@ -32,6 +32,13 @@ PULL_LEAD = 30  # how long before the first such kill the puller drew the camp
 FIGHT_GAP = 15  # seconds without a death that end a fight; also how long before the first death it starts
 FIGHT_DEATHS = 3
 LANING_END = 600
+WISDOM_RUNE = 8  # the rune kind in a pick-up message
+# the two wisdom runes, in map cells: where heroes stood picking them up (388 pick-ups in 40 replays). Each side's
+# rune is the one in its half of the map
+WISDOM_SPOTS = {"radiant": (65.9, 134.6), "dire": (191.3, 118.8)}
+WISDOM_EVERY = 420  # both appear at 7:00 and every seven minutes after
+WISDOM_REACH = 10  # cells around a rune within which a hero counts as being there for it
+WISDOM_BEFORE, WISDOM_WAIT = 20, 30  # seconds before it appears, and after when nobody takes it, that count
 # towers, barracks and the Ancient; the filler buildings in the bases are left out
 BUILDING = re.compile(r"npc_dota_(good|bad)guys_(tower\d\w*|(melee|range)_rax_\w+|fort)")
 
@@ -87,6 +94,19 @@ class Log:
 
     def radiant(self, slot: int) -> bool:
         return self.player_slot[slot] < 128
+
+    def lead(self, time: int) -> int:
+        """Radiant's net worth minus Dire's at that second."""
+        return sum(
+            e["networth"] * (1 if self.radiant(slot) else -1)
+            for slot in self.player_slot
+            if (e := self.at.get((time, slot))) and e.get("networth") is not None
+        )
+
+    def near(self, time: int, slot: int, x: float, y: float, reach: float) -> bool:
+        """Whether the hero was alive within `reach` cells of (x, y) at that second."""
+        e = self.at.get((time, slot), {})
+        return e.get("x") is not None and e.get("life_state") == 0 and hypot(e["x"] - x, e["y"] - y) <= reach
 
     def hero_hits(self):
         """(time, attacker slot, victim slot, damage) for each hit by a hero on an enemy hero."""
@@ -335,6 +355,46 @@ def buildings(log: Log) -> list[dict]:
     ]
 
 
+def tormentors(log: Log) -> list[dict]:
+    """Each Tormentor killed: which side killed it, how many of the other side were dead then, and the lead.
+    The game's own message names the side (2 Radiant, 3 Dire); the combat log names a summon when one landed the blow."""
+    rows = []
+    for e in log.events:
+        if e["type"] == "CHAT_MESSAGE_MINIBOSS_KILL" and e.get("value") in (2, 3):
+            radiant = e["value"] == 2
+            dead = [s for s in log.player_slot if log.radiant(s) != radiant and log.at.get((e["time"], s), {}).get("life_state") in (1, 2)]
+            rows.append({"time": e["time"], "radiant": radiant, "enemies_dead": len(dead), "radiant_lead": log.lead(e["time"])})
+    return rows
+
+
+def wisdom_runes(log: Log) -> list[dict]:
+    """Each wisdom rune that appeared: who took it, how many heroes of each side came for it, and the lead then.
+
+    A hero came for it when it was alive within WISDOM_REACH cells of the rune from 20 seconds before it appeared
+    until it was taken, or for 30 seconds when nobody took it before the next one appeared.
+    """
+    picks = [e for e in log.events if e["type"] == "CHAT_MESSAGE_RUNE_PICKUP" and e.get("value") == WISDOM_RUNE]
+    rows = []
+    for time in range(WISDOM_EVERY, log.end + 1, WISDOM_EVERY):
+        for rune, (x, y) in WISDOM_SPOTS.items():
+            taken = next(
+                (e for e in picks if time <= e["time"] < time + WISDOM_EVERY and e.get("player1") in log.player_slot
+                 and log.near(e["time"], e["player1"], x, y, WISDOM_REACH)),
+                None,
+            )  # fmt: skip
+            until = taken["time"] if taken else time + WISDOM_WAIT
+            came = {s for s in log.player_slot for t in range(time - WISDOM_BEFORE, until + 1) if log.near(t, s, x, y, WISDOM_REACH)}
+            rows.append(
+                {
+                    "time": time, "rune": rune, "radiant_heroes": sum(map(log.radiant, came)),
+                    "dire_heroes": sum(not log.radiant(s) for s in came),
+                    "taken_by_radiant": None if taken is None else log.radiant(taken["player1"]),
+                    "radiant_lead": log.lead(time),
+                }  # fmt: skip
+            )
+    return rows
+
+
 def zone(x: float, y: float) -> str | None:
     """Part of the map a position belongs to. Coordinates are replay cells: about 64-191, Radiant base bottom left."""
     if (x < 96 and y < 96) or (x > 160 and y > 160):
@@ -373,6 +433,8 @@ def derive(events: list[dict], recipes: dict[str, list[str]] | None = None) -> d
         Ward: wards(log),
         Building: buildings(log),
         Lane: lanes(log),
+        Tormentor: tormentors(log),
+        WisdomRune: wisdom_runes(log),
     }
 
 
