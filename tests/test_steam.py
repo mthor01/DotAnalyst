@@ -53,6 +53,10 @@ class FakeSteam:
         assert params["key"] == KEY
         if "GetHeroes" in request.url.path:
             return httpx.Response(200, json=HEROES)
+        if "GetPlayerSummaries" in request.url.path:  # ME has a profile, every other account none
+            ids = params["steamids"].split(",")
+            players = [{"steamid": i, "avatarmedium": f"https://avatars.example/{i}.jpg"} for i in ids if i == str(ME + steam.STEAM_ID_BASE)]
+            return httpx.Response(200, json={"response": {"players": players}})
         if "GetMatchHistoryBySequenceNum" in request.url.path:
             assert params["matches_requested"] == "1"
             seq = int(params["start_at_match_seq_num"])
@@ -126,6 +130,17 @@ def test_anonymous_player_has_no_account_id(session):
     slots = {p["player_slot"] for p in match["players"][:2]}
     stored = session.scalars(select(MatchPlayer).where(MatchPlayer.player_slot.in_(slots))).all()
     assert [p.account_id for p in stored] == [None, None]
+
+
+def test_sync_stores_each_accounts_avatar_once(session):
+    session.add(Account(account_id=1001, active=True))
+    session.commit()
+    steam.sync(session, FakeSteam().client, KEY)
+    assert session.get(Account, ME).avatar == f"https://avatars.example/{ME + steam.STEAM_ID_BASE}.jpg"
+    assert session.get(Account, 1001).avatar == ""  # no profile: stored as none, so not asked again
+    fake = FakeSteam()
+    steam.sync(session, fake.client, KEY)
+    assert fake.count("GetPlayerSummaries") == 0
 
 
 def test_second_sync_fetches_no_details(session):

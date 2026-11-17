@@ -1,4 +1,9 @@
-export type Account = { account_id: number; label: string | null; history_exposed: boolean | null }
+export type Account = {
+  account_id: number
+  label: string | null
+  history_exposed: boolean | null
+  avatar: string | null // Steam profile picture; "" when there is none, null until the poller asked
+}
 
 export type MatchRow = {
   match_id: number

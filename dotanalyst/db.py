@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import JSON, Engine, create_engine
+from sqlalchemy import JSON, Engine, create_engine, inspect
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 DATA = Path("data")
@@ -18,6 +18,7 @@ class Account(Base):
     active: Mapped[bool] = mapped_column(default=True)
     # None until the first sync; False when Steam answers status 15
     history_exposed: Mapped[bool | None]
+    avatar: Mapped[str | None]  # Steam profile picture URL; "" when Steam has none, None until asked
 
 
 class Match(Base):
@@ -279,6 +280,9 @@ def open_engine() -> Engine:
     engine = create_engine(f"sqlite:///{DATA / 'dotanalyst.db'}")
     Base.metadata.create_all(engine)
     Derived.metadata.create_all(engine)
+    with engine.begin() as c:  # create_all adds no columns to a table that exists
+        if "avatar" not in {col["name"] for col in inspect(c).get_columns("accounts")}:
+            c.exec_driver_sql("ALTER TABLE accounts ADD COLUMN avatar VARCHAR")
     return engine
 
 

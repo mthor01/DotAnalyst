@@ -105,6 +105,7 @@ def sync(session: Session, client: httpx.Client, key: str, newest_only: bool = F
     newest_only reads an account's history only down to a page that is all stored (1 request instead of 5 when
     nothing is new); a full read also finds what an interrupted sync left out further down.
     """
+    store_avatars(session, client, key)
     known = set(session.scalars(select(Match.match_id))) if newest_only else frozenset()
     result: dict[int, int | None] = {}
     for account in session.scalars(select(Account).where(Account.active)).all():
@@ -126,6 +127,18 @@ def sync(session: Session, client: httpx.Client, key: str, newest_only: bool = F
             new += 1
         result[account.account_id] = new
     return result
+
+
+def store_avatars(session: Session, client: httpx.Client, key: str) -> None:
+    """Ask Steam once for the profile picture of each active account that has none stored."""
+    missing = session.scalars(select(Account).where(Account.active, Account.avatar.is_(None))).all()[:100]
+    if not missing:
+        return
+    steam_ids = ",".join(str(a.account_id + STEAM_ID_BASE) for a in missing)
+    found = {int(p["steamid"]) - STEAM_ID_BASE: p.get("avatarmedium", "") for p in call(client, key, NAMES, steamids=steam_ids)["players"]}
+    for account in missing:
+        account.avatar = found.get(account.account_id, "")  # "" so an account without a profile is not asked again
+    session.commit()
 
 
 def store_league_match(session: Session, m: dict) -> None:

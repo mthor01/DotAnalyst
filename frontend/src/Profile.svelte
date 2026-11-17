@@ -65,7 +65,10 @@
   <p class="muted">No matches for these filters.</p>
 {:else}
   <header class="title">
-    <h2>{account?.label ?? account?.account_id}</h2>
+    <h2>
+      {#if account?.avatar}<img class="avatar" src={account.avatar} alt="" width="40" height="40" />{/if}
+      {account?.label ?? account?.account_id}
+    </h2>
     <p class="muted">The last {recent.length} of {rows.length} matches for these filters</p>
     <div class="choice sizes" role="group" aria-label="How many matches">
       {#each SIZES as n}
@@ -179,6 +182,11 @@
     font-size: 28px;
     font-weight: 800;
     font-stretch: 125%;
+  }
+  .avatar {
+    margin-right: 10px;
+    border-radius: 4px;
+    vertical-align: -6px;
   }
   .title p {
     margin: 0;
