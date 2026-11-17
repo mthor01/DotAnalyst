@@ -85,28 +85,36 @@
   const dayOf = (d: Date) => d.toLocaleDateString('en-CA')
   const perDay = $derived(
     rows.reduce((m, r) => {
-      const day = dayOf(new Date(r.start_time * 1000))
-      return m.set(day, (m.get(day) ?? 0) + 1)
-    }, new Map<string, number>()),
+      const key = dayOf(new Date(r.start_time * 1000))
+      const day = m.get(key) ?? { games: 0, wins: 0 }
+      return m.set(key, { games: day.games + 1, wins: day.wins + r.win })
+    }, new Map<string, { games: number; wins: number }>()),
   )
   const weeks = $derived.by(() => {
     const day = new Date()
     day.setHours(0, 0, 0, 0)
     day.setMonth(day.getMonth() - 3)
     day.setDate(day.getDate() - ((day.getDay() + 6) % 7)) // back to that week's Monday
-    const found: { date: Date; games: number }[][] = []
+    const found: { date: Date; games: number; wins: number }[][] = []
     for (const now = new Date(); day <= now; day.setDate(day.getDate() + 1)) {
       if (day.getDay() === 1) found.push([])
-      found.at(-1)!.push({ date: new Date(day), games: perDay.get(dayOf(day)) ?? 0 })
+      found.at(-1)!.push({ date: new Date(day), games: 0, wins: 0, ...perDay.get(dayOf(day)) })
     }
     return found
   })
   const active = $derived(weeks.flat().filter((d) => d.games))
   const busiest = $derived(Math.max(1, ...active.map((d) => d.games)))
-  const shade = (games: number) =>
-    games ? `color-mix(in oklab, var(--series-1) ${30 + (70 * games) / busiest}%, var(--raised))` : 'var(--raised)'
-  const dayNote = (d: { date: Date; games: number }) =>
-    `${d.date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}: ${d.games || 'no'} ${d.games === 1 ? 'game' : 'games'}`
+  // win rate 0 → red, ½ → yellow, 1 → green; the circle's area grows with the games
+  const tint = (d: { games: number; wins: number }) => {
+    const rate = d.wins / d.games
+    return rate < 0.5
+      ? `color-mix(in oklab, var(--series-4) ${200 * rate}%, var(--dire))`
+      : `color-mix(in oklab, var(--radiant) ${200 * rate - 100}%, var(--series-4))`
+  }
+  const dot = (games: number) => `${Math.max(5, 18 * Math.sqrt(games / busiest))}px`
+  const dayNote = (d: { date: Date; games: number; wins: number }) =>
+    `${d.date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}: ${d.games || 'no'} ${d.games === 1 ? 'game' : 'games'}` +
+    (d.games ? `, ${d.wins} won (${percent(d.wins, d.games)}%)` : '')
 
   const laned = $derived(recent.filter((r) => r.lane_nw_diff !== null))
   const lanes = $derived({
@@ -207,12 +215,18 @@
   </section>
 
   <section class="card activity">
-    <div class="calendar" role="img" aria-label="Games per day over the last 3 months: {active.length} days played">
+    <div class="calendar" role="img" aria-label="Games and win rate per day over the last 3 months: {active.length} days played">
+      <div class="week">
+        <span class="month"></span>
+        {#each weeks[0] as d}<span class="weekday">{d.date.toLocaleDateString(undefined, { weekday: 'short' })}</span>{/each}
+      </div>
       {#each weeks as week}
         {@const first = week.find((d) => d.date.getDate() === 1)}
         <div class="week">
           <span class="month">{first ? first.date.toLocaleDateString(undefined, { month: 'short' }) : ''}</span>
-          {#each week as d}<i style:background={shade(d.games)} title={dayNote(d)}></i>{/each}
+          {#each week as d}
+            <i title={dayNote(d)}>{#if d.games}<b style:background={tint(d)} style:width={dot(d.games)} style:height={dot(d.games)}></b>{/if}</i>
+          {/each}
         </div>
       {/each}
     </div>
@@ -220,7 +234,8 @@
       <h3>Activity</h3>
       <p>
         {active.reduce((n, d) => n + d.games, 0)} games on {active.length} days in the last 3 months, at most {busiest}
-        in one day. One square per day, a column per week from Monday; the darker, the more games. Every role counts here.
+        in one day. One square per day, a column per week from Monday. The bigger the circle, the more games that day; its
+        colour is the day's win rate, red when all were lost, yellow at half, green when all were won. Every role counts here.
       </p>
     </div>
   </section>
@@ -457,16 +472,29 @@
     gap: 3px;
   }
   .month {
-    width: 14px; /* the name runs over into the next weeks */
-    height: 16px;
+    width: 22px; /* the name runs over into the next weeks */
+    height: 18px;
     font-size: 12px;
     color: var(--muted);
     white-space: nowrap;
   }
+  .weekday {
+    height: 22px;
+    padding-right: 6px;
+    font-size: 12px;
+    line-height: 22px;
+    color: var(--muted);
+  }
   .week i {
-    width: 14px;
-    height: 14px;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    background: var(--raised);
     border-radius: 3px;
+  }
+  .week b {
+    border-radius: 50%;
   }
 
   .vision {
