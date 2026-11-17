@@ -8,8 +8,13 @@
   import Playback from './lib/Playback.svelte'
 
   /** brief: only the scoreboard, the draft and the lead chart, for a game unfolded on a team page; notes: a word
-   *  under each side's name in the draft */
-  let { id, brief = false, notes }: { id: string; brief?: boolean; notes?: [string, string] } = $props()
+   *  under each side's name in the draft; draft: false leaves the draft out of the brief view */
+  let {
+    id,
+    brief = false,
+    notes,
+    draft = true,
+  }: { id: string; brief?: boolean; notes?: [string, string]; draft?: boolean } = $props()
   let match = $state<MatchDetail | null>(null)
   let error = $state('')
 
@@ -64,7 +69,7 @@
   const hero = $derived(new Map(players.map((p) => [p.player_slot, p.hero_id])))
   const name = (slot: number | null) => (slot === null ? '' : heroName(hero.get(slot) ?? 0))
   const hasReplay = $derived(!!match?.player_minute.length)
-  const hasDraft = $derived(!!match?.draft.length)
+  const hasDraft = $derived(!!match?.draft.length && (draft || !brief))
   const tabs = $derived(Object.entries(TABS).filter(([id]) => id === 'general' || (id === 'draft' ? hasDraft : hasReplay)))
   const shown = $derived(!brief && tabs.some(([id]) => id === tab) ? tab : 'general')
   const lastMinute = $derived(Math.max(0, ...(match?.player_minute ?? []).map((r) => r.minute)))
