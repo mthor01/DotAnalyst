@@ -1,13 +1,15 @@
 <script lang="ts">
   import { GAME_MODES, LOBBY_TYPES, clock, get, post, type MatchDetail, type MatchPlayer } from './lib/api'
+  import type { Snippet } from 'svelte'
   import Chart, { type Ink } from './lib/Chart.svelte'
   import { ATTRIBUTES, abilityIcon, abilityName, constants, heroIcon, heroName, heroPortrait, itemIcon, itemIconByName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import MiniMap, { KINDS, SIDES, mapX, mapY, viewOf } from './lib/MiniMap.svelte'
   import Playback from './lib/Playback.svelte'
 
-  /** brief: only the scoreboard, the lead chart and the lanes map, for a game unfolded on a team page */
-  let { id, brief = false }: { id: string; brief?: boolean } = $props()
+  /** brief: only the scoreboard, the lead chart and the lanes map, for a game unfolded on a team page; aside goes
+   *  beside the map, as tall as it (--side) */
+  let { id, brief = false, aside }: { id: string; brief?: boolean; aside?: Snippet } = $props()
   let match = $state<MatchDetail | null>(null)
   let error = $state('')
 
@@ -529,13 +531,17 @@
         <span>■ building standing at the end</span>
         <span>□ destroyed</span>
       </p>
-      <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings} toggles={[SIDES]}>
-        {#snippet children(size, on)}
-          {#each onLanes.filter((at) => on[teamOf(at.player_slot)]) as at (at.player_slot)}
-            {@render heroMark(at, size * 0.04, `${name(at.player_slot)}: ${LANES[at.lane]}`)}
-          {/each}
-        {/snippet}
-      </MiniMap>
+      <div class:beside={brief}>
+        <!-- in brief, both sides at once and nothing to set -->
+        <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings} toggles={brief ? [] : [SIDES]} plain={brief}>
+          {#snippet children(size, on)}
+            {#each onLanes.filter((at) => brief || on[teamOf(at.player_slot)]) as at (at.player_slot)}
+              {@render heroMark(at, size * 0.04, `${name(at.player_slot)}: ${LANES[at.lane]}`)}
+            {/each}
+          {/snippet}
+        </MiniMap>
+        {@render aside?.()}
+      </div>
       <p class="muted">
         A hero is drawn on the lane where it spent most of the first ten minutes, not at an exact place. Hover a hero or
         a building for its name.
@@ -551,6 +557,7 @@
         </button>
         <span class="muted" role="status">{asked}</span>
       </p>
+      {@render aside?.()}
     {/if}
   {:else if shown === 'graphs'}
     <p class="filters">
@@ -953,6 +960,18 @@
 {/if}
 
 <style>
+  /* the lanes map and what goes beside it (a team page's draft), both --side tall */
+  .beside {
+    --side: 480px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    gap: 16px;
+  }
+  .beside > :global(.map) {
+    width: var(--side);
+    max-width: 100%;
+  }
   .back {
     margin: 0 0 12px;
   }

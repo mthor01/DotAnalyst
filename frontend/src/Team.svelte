@@ -344,26 +344,29 @@
           {#if open}
             <tr class="more">
               <td colspan="10">
-                {#if g.draft.length}
-                  <h3>Draft</h3>
-                  <div class="order">
-                    <p class="sides">
-                      <b class="radiant">Radiant<small>{g.radiant ? team.name : 'Enemy'}</small></b>
-                      <b class="dire">Dire<small>{g.radiant ? 'Enemy' : team.name}</small></b>
-                    </p>
-                    <ol aria-label="Picks and bans in draft order">
-                      {#each draftRows(g.draft, g.radiant) as row}
-                        <li>
-                          {#each row as t, k}
-                            {@const what = `${t.n}. ${t.radiant ? 'Radiant' : 'Dire'} ${t.pick ? 'pick' : 'ban'}: ${heroName(t.hero_id)}`}
-                            <img class="hero {t.radiant ? 'left' : 'right'}" class:ban={!t.pick} src={heroPortrait(t.hero_id)} alt={what} title={what} loading="lazy" />
-                            <span class="n {t.radiant ? 'left' : 'right'}" class:second={k === 1}>{t.n}</span>
+                <Match id={String(g.match_id)} brief>
+                  {#snippet aside()}
+                    {#if g.draft.length}
+                      <div class="order" style:--rows={draftRows(g.draft, g.radiant).length}>
+                        <p class="sides">
+                          <b class="radiant">Radiant<small>{g.radiant ? 'Them' : 'Enemy'}</small></b>
+                          <b class="dire">Dire<small>{g.radiant ? 'Enemy' : 'Them'}</small></b>
+                        </p>
+                        <ol aria-label="Picks and bans in draft order">
+                          {#each draftRows(g.draft, g.radiant) as row}
+                            <li>
+                              {#each row as t, k}
+                                {@const what = `${t.n}. ${t.radiant ? 'Radiant' : 'Dire'} ${t.pick ? 'pick' : 'ban'}: ${heroName(t.hero_id)}`}
+                                <img class="hero {t.radiant ? 'left' : 'right'}" class:ban={!t.pick} src={heroPortrait(t.hero_id)} alt={what} title={what} loading="lazy" />
+                                <span class="n {t.radiant ? 'left' : 'right'}" class:second={k === 1}>{t.n}</span>
+                              {/each}
+                            </li>
                           {/each}
-                        </li>
-                      {/each}
-                    </ol>
-                  </div>
-                {/if}
+                        </ol>
+                      </div>
+                    {/if}
+                  {/snippet}
+                </Match>
                 <p>
                   {#if g.tormentor}
                     First Tormentor at {clock(g.tormentor.time)}, taken by {g.tormentor.taken ? 'them' : 'the enemy'} with
@@ -373,7 +376,6 @@
                   {/if}
                   {#if g.first_blood !== null}They {g.first_blood ? 'drew' : 'gave up'} first blood.{/if}
                 </p>
-                <Match id={String(g.match_id)} brief />
               </td>
             </tr>
           {/if}
@@ -545,10 +547,14 @@
   }
   /* the draft as the game shows it: Radiant left, Dire right, the turn numbers down the middle, each hero joined to
      its number by a short line; picks are bigger than bans */
+  /* as tall as the map beside it (--side, set by Match): the header takes 52px, the rest is shared by the rows */
   .order {
-    --box: 112px;
-    width: calc(2 * var(--box) + 72px);
-    padding: 12px 16px 16px;
+    --h: calc((var(--side, 480px) - 52px - 3px * (var(--rows) - 1)) / var(--rows));
+    --box: calc(var(--h) * 16 / 9);
+    box-sizing: border-box;
+    height: var(--side, 480px);
+    width: calc(2 * var(--box) + 64px);
+    padding: 8px 12px;
     border-radius: 6px;
     background:
       linear-gradient(90deg, color-mix(in srgb, var(--radiant) 22%, transparent), transparent 45%),
@@ -558,11 +564,14 @@
   .sides,
   .order li {
     display: grid;
-    grid-template-columns: 1fr 28px 1fr;
-    column-gap: 14px;
+    grid-template-columns: 1fr 24px 1fr;
+    column-gap: 8px;
   }
   .sides {
-    margin: 0 0 10px;
+    height: 36px;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.3;
     text-align: center;
     letter-spacing: 0.08em;
   }
@@ -585,7 +594,7 @@
   }
   .order ol {
     display: grid;
-    gap: 8px;
+    gap: 3px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -595,9 +604,9 @@
     width: var(--box);
     aspect-ratio: 16 / 9;
     border: 1px solid var(--axis);
-    border-radius: 5px;
+    border-radius: 3px;
     background: #000;
-    box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
   }
   .hero.left {
     grid-column: 1;
@@ -617,7 +626,7 @@
     grid-row: 1;
     grid-column: 2;
     align-self: center;
-    padding: 4px 0;
+    font-size: 11px;
     line-height: 1;
     text-align: center;
     color: var(--muted);
@@ -633,7 +642,7 @@
     content: '';
     position: absolute;
     top: 50%;
-    width: 18px;
+    width: 10px;
     border-top: 1px solid var(--axis);
   }
   .n.left::before {
