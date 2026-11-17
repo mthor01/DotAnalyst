@@ -181,9 +181,13 @@ def matchups(session: Session, where: list) -> list[dict]:
 
 
 def wards(session: Session, where: list) -> list[dict]:
-    """Every ward the account placed in its parsed matches: the match, the kind, the place and the side played."""
+    """Every ward the account placed in its parsed matches: the match, the kind, the place, the side played and
+    whether that match was won."""
     ward = and_(Ward.match_id == MatchPlayer.match_id, Ward.player_slot == MatchPlayer.player_slot)
-    columns = (Match.match_id, Ward.type, Ward.x, Ward.y, IS_RADIANT.label("radiant"), Ward.placed.label("time"))
+    columns = (
+        Match.match_id, Ward.type, Ward.x, Ward.y, IS_RADIANT.label("radiant"), Ward.placed.label("time"),
+        (IS_RADIANT == Match.radiant_win).label("win"),
+    )  # fmt: skip
     return _rows(session, _mine(*columns).join(Ward, ward).where(*where))
 
 
@@ -329,8 +333,8 @@ def team(
             player["games"] += 1
             player["replays"] += g.match_id in parsed
             if g.match_id in parsed:  # the ward map's games, wards or none
-                player["parsed"].append({"radiant": radiant, "league": True})
-            placed_by[g.match_id, p["player_slot"]] = player
+                player["parsed"].append({"radiant": radiant, "league": True, "win": win})
+            placed_by[g.match_id, p["player_slot"]] = player, win
             blank = {"hero_id": p["hero_id"], "games": 0, "wins": 0, **dict.fromkeys(AVERAGED, 0)}
             on = player["heroes"].setdefault(p["hero_id"], blank)
             on.update(games=on["games"] + 1, wins=on["wins"] + win)
@@ -350,7 +354,7 @@ def team(
     # their parsed games outside any league, for the ward map's usual matches: only the dates narrow them
     mp = MatchPlayer
     usual = (
-        select(mp.account_id, mp.match_id, mp.player_slot)
+        select(mp.account_id, mp.match_id, mp.player_slot, Match.radiant_win)
         .join(Match, Match.match_id == mp.match_id)
         .where(
             mp.account_id.in_(players), Match.replay_state == "parsed",
@@ -358,18 +362,20 @@ def team(
         )
     )  # fmt: skip
     for row in session.execute(usual):
+        win = (row.player_slot < 128) == row.radiant_win
         players[row.account_id]["usual_replays"] += 1
-        players[row.account_id]["parsed"].append({"radiant": row.player_slot < 128, "league": False})
-        placed_by[row.match_id, row.player_slot] = players[row.account_id]
+        players[row.account_id]["parsed"].append({"radiant": row.player_slot < 128, "league": False, "win": win})
+        placed_by[row.match_id, row.player_slot] = players[row.account_id], win
     w = Ward
     league_ids = set(ids)
     placed_in = {match_id for match_id, _ in placed_by}
     for ward in session.execute(select(w.match_id, w.player_slot, w.type, w.x, w.y, w.placed).where(w.match_id.in_(placed_in))):  # fmt: skip
         if (ward.match_id, ward.player_slot) in placed_by:
-            placed_by[ward.match_id, ward.player_slot]["wards"].append(
+            player, win = placed_by[ward.match_id, ward.player_slot]
+            player["wards"].append(
                 {
                     "match_id": ward.match_id, "type": ward.type, "x": ward.x, "y": ward.y, "radiant": ward.player_slot < 128, "time": ward.placed,
-                    "league": ward.match_id in league_ids,
+                    "league": ward.match_id in league_ids, "win": win,
                 }
             )  # fmt: skip
     n = PlayerName

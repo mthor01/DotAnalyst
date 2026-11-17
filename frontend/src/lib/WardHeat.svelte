@@ -4,7 +4,7 @@
 
   /** games: those the wards could come from, warded or not. byGame: wards and games carry `league`, and a dropdown
    *  splits tournament games from the rest */
-  let { wards, games, label, byGame = false }: { wards: WardSpot[]; games: { radiant: boolean; league?: boolean }[]; label: string; byGame?: boolean } = $props()
+  let { wards, games, label, byGame = false }: { wards: WardSpot[]; games: { radiant: boolean; win: boolean; league?: boolean }[]; label: string; byGame?: boolean } = $props()
 
   const SQUARE = 2 // map cells to a side of the squares that tell, on hover, how many wards went there
   const SCALE = 2 // pixels of the heat picture per map cell
@@ -14,6 +14,7 @@
     { '': 'Whole game', m0: '0–10 min', m10: '10–20 min', m20: '20–30 min', m30: '30–40 min', m40: '40 min on' },
   ]
   const GAMES = { '': 'All games', league: 'Tournament games', usual: 'Usual matches' }
+  const RESULTS = { '': 'Wins and losses', won: 'Wins', lost: 'Losses' }
   /** Squares warded in more than this share of the chosen games: the number after the s, in percent */
   const SHARES = { s0: 'Every warded spot', s5: 'In over 5% of games', s10: 'In over 10% of games', s25: 'In over 25% of games', s50: 'In over 50% of games' }
   /** The ten minutes a ward was placed in, as a key of the time dropdown; wards before the horn count to the first. */
@@ -42,12 +43,14 @@
 
   const shownOf = (on: Record<string, boolean>) =>
     wards.filter(
-      (w) => on[w.type] && on[w.radiant ? 'radiant' : 'dire'] && on[period(w)] && (!byGame || on[w.league ? 'league' : 'usual']),
+      (w) => on[w.type] && on[period(w)] && picked(w, on),
     )
 
+  /** Whether a game (or a ward, by its game) is one the side button and the game dropdowns choose */
+  const picked = (g: { radiant: boolean; win: boolean; league?: boolean }, on: Record<string, boolean>) =>
+    on[g.radiant ? 'radiant' : 'dire'] && on[g.win ? 'won' : 'lost'] && (!byGame || on[g.league ? 'league' : 'usual'])
   /** How many games the buttons and dropdowns choose: the time dropdown picks wards, not games */
-  const chosen = (on: Record<string, boolean>) =>
-    games.filter((g) => on[g.radiant ? 'radiant' : 'dire'] && (!byGame || on[g.league ? 'league' : 'usual'])).length
+  const chosen = (on: Record<string, boolean>) => games.filter((g) => picked(g, on)).length
   const square = (w: WardSpot) => `${Math.floor(mapX(w.x) / SQUARE) * SQUARE} ${Math.floor(mapY(w.y) / SQUARE) * SQUARE}`
   /** Only the wards in squares warded in more than the chosen share of the `of` games */
   function common(shown: WardSpot[], on: Record<string, boolean>, of: number) {
@@ -108,7 +111,7 @@
   const count = (type: string) => wards.filter((w) => w.type === type).length
 </script>
 
-<MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), ...LAYERS, SHARES]}>
+<MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS, ...LAYERS, SHARES]}>
   {#snippet children(_, on)}
     {@const of = chosen(on)}
     {@const shown = common(shownOf(on), on, of)}
