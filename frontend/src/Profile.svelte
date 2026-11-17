@@ -162,6 +162,28 @@
   {:else if recent.length === 0}
     <p class="muted">No matches{as} for these filters. Pick another role above.</p>
   {:else if shown === 'overview'}
+  <dl class="card numbers">
+    <div>
+      <dt>Win rate</dt>
+      <dd>{share(wins)}</dd>
+      <dd class="muted">{wins} won, {recent.length - wins} lost</dd>
+    </div>
+    <div>
+      <dt>Lanes won, even, lost</dt>
+      <dd><span class="good">{lanes.won}</span> – {lanes.even} – <span class="bad">{lanes.lost}</span></dd>
+      <dd class="muted">even is within {EVEN} net worth at 10:00</dd>
+    </div>
+    <div>
+      <dt>Ranked</dt>
+      <dd>{share(recent.filter((r) => r.lobby_type === 7).length)}</dd>
+      <dd class="muted">of these matches</dd>
+    </div>
+    <div>
+      <dt>With tracked players</dt>
+      <dd>{share(recent.filter((r) => r.with_tracked).length)}</dd>
+      <dd class="muted">another tracked account on the team</dd>
+    </div>
+  </dl>
   <div class="overview">
     <section class="card roles">
       <RoleWheel games={roles} none="No replay" />
@@ -241,28 +263,6 @@
     </div>
   </section>
 
-  <dl class="card numbers">
-    <div>
-      <dt>Win rate</dt>
-      <dd>{share(wins)}</dd>
-      <dd class="muted">{wins} won, {recent.length - wins} lost</dd>
-    </div>
-    <div>
-      <dt>Lanes won, even, lost</dt>
-      <dd><span class="good">{lanes.won}</span> – {lanes.even} – <span class="bad">{lanes.lost}</span></dd>
-      <dd class="muted">even is within {EVEN} net worth at 10:00</dd>
-    </div>
-    <div>
-      <dt>Ranked</dt>
-      <dd>{share(recent.filter((r) => r.lobby_type === 7).length)}</dd>
-      <dd class="muted">of these matches</dd>
-    </div>
-    <div>
-      <dt>With tracked players</dt>
-      <dd>{share(recent.filter((r) => r.with_tracked).length)}</dd>
-      <dd class="muted">another tracked account on the team</dd>
-    </div>
-  </dl>
   {:else}
   <section class="card vision">
     <div>
@@ -538,7 +538,7 @@
   .numbers {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    margin: 0;
+    margin: 0 0 12px;
   }
   .numbers div {
     padding: 16px 18px;
