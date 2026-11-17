@@ -8,7 +8,7 @@
   const SQUARE = 2 // map cells to a side of the squares that tell, on hover, how many wards went there
   const SCALE = 2 // pixels of the heat picture per map cell
   const SPREAD = 1.5 // cells: wards on the same spot run into one hill, wards a few cells apart stay apart
-  const TOGGLES = { radiant: 'As Radiant', dire: 'As Dire', ...KIND_NAMES }
+  const TOGGLES = [{ radiant: 'As Radiant', dire: 'As Dire' }, KIND_NAMES]
   const LAYERS = [
     { '': 'Whole game', m0: '0–10 min', m10: '10–20 min', m20: '20–30 min', m30: '30–40 min', m40: '40 min on' },
   ]

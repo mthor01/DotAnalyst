@@ -182,7 +182,7 @@
   <h2>First moves</h2>
   <p class="muted">
     Where their five heroes walked from the start of the pre-game to 0:30, in their last six games on one side. One
-    colour per game; the dropdown above the map picks the side, the buttons beside it switch games on and off, the
+    colour per game; the button above the map switches between Radiant and Dire, the buttons beside it switch games on and off, the
     slider moves the clock.
   </p>
   <Openings games={team.games} onfetched={() => (fetched += 1)} />

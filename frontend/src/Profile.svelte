@@ -162,8 +162,8 @@
         warms the map around its spot; red is a spot warded now and then, yellow to white the spots warded most.
       </p>
       <p>
-        Radiant and Dire ward different places, so the buttons above the map show one side's games alone, or one kind
-        of ward. Scroll over the map to zoom, drag to move it, hover a spot for its count.
+        Radiant and Dire ward different places, so the map shows one side's games and one kind of ward at a time: the
+        buttons above it switch between them. Scroll over the map to zoom, drag to move it, hover a spot for its count.
       </p>
     </div>
   </section>

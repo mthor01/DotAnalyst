@@ -516,7 +516,7 @@
         <span>■ building standing at the end</span>
         <span>□ destroyed</span>
       </p>
-      <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings} toggles={SIDES}>
+      <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings} toggles={[SIDES]}>
         {#snippet children(size, on)}
           {#each onLanes.filter((at) => on[teamOf(at.player_slot)]) as at (at.player_slot)}
             {@render heroMark(at, size * 0.04, `${name(at.player_slot)}: ${LANES[at.lane]}`)}
@@ -734,7 +734,7 @@
           <span>● Observer</span>
           <span>◆ Sentry</span>
         </p>
-        <MiniMap label="Map of the {wardsShown.length} wards placed {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd} toggles={{ ...SIDES, ...KINDS }}>
+        <MiniMap label="Map of the {wardsShown.length} wards placed {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd} toggles={[SIDES, KINDS]}>
           {#snippet children(size, on)}
             {#each wardsShown.filter((w) => on[teamOf(w.player_slot)] && on[w.type]) as w}{@render wardMark(w, size * 0.0134, '')}{/each}
           {/snippet}
@@ -746,7 +746,7 @@
           <span><i class="swatch radiant"></i>green edge: a Radiant hero died</span>
           <span><i class="swatch dire"></i>red edge: a Dire hero died</span>
         </p>
-        <MiniMap label="Map of the {deathsShown.length} hero deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd} toggles={SIDES}>
+        <MiniMap label="Map of the {deathsShown.length} hero deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd} toggles={[SIDES]}>
           {#snippet children(size, on)}
             {#each deathsShown.filter((d) => on[teamOf(d.player_slot)]) as d}{@render heroMark(d, size * 0.043, deathNote(d))}{/each}
           {/snippet}

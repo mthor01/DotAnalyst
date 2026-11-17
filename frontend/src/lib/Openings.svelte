@@ -81,10 +81,9 @@
 <MiniMap label="Where the team's heroes walked from {clock(FROM)} to {clock(at)} in their last {games.length} games as {radiant ? 'Radiant' : 'Dire'}">
   {#snippet controls()}
     <!-- one side at a time: its six games take the six colours -->
-    {#each [true, false] as side}
-      <button class="toggle" style:--tint="var(--{side ? 'radiant' : 'dire'})" aria-pressed={radiant === side}
-        onclick={() => (picked = side)}><i></i>As {side ? 'Radiant' : 'Dire'}</button>
-    {/each}
+    {@const [name, other] = radiant ? ['Radiant', 'Dire'] : ['Dire', 'Radiant']}
+    <button class="toggle" style:--tint="var(--{name.toLowerCase()})" aria-label="As {name}, switch to {other}"
+      title="Switch to {other}" onclick={() => (picked = !radiant)}><i></i>As {name}</button>
   {/snippet}
   {#snippet children(size)}
     {#each ways.filter((w) => !hidden[games[w.n].match_id] && w.way.length) as w (w.key)}
