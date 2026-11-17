@@ -104,9 +104,9 @@
   })
   const active = $derived(weeks.flat().filter((d) => d.games))
   const busiest = $derived(Math.max(1, ...active.map((d) => d.games)))
-  // win rate 0 → red, ½ → yellow, 1 → green; the circle's area grows with the games
+  // win rate 25 % or less → red, 50 % → yellow, 75 % or more → green; the circle's area grows with the games
   const tint = (d: { games: number; wins: number }) => {
-    const rate = d.wins / d.games
+    const rate = Math.min(1, Math.max(0, (2 * d.wins) / d.games - 0.5)) // 25 %..75 % stretched to 0..1
     return rate < 0.5
       ? `color-mix(in oklab, var(--series-4) ${200 * rate}%, var(--dire))`
       : `color-mix(in oklab, var(--radiant) ${200 * rate - 100}%, var(--series-4))`
@@ -235,7 +235,7 @@
       <p>
         {active.reduce((n, d) => n + d.games, 0)} games on {active.length} days in the last 3 months, at most {busiest}
         in one day. One square per day, a column per week from Monday. The bigger the circle, the more games that day; its
-        colour is the day's win rate, red when all were lost, yellow at half, green when all were won. Every role counts here.
+        colour is the day's win rate, red at 25 % or less, yellow at half, green at 75 % or more. Every role counts here.
       </p>
     </div>
   </section>

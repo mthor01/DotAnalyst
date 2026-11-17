@@ -261,7 +261,7 @@ The role wheel (`RoleWheel.svelte`) gives each lane its share of the middle ring
 
 ### Activity (Profile)
 
-On the Overview tab: the account's games per day over the last 3 months, one square per day and a column per week from Monday (the first column starts on the Monday of the week 3 months ago). Every match of the shared filters counts, whatever the Role dropdown and the 25/100/500 buttons say. A day with games gets a circle whose area is in proportion to its games (the busiest day 18 px across, at least 5 px) and whose colour is its win rate: red (`--dire`) at 0 %, yellow (`--series-4`) at 50 %, green (`--radiant`) at 100 %, mixed in OKLab in between. Days are the browser's local days.
+On the Overview tab: the account's games per day over the last 3 months, one square per day and a column per week from Monday (the first column starts on the Monday of the week 3 months ago). Every match of the shared filters counts, whatever the Role dropdown and the 25/100/500 buttons say. A day with games gets a circle whose area is in proportion to its games (the busiest day 18 px across, at least 5 px) and whose colour is its win rate: red (`--dire`) at 25 % or less, yellow (`--series-4`) at 50 %, green (`--radiant`) at 75 % or more, mixed in OKLab in between. Days are the browser's local days.
 
 ### Trend line (Trends)
 
