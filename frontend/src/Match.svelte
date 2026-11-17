@@ -1,15 +1,15 @@
 <script lang="ts">
   import { GAME_MODES, LOBBY_TYPES, clock, get, post, type MatchDetail, type MatchPlayer } from './lib/api'
-  import type { Snippet } from 'svelte'
   import Chart, { type Ink } from './lib/Chart.svelte'
+  import Draft from './lib/Draft.svelte'
   import { ATTRIBUTES, abilityIcon, abilityName, constants, heroIcon, heroName, heroPortrait, itemIcon, itemIconByName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import MiniMap, { KINDS, SIDES, mapX, mapY, viewOf } from './lib/MiniMap.svelte'
   import Playback from './lib/Playback.svelte'
 
-  /** brief: only the scoreboard, the lead chart and the lanes map, for a game unfolded on a team page; aside goes
-   *  beside the map, as tall as it (--side) */
-  let { id, brief = false, aside }: { id: string; brief?: boolean; aside?: Snippet } = $props()
+  /** brief: only the scoreboard, the draft and the lead chart, for a game unfolded on a team page; notes: a word
+   *  under each side's name in the draft */
+  let { id, brief = false, notes }: { id: string; brief?: boolean; notes?: [string, string] } = $props()
   let match = $state<MatchDetail | null>(null)
   let error = $state('')
 
@@ -48,8 +48,8 @@
     asking = false
   }
 
-  // ---- the page is split into parts; all but the first need the replay
-  const TABS = { general: 'General', graphs: 'Graphs', laning: 'Laning', builds: 'Builds', map: 'Wards and deaths', fights: 'Teamfights' } // prettier-ignore
+  // ---- the page is split into parts; all but the first two need the replay, the draft one a game with a draft
+  const TABS = { general: 'General', draft: 'Draft', graphs: 'Graphs', laning: 'Laning', builds: 'Builds', map: 'Wards and deaths', fights: 'Teamfights' } // prettier-ignore
   let tab = $state<keyof typeof TABS>('general') // kept from match to match
 
   const TEAMS = ['Radiant', 'Dire'] as const
@@ -64,7 +64,9 @@
   const hero = $derived(new Map(players.map((p) => [p.player_slot, p.hero_id])))
   const name = (slot: number | null) => (slot === null ? '' : heroName(hero.get(slot) ?? 0))
   const hasReplay = $derived(!!match?.player_minute.length)
-  const shown = $derived(hasReplay && !brief ? tab : 'general')
+  const hasDraft = $derived(!!match?.draft.length)
+  const tabs = $derived(Object.entries(TABS).filter(([id]) => id === 'general' || (id === 'draft' ? hasDraft : hasReplay)))
+  const shown = $derived(!brief && tabs.some(([id]) => id === tab) ? tab : 'general')
   const lastMinute = $derived(Math.max(0, ...(match?.player_minute ?? []).map((r) => r.minute)))
   const minuteRow = $derived(new Map((match?.player_minute ?? []).map((r) => [`${r.player_slot}:${r.minute}`, r])))
 
@@ -469,9 +471,9 @@
   </header>
   {/if}
 
-  {#if hasReplay && !brief}
+  {#if !brief && tabs.length > 1}
     <div class="tabs" role="tablist" aria-label="Parts of the match">
-      {#each Object.entries(TABS) as [id, title]}
+      {#each tabs as [id, title]}
         <button role="tab" aria-selected={tab === id} onclick={() => (tab = id as keyof typeof TABS)}>{title}</button>
       {/each}
     </div>
@@ -515,6 +517,9 @@
       </table>
     </div>
 
+    {#if brief && hasDraft}
+      <div class="draft"><Draft draft={match.draft} captains={match.game_mode === 2} {notes} /></div>
+    {/if}
     {#if hasReplay}
       {#if brief}
         <h2>Lead</h2>
@@ -525,27 +530,24 @@
         <div class="card chart">
           <Chart option={leadChart(leadOf(players, lastMinute))} height={320} label="Radiant's lead over Dire in net worth and in experience over time; above zero Radiant is ahead, below zero Dire" />
         </div>
-      {/if}
+      {:else}
       <h2>Lanes and buildings</h2>
       <p class="legend">
         <span>■ building standing at the end</span>
         <span>□ destroyed</span>
       </p>
-      <div class:beside={brief}>
-        <!-- in brief, both sides at once and nothing to set -->
-        <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings} toggles={brief ? [] : [SIDES]} plain={brief}>
-          {#snippet children(size, on)}
-            {#each onLanes.filter((at) => brief || on[teamOf(at.player_slot)]) as at (at.player_slot)}
-              {@render heroMark(at, size * 0.04, `${name(at.player_slot)}: ${LANES[at.lane]}`)}
-            {/each}
-          {/snippet}
-        </MiniMap>
-        {@render aside?.()}
-      </div>
+      <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings} toggles={[SIDES]}>
+        {#snippet children(size, on)}
+          {#each onLanes.filter((at) => on[teamOf(at.player_slot)]) as at (at.player_slot)}
+            {@render heroMark(at, size * 0.04, `${name(at.player_slot)}: ${LANES[at.lane]}`)}
+          {/each}
+        {/snippet}
+      </MiniMap>
       <p class="muted">
         A hero is drawn on the lane where it spent most of the first ten minutes, not at an exact place. Hover a hero or
         a building for its name.
       </p>
+      {/if}
     {:else}
       <p class="muted">
         No replay data for this match (replay: {match.replay_state}), so only the scoreboard above is known. Replays are
@@ -557,8 +559,9 @@
         </button>
         <span class="muted" role="status">{asked}</span>
       </p>
-      {@render aside?.()}
     {/if}
+  {:else if shown === 'draft'}
+    <div class="draft"><Draft draft={match.draft} captains={match.game_mode === 2} /></div>
   {:else if shown === 'graphs'}
     <p class="filters">
       <span class="choice" role="group" aria-label="What the graph shows">
@@ -960,17 +963,8 @@
 {/if}
 
 <style>
-  /* the lanes map and what goes beside it (a team page's draft), both --side tall */
-  .beside {
-    --side: 480px;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: start;
-    gap: 16px;
-  }
-  .beside > :global(.map) {
-    width: var(--side);
-    max-width: 100%;
+  .draft {
+    margin: 16px 0;
   }
   .back {
     margin: 0 0 12px;

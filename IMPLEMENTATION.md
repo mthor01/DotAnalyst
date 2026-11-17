@@ -167,6 +167,7 @@ One function each in `dotanalyst/metrics.py`, stored per player and match in `me
 |---|---|
 | `lane_cs_diff`, `lane_nw_diff` | Last hits (or net worth) at 10:00 of all heroes of the player's side in the player's lane, minus the same sum of the enemies in that lane. No value for a jungler, for a lane without enemies, or in a match shorter than 10 minutes. Both players of a lane get the same value |
 | `obs_placed`, `sen_placed` | Wards of that kind the player placed |
+| `obs_bought`, `sen_bought` | Wards of that kind the player bought (`ward_observer`, `ward_sentry` purchases). A `ward_dispenser` purchase is the game merging or splitting wards already bought and is not counted. Known limit: wards a teammate bought and handed over count for the buyer, not the one who placed them |
 | `wards_destroyed` | Enemy wards of either kind the player destroyed |
 | `obs_lifetime` | Mean seconds the player's observers stood. One still standing at the end is left out |
 | `fight_participation` | Share of the match's teamfights the player took part in |
@@ -288,6 +289,14 @@ A close-up (a fight, a death) shows the square that holds its places with 8 cell
 ### Item timeline (Builds)
 
 Consumables, wards and recipes are left out (`UNLISTED` in `Match.svelte`). A part bought after 0:00 that was built into a bigger item within 60 seconds is left out too, so a finished item does not sit on a pile of its parts.
+
+### Draft (match page)
+
+The match's `picks_bans` from Steam's answer, in draft order, so the Draft tab is there with or without a parsed replay, and missing in modes without a draft (no picks or bans recorded). In Captains Mode it is drawn as the game draws it, on its side: Radiant's heroes above the turn numbers, Dire's below, bans smaller and grey. A turn shares its column with the next when the next is the other side's and of the same kind (two bans, or two picks), as the game pairs them. In other modes it is only the bans and the picks numbered in the order they were made, each with a bar in its side's colour. An unfolded game on the team page shows the same draft right under the scoreboard, with "Them" and "Enemy" under the side names.
+
+### Ward numbers (Profile)
+
+Above the ward heatmap: observers bought, sentries bought and enemy wards destroyed per match, and the observer uptime, each the mean of that metric (see Metrics) over the profile's matches that have it, so only matches with a parsed replay count. Uptime is the mean of the matches' `obs_lifetime`, so a match with few observers weighs as much as one with many; an observer still standing at the end is left out.
 
 ### Lead charts
 

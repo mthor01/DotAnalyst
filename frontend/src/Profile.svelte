@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { get, percent, type Account, type MatchRow, type WardSpot } from './lib/api'
+  import { clock, get, percent, type Account, type MatchRow, type WardSpot } from './lib/api'
   import { heroIcon, heroName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import RoleWheel, { tally, type Role } from './lib/RoleWheel.svelte'
@@ -64,6 +64,17 @@
     return wards.filter((w) => shown.has(w.match_id))
   })
   const parsed = $derived(recent.filter((r) => r.replay_state === 'parsed').length)
+  /** The mean of a replay stat over the matches that have it, null with none */
+  function mean(values: (number | null)[]) {
+    const known = values.filter((v) => v !== null)
+    return known.length ? known.reduce((a, b) => a + b, 0) / known.length : null
+  }
+  const wardAverages = $derived([
+    ['Observers bought', mean(recent.map((r) => r.obs_bought)), 'per match'],
+    ['Sentries bought', mean(recent.map((r) => r.sen_bought)), 'per match'],
+    ['Enemy wards destroyed', mean(recent.map((r) => r.wards_destroyed)), 'per match'],
+    ['Observer uptime', mean(recent.map((r) => r.obs_lifetime)), 'how long an observer stood'],
+  ] as const)
 
   const laned = $derived(recent.filter((r) => r.lane_nw_diff !== null))
   const lanes = $derived({
@@ -156,6 +167,15 @@
       <WardHeat wards={warded} games={recent.filter((r) => r.replay_state === 'parsed')} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches" />
     </div>
     <div class="muted">
+      <dl class="wardstats">
+        {#each wardAverages as [label, value, unit]}
+          <div>
+            <dt>{label}</dt>
+            <dd>{value === null ? '–' : label === 'Observer uptime' ? clock(Math.round(value)) : value.toFixed(1)}</dd>
+            <dd>{unit}</dd>
+          </div>
+        {/each}
+      </dl>
       <h3>Wards placed</h3>
       <p>
         Where the wards went in the {parsed} of these {recent.length} matches that have a parsed replay. Every ward
@@ -164,6 +184,10 @@
       <p>
         Radiant and Dire ward different places, so the map shows one side's games and one kind of ward at a time: the
         buttons above it switch between them. Scroll over the map to zoom, drag to move it, hover a spot for its count.
+      </p>
+      <p>
+        The numbers above are averages over the same matches. Uptime is the mean time from placing an observer to its
+        expiry or its destruction; one still standing when the game ended is left out.
       </p>
     </div>
   </section>
@@ -338,6 +362,16 @@
   }
   .vision p {
     max-width: 52ch;
+  }
+  .wardstats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 24px;
+    max-width: 52ch;
+    margin: 0 0 20px;
+  }
+  .wardstats dt + dd {
+    color: var(--text);
   }
 
   .numbers {

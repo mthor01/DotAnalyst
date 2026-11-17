@@ -24,9 +24,14 @@ export type MatchRow = {
   net_worth: number
   items: number[]
   radiant: boolean
-  /** The next three come from the replay: null without one. `lane_nw_diff` is also null outside the three lanes. */
+  /** lane to obs_lifetime come from the replay: null without one. `lane_nw_diff` is also null outside the three
+   *  lanes, `obs_lifetime` (mean seconds an observer stood) when none of the player's was removed before the end. */
   lane: 'top' | 'mid' | 'bot' | 'jungle' | null
   lane_nw_diff: number | null
+  obs_bought: number | null
+  sen_bought: number | null
+  wards_destroyed: number | null
+  obs_lifetime: number | null
   with_tracked: boolean
   position: 1 | 2 | 3 | 4 | 5 // from the lane and the farm, see IMPLEMENTATION.md
 }
@@ -80,6 +85,8 @@ export type MatchDetail = {
   lobby_type: number
   replay_state: string
   players: MatchPlayer[]
+  /** Picks and bans in draft order, from Steam's answer; empty in modes without a draft */
+  draft: { hero_id: number; pick: boolean; radiant: boolean }[]
   player_minute: { player_slot: number; minute: number; gold: number; xp: number; net_worth: number; last_hits: number; denies: number; hero_damage: number; healing: number; camps_stacked: number; camps_pulled: number; lotuses: number }[]
   purchases: { player_slot: number; time: number; item: string; built_at: number | null }[]
   /** Skill points in the order they were spent; a talent's `ability` starts with special_bonus_. */
@@ -134,8 +141,6 @@ export type TeamDetail = {
     /** From the parsed replay, null without one: the game's first Tormentor and whether they drew first blood */
     tormentor: { time: number; taken: boolean; enemies_dead: number; lead: number } | null
     first_blood: boolean | null
-    /** Picks and bans in draft order; `ours` is theirs */
-    draft: { hero_id: number; pick: boolean; ours: boolean }[]
   }[]
   heroes: TeamHero[]
   /** `wards` are those of the `replays` games of the player whose replay is parsed. `outside` are the player's last
@@ -176,6 +181,8 @@ export const METRICS: { name: string; label: string; show: (v: number) => string
   { name: 'deaths_outside_fights', label: 'Deaths outside teamfights', show: count },
   { name: 'obs_placed', label: 'Observers placed', show: count },
   { name: 'sen_placed', label: 'Sentries placed', show: count },
+  { name: 'obs_bought', label: 'Observers bought', show: count },
+  { name: 'sen_bought', label: 'Sentries bought', show: count },
   { name: 'wards_destroyed', label: 'Enemy wards destroyed', show: count },
   { name: 'obs_lifetime', label: 'Observer lifetime', show: (v) => `${Math.round(v)} s` },
 ]

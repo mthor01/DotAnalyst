@@ -1,6 +1,6 @@
 <script lang="ts">
   import { clock, get, percent, sortedBy, type TeamDetail, type TeamHero } from './lib/api'
-  import { heroIcon, heroName, heroPortrait } from './lib/constants.svelte'
+  import { heroIcon, heroName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import Openings from './lib/Openings.svelte'
   import RoleWheel from './lib/RoleWheel.svelte'
@@ -59,18 +59,6 @@
   let tab = $state<(typeof TABS)[number]>('Games')
   let unfolded = $state<number[]>([]) // the games whose row is open
   const unfold = (id: number) => (unfolded = unfolded.includes(id) ? unfolded.filter((o) => o !== id) : [...unfolded, id])
-  type Turn = { hero_id: number; pick: boolean; radiant: boolean; n: number }
-  /** The draft in rows, as the game shows it: a turn shares its row with the next when that is the other side's turn
-   *  of the same kind (both picks or both bans) */
-  function draftRows(draft: { hero_id: number; pick: boolean; ours: boolean }[], radiant: boolean) {
-    const turns: Turn[] = draft.map((d, i) => ({ hero_id: d.hero_id, pick: d.pick, radiant: d.ours === radiant, n: i + 1 }))
-    const rows: Turn[][] = []
-    for (let i = 0; i < turns.length; i++) {
-      const [a, b] = [turns[i], turns[i + 1]]
-      rows.push(b && b.radiant !== a.radiant && b.pick === a.pick ? [a, turns[++i]] : [a])
-    }
-    return rows
-  }
   /** The parsed games where first blood is known */
   const bloods = $derived(team?.games.filter((g) => g.first_blood !== null) ?? [])
   const drew = $derived(bloods.filter((g) => g.first_blood).length)
@@ -344,29 +332,7 @@
           {#if open}
             <tr class="more">
               <td colspan="10">
-                <Match id={String(g.match_id)} brief>
-                  {#snippet aside()}
-                    {#if g.draft.length}
-                      <div class="order" style:--rows={draftRows(g.draft, g.radiant).length}>
-                        <p class="sides">
-                          <b class="radiant">Radiant<small>{g.radiant ? 'Them' : 'Enemy'}</small></b>
-                          <b class="dire">Dire<small>{g.radiant ? 'Enemy' : 'Them'}</small></b>
-                        </p>
-                        <ol aria-label="Picks and bans in draft order">
-                          {#each draftRows(g.draft, g.radiant) as row}
-                            <li>
-                              {#each row as t, k}
-                                {@const what = `${t.n}. ${t.radiant ? 'Radiant' : 'Dire'} ${t.pick ? 'pick' : 'ban'}: ${heroName(t.hero_id)}`}
-                                <img class="hero {t.radiant ? 'left' : 'right'}" class:ban={!t.pick} src={heroPortrait(t.hero_id)} alt={what} title={what} loading="lazy" />
-                                <span class="n {t.radiant ? 'left' : 'right'}" class:second={k === 1}>{t.n}</span>
-                              {/each}
-                            </li>
-                          {/each}
-                        </ol>
-                      </div>
-                    {/if}
-                  {/snippet}
-                </Match>
+                <Match id={String(g.match_id)} brief notes={g.radiant ? ['Them', 'Enemy'] : ['Enemy', 'Them']} />
                 <p>
                   {#if g.tormentor}
                     First Tormentor at {clock(g.tormentor.time)}, taken by {g.tormentor.taken ? 'them' : 'the enemy'} with
@@ -544,112 +510,6 @@
   .more > td {
     padding: 12px 12px 18px;
     background: var(--page);
-  }
-  /* the draft as the game shows it: Radiant left, Dire right, the turn numbers down the middle, each hero joined to
-     its number by a short line; picks are bigger than bans */
-  /* as tall as the map beside it (--side, set by Match): the header takes 52px, the rest is shared by the rows */
-  .order {
-    --h: calc((var(--side, 480px) - 52px - 3px * (var(--rows) - 1)) / var(--rows));
-    --box: calc(var(--h) * 16 / 9);
-    box-sizing: border-box;
-    height: var(--side, 480px);
-    width: calc(2 * var(--box) + 64px);
-    padding: 8px 12px;
-    border-radius: 6px;
-    background:
-      linear-gradient(90deg, color-mix(in srgb, var(--radiant) 22%, transparent), transparent 45%),
-      linear-gradient(270deg, color-mix(in srgb, var(--dire) 10%, transparent), transparent 45%),
-      var(--surface);
-  }
-  .sides,
-  .order li {
-    display: grid;
-    grid-template-columns: 1fr 24px 1fr;
-    column-gap: 8px;
-  }
-  .sides {
-    height: 36px;
-    margin: 0;
-    font-size: 13px;
-    line-height: 1.3;
-    text-align: center;
-    letter-spacing: 0.08em;
-  }
-  .sides b {
-    display: flex;
-    flex-direction: column;
-  }
-  .sides .radiant {
-    color: var(--radiant);
-    text-shadow: 0 0 8px color-mix(in srgb, var(--radiant) 60%, transparent);
-  }
-  .sides .dire {
-    grid-column: 3;
-    color: var(--text-2);
-  }
-  .sides small {
-    font-weight: normal;
-    letter-spacing: 0;
-    color: var(--muted);
-  }
-  .order ol {
-    display: grid;
-    gap: 3px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .hero {
-    grid-row: 1;
-    width: var(--box);
-    aspect-ratio: 16 / 9;
-    border: 1px solid var(--axis);
-    border-radius: 3px;
-    background: #000;
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
-  }
-  .hero.left {
-    grid-column: 1;
-    justify-self: end;
-  }
-  .hero.right {
-    grid-column: 3;
-  }
-  .hero.ban {
-    width: calc(var(--box) * 0.75);
-    align-self: center;
-    filter: grayscale(1);
-    opacity: 0.55;
-  }
-  .n {
-    position: relative;
-    grid-row: 1;
-    grid-column: 2;
-    align-self: center;
-    font-size: 11px;
-    line-height: 1;
-    text-align: center;
-    color: var(--muted);
-  }
-  /* in a row of two, the first number sits high and the second low */
-  li:has(.second) .n {
-    align-self: start;
-  }
-  li .n.second {
-    align-self: end;
-  }
-  .n::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    width: 10px;
-    border-top: 1px solid var(--axis);
-  }
-  .n.left::before {
-    right: calc(100% - 4px);
-  }
-  .n.right::before {
-    left: calc(100% - 4px);
   }
   /* the busier a role is for that pick, the deeper the cell: a pick that is always mid stands out */
   .draft td.num {

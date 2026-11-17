@@ -75,10 +75,8 @@
     /** Gets the width of the picture in map cells, to size its marks by so that they stay as large on the screen
      *  when the reader zooms, and which layers are shown. */
     children?: Snippet<[number, Record<string, boolean>]>
-    /** No controls and no zooming: the whole map with every layer's first option */
-    plain?: boolean
   }
-  let { label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = [], controls, children, plain = false }: Props = $props()
+  let { label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = [], controls, children }: Props = $props()
 
   const box = (v: View) => `${v.x} ${v.y} ${v.size} ${v.size}`
   let moved = $state<View | null>(null) // where the reader has taken the picture; null is the view given
@@ -95,7 +93,6 @@
     moved = { x: inside(x), y: inside(y), size }
   }
   function zoom(e: WheelEvent) {
-    if (plain) return
     const { x, y, size } = shown
     const to = Math.min(127, Math.max(CLOSEST, size * (e.deltaY < 0 ? 0.8 : 1.25)))
     if (to === size) return // at either end the wheel scrolls the page again
@@ -138,7 +135,6 @@
 </script>
 
 <div class="map">
-  {#if !plain}
   <p>
     <span class="controls">
       {@render controls?.()}
@@ -157,7 +153,6 @@
     </span>
     <button class="action" disabled={!moved || box(moved) === given} onclick={() => (moved = null)}>Reset view</button>
   </p>
-  {/if}
   <!-- one unit of the viewBox is one map cell, so marks are placed with mapX/mapY and sized in cells.
        Moving the map is an extra for the mouse: all it shows is in the label and the titles -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -165,9 +160,9 @@
     bind:this={svg}
     viewBox={box(shown)}
     role="img"
-    aria-label="{label}.{plain ? '' : ' Scroll to zoom, drag to move.'}"
+    aria-label="{label}. Scroll to zoom, drag to move."
     onwheel={zoom}
-    onpointerdown={(e) => plain || ((grip = { x: e.clientX, y: e.clientY }), svg.setPointerCapture(e.pointerId))}
+    onpointerdown={(e) => ((grip = { x: e.clientX, y: e.clientY }), svg.setPointerCapture(e.pointerId))}
     onpointermove={drag}
     onpointerup={() => (grip = null)}
     onpointercancel={() => (grip = null)}

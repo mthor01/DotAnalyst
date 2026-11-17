@@ -73,7 +73,8 @@ def test_matches_carry_side_lane_and_company(session):
         [
             Lane(match_id=1, player_slot=0, lane="mid"),
             Metric(match_id=1, player_slot=0, name="lane_nw_diff", value=-250),
-            Metric(match_id=1, player_slot=0, name="obs_placed", value=2),  # another metric must not double the row
+            Metric(match_id=1, player_slot=0, name="obs_bought", value=3),
+            Metric(match_id=1, player_slot=0, name="obs_placed", value=2),  # a metric rows do not carry must not double them
         ]
     )
     rows = {r["match_id"]: r for r in queries.matches(session, queries.conditions(ME))}
@@ -83,6 +84,7 @@ def test_matches_carry_side_lane_and_company(session):
         return tuple(rows[match_id][key] for key in ("radiant", "lane", "lane_nw_diff", "with_tracked"))
 
     assert extras(1) == (True, "mid", -250, True)
+    assert (rows[1]["obs_bought"], rows[1]["sen_bought"]) == (3, None)
     assert rows[1]["position"] == 2  # the only one in mid
     assert {r["position"] for r in rows.values()} <= {1, 2, 3, 4, 5}
     assert extras(2) == (False, None, None, False)  # no replay stats; the friend was on the other team
@@ -219,12 +221,6 @@ def test_team_games_newest_first_from_the_teams_side(league):
         "win": False, "opponent_id": THEM, "opponent": "Them", "picks": [1, 2, 3, 4, 11],
         "picks_against": [6, 7, 8, 9, 10], "bans": [51],
         "bans_against": [50], "replay": False, "tormentor": None, "first_blood": None,
-        # the draft in its order; the recorded one numbers every step 0, so it stays as stored
-        "draft": [
-            {"hero_id": 50, "pick": False, "ours": False}, {"hero_id": 51, "pick": False, "ours": True},
-            *({"hero_id": h, "pick": True, "ours": False} for h in (6, 7, 8, 9, 10)),
-            *({"hero_id": h, "pick": True, "ours": True} for h in (1, 2, 3, 4, 11)),
-        ],
     }  # fmt: skip
     assert [g["win"] for g in found["games"]] == [True, False, True]
 
@@ -411,6 +407,11 @@ def test_a_league_game_is_a_match_page_before_its_replay_was_asked_for(league):
     assert (found["players"][0]["kills"], found["players"][0]["net_worth"]) == (first["kills"], first["net_worth"])
     assert found["players"][5]["account_id"] == 1000 and found["players"][5]["label"] is None
     assert found["wards"] == [] and found["player_minute"] == []
+    assert found["draft"][:2] == [{"hero_id": 50, "pick": False, "radiant": True}, {"hero_id": 51, "pick": False, "radiant": False}]
+    assert found["draft"][2:] == [
+        *({"hero_id": h, "pick": True, "radiant": True} for h in (6, 7, 8, 9, 10)),
+        *({"hero_id": h, "pick": True, "radiant": False} for h in (1, 2, 3, 4, 11)),
+    ]  # in Steam's order, which the fixture numbers 0 at every turn, so it stays as stored
     assert queries.match(league, 99) is None
 
 

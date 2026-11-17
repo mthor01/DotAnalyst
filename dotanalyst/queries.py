@@ -102,33 +102,37 @@ def _positions_in(session: Session, played) -> dict[tuple[int, int], int]:
     return {(match_id, slot): n for (match_id, _), team in teams.items() for slot, n in positions(team).items()}
 
 
+ROW_METRICS = ("lane_nw_diff", "obs_bought", "sen_bought", "wards_destroyed", "obs_lifetime")
+
+
 def matches(session: Session, where: list) -> list[dict]:
-    """The account's matches, newest first. `lane` and `lane_nw_diff` are None without a parsed replay; `position`
+    """The account's matches, newest first. `lane` and the ROW_METRICS are None without a parsed replay; `position`
     is 1-5, see positions."""
     p = MatchPlayer
+    joined = {name: aliased(Metric) for name in ROW_METRICS}
     with_tracked = (
         select(OTHER.match_id)
         .join(Account, and_(Account.account_id == OTHER.account_id, Account.active))
         .where(OTHER.match_id == p.match_id, OTHER.account_id != p.account_id, SAME_TEAM)
         .exists()
     )
-    rows = _rows(
-        session,
+    statement = (
         _mine(
             Match.match_id, Match.start_time, Match.duration, Match.game_mode, Match.lobby_type,
             Match.replay_state, WON.label("win"), p.player_slot, p.hero_id, p.kills, p.deaths, p.assists,
             p.last_hits, p.denies, p.gold_per_min, p.xp_per_min, p.net_worth, p.items,
-            IS_RADIANT.label("radiant"), Lane.lane, Metric.value.label("lane_nw_diff"),
+            IS_RADIANT.label("radiant"), Lane.lane, *(m.value.label(name) for name, m in joined.items()),
             with_tracked.label("with_tracked"),
         )
         .outerjoin(Lane, and_(Lane.match_id == p.match_id, Lane.player_slot == p.player_slot))
-        .outerjoin(
-            Metric,
-            and_(Metric.match_id == p.match_id, Metric.player_slot == p.player_slot, Metric.name == "lane_nw_diff"),
-        )
         .where(*where)
-        .order_by(Match.start_time.desc()),
+        .order_by(Match.start_time.desc())
     )
+    for name, m in joined.items():
+        statement = statement.outerjoin(
+            m, and_(m.match_id == p.match_id, m.player_slot == p.player_slot, m.name == name)
+        )
+    rows = _rows(session, statement)
     found = _positions(session, where)
     for r in rows:
         r["position"] = found[r["match_id"], r.pop("player_slot")]
@@ -227,6 +231,10 @@ def match(session: Session, match_id: int) -> dict | None:
         "match_id": match_id, "start_time": found.start_time, "duration": found.duration,
         "radiant_win": found.radiant_win, "game_mode": found.game_mode, "lobby_type": found.lobby_type,
         "replay_state": found.replay_state or "none", "players": players,
+        "draft": [
+            {"hero_id": b["hero_id"], "pick": b["is_pick"], "radiant": b["team"] == 0}
+            for b in sorted(found.raw_json.get("picks_bans") or [], key=lambda b: b["order"])
+        ],
     }  # fmt: skip
     for model in TABLES:
         table = model.__table__
@@ -370,10 +378,6 @@ def team(
                 "picks": [p["hero_id"] for p in side], "picks_against": [p["hero_id"] for p in ten if p not in side],
                 "bans": own, "bans_against": against,
                 "replay": g.match_id in parsed, "tormentor": tormentor.get(g.match_id), "first_blood": blood.get(g.match_id),
-                "draft": [
-                    {"hero_id": b["hero_id"], "pick": b["is_pick"], "ours": (b["team"] == 0) == radiant}
-                    for b in sorted(g.raw_json.get("picks_bans") or [], key=lambda b: b["order"])
-                ],
             }
         )  # fmt: skip
     for h in heroes.values():

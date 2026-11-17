@@ -68,6 +68,14 @@ def test_wards_placed(match):
     assert (metrics.obs_placed(match, LUNA), metrics.sen_placed(match, LUNA)) == (0, 1)
 
 
+def test_wards_bought(match):
+    # Lich bought observers at 4:19, 7:35, 9:57 and 14:46; each time the game also logs a ward_dispenser, which is
+    # the observer and sentry merging, and at 11:52 one alone, which is the stack splitting: neither is a purchase
+    assert (metrics.obs_bought(match, LICH), metrics.sen_bought(match, LICH)) == (4, 10)
+    assert (metrics.obs_bought(match, DAWNBREAKER), metrics.sen_bought(match, DAWNBREAKER)) == (2, 1)
+    assert (metrics.obs_bought(match, SHADOW_FIEND), metrics.sen_bought(match, SHADOW_FIEND)) == (1, 0)
+
+
 def test_wards_destroyed(match):
     # Phoenix: Shadow Fiend's observer at -0:43, Rubick's sentries at 1:02 and 1:09, Rubick's observer at 10:46;
     # the two wards "attacked" by Phoenix after the game were Phoenix's own, running out

@@ -38,6 +38,16 @@ def sen_placed(match: dict, slot: int) -> int:
     return sum(w["player_slot"] == slot and w["type"] == "sen" for w in match["wards"])
 
 
+def obs_bought(match: dict, slot: int) -> int:
+    """Observers bought. A ward_dispenser purchase is the game merging or splitting wards already bought, so it is not
+    counted."""
+    return sum(p["player_slot"] == slot and p["item"] == "ward_observer" for p in match["purchases"])
+
+
+def sen_bought(match: dict, slot: int) -> int:
+    return sum(p["player_slot"] == slot and p["item"] == "ward_sentry" for p in match["purchases"])
+
+
 def wards_destroyed(match: dict, slot: int) -> int:
     """Enemy wards of either kind this player destroyed."""
     return sum(w["killed_by"] == slot for w in match["wards"])
@@ -72,7 +82,7 @@ def deaths_outside_fights(match: dict, slot: int) -> int:
 
 
 METRICS = (
-    lane_cs_diff, lane_nw_diff, obs_placed, sen_placed, wards_destroyed, obs_lifetime,
+    lane_cs_diff, lane_nw_diff, obs_placed, sen_placed, obs_bought, sen_bought, wards_destroyed, obs_lifetime,
     fight_participation, kill_participation, deaths_outside_fights,
 )  # fmt: skip
 NAMES = tuple(metric.__name__ for metric in METRICS)
