@@ -10,15 +10,15 @@
   const SCALE = 2 // pixels of the heat picture per map cell
   const SPREAD = 1.5 // cells: wards on the same spot run into one hill, wards a few cells apart stay apart
   const TOGGLES = [{ radiant: 'As Radiant', dire: 'As Dire' }, KIND_NAMES]
-  const LAYERS = [
-    { '': 'Whole game', m0: '0–10 min', m10: '10–20 min', m20: '20–30 min', m30: '30–40 min', m40: '40 min on' },
-  ]
   const GAMES = { '': 'All games', league: 'Tournament games', usual: 'Usual matches' }
   const RESULTS = { '': 'Wins and losses', won: 'Wins', lost: 'Losses' }
-  /** Squares warded in more than this share of the chosen games: the number after the s, in percent */
-  const SHARES = { s0: 'Every warded spot', s5: 'In over 5% of games', s10: 'In over 10% of games', s25: 'In over 25% of games', s50: 'In over 50% of games' }
-  /** The ten minutes a ward was placed in, as a key of the time dropdown; wards before the horn count to the first. */
-  const period = (w: WardSpot) => `m${Math.min(40, Math.floor(Math.max(0, w.time) / 600) * 10)}`
+  /** The timeline: ten minutes each, the last open-ended */
+  const PERIODS = ['0–10', '10–20', '20–30', '30–40', '40+']
+  /** The ten minutes a ward was placed in, as an index of PERIODS; wards before the horn count to the first. */
+  const period = (w: WardSpot) => Math.min(PERIODS.length - 1, Math.floor(Math.max(0, w.time) / 600))
+  let periods = $state(PERIODS.map(() => true)) // the stretches of the timeline switched on
+  const every = $derived(periods.every(Boolean))
+  let share = $state(0) // percent: only squares warded in more than this share of the chosen games
   // the heat colours of each kind, from a lone ward to its busiest spot: [where on the scale, red, green, blue, opacity]
   const RAMPS = {
     obs: [
@@ -43,21 +43,20 @@
 
   const shownOf = (on: Record<string, boolean>) =>
     wards.filter(
-      (w) => on[w.type] && on[period(w)] && picked(w, on),
+      (w) => on[w.type] && periods[period(w)] && picked(w, on),
     )
 
   /** Whether a game (or a ward, by its game) is one the side button and the game dropdowns choose */
   const picked = (g: { radiant: boolean; win: boolean | number; league?: boolean }, on: Record<string, boolean>) =>
     on[g.radiant ? 'radiant' : 'dire'] && on[g.win ? 'won' : 'lost'] && (!byGame || on[g.league ? 'league' : 'usual'])
-  /** How many games the buttons and dropdowns choose: the time dropdown picks wards, not games */
+  /** How many games the buttons and dropdowns choose: the timeline picks wards, not games */
   const chosen = (on: Record<string, boolean>) => games.filter((g) => picked(g, on)).length
   const square = (w: WardSpot) => `${Math.floor(mapX(w.x) / SQUARE) * SQUARE} ${Math.floor(mapY(w.y) / SQUARE) * SQUARE}`
-  /** Only the wards in squares warded in more than the chosen share of the `of` games */
-  function common(shown: WardSpot[], on: Record<string, boolean>, of: number) {
-    const least = Number(Object.keys(SHARES).find((key) => on[key])!.slice(1)) / 100
+  /** Only the wards in squares warded in more than the slider's share of the `of` games */
+  function common(shown: WardSpot[], of: number) {
     const games = new Map<string, Set<number>>()
     for (const w of shown) games.set(square(w), (games.get(square(w)) ?? new Set()).add(w.match_id))
-    return shown.filter((w) => games.get(square(w))!.size > least * of)
+    return shown.filter((w) => games.get(square(w))!.size > (share / 100) * of)
   }
 
   /** The heat picture of one kind: every ward adds a small Gaussian hill, and the height is coloured along the ramp. */
@@ -111,10 +110,11 @@
   const count = (type: string) => wards.filter((w) => w.type === type).length
 </script>
 
-<MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS, ...LAYERS, SHARES]}>
+<div class="beside">
+<MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
   {#snippet children(_, on)}
     {@const of = chosen(on)}
-    {@const shown = common(shownOf(on), on, of)}
+    {@const shown = common(shownOf(on), of)}
     <!-- the map is darkened so that the heat stands out from its greens and greys -->
     <rect class="veil" width="127" height="127" />
     <!-- one picture per kind, each scaled to its own busiest spot; sentries on top, as there are fewer -->
@@ -132,15 +132,78 @@
     {/each}
   {/snippet}
 </MiniMap>
+  <label class="share" title="Only the spots warded in more than this share of the chosen games">
+    <b>{share ? `Over ${share}%` : 'Every spot'}</b>
+    <input type="range" min="0" max="50" step="1" bind:value={share} aria-label="Only spots warded in more than this percent of the chosen games" />
+    <span>of games</span>
+  </label>
+</div>
+<p class="timeline">
+  <span class="choice" role="group" aria-label="When the wards were placed, in minutes">
+    {#each PERIODS as name, i}
+      <button aria-pressed={periods[i]} onclick={() => (periods[i] = !periods[i])}>{name}</button>
+    {/each}
+  </span>
+  <button class="action" onclick={() => (periods = PERIODS.map(() => !every))}>{every ? 'All off' : 'All on'}</button>
+  <span class="unit">minutes</span>
+</p>
 <p class="legend">
   <span>{count('obs')} observers and {count('sen')} sentries.</span>
   {#each KINDS as kind}
     <span class="scale">{KIND_NAMES[kind]}: one <i class="ramp" style:background={strip(RAMPS[kind])}></i> the most</span>
   {/each}
-  <span>The buttons and dropdowns above the map choose which wards count; hover a spot for its numbers.</span>
+  <span>The buttons, dropdowns, slider and timeline choose which wards count; hover a spot for its numbers.</span>
 </p>
 
 <style>
+  /* the map and, beside it, the slider as tall as the map */
+  .beside {
+    display: flex;
+    gap: 10px;
+    max-width: 590px;
+  }
+  .beside > :global(.map) {
+    flex: 1;
+    min-width: 0;
+  }
+  .share {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 56px;
+    font-size: 11px;
+    text-align: center;
+    color: var(--text-2);
+  }
+  .share b {
+    color: var(--text);
+  }
+  .share input {
+    flex: 1;
+    margin: 0;
+    writing-mode: vertical-lr;
+    direction: rtl; /* 0% at the bottom */
+  }
+  .timeline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 0;
+    font-size: 13px;
+  }
+  .choice {
+    flex: 1;
+    max-width: 380px;
+  }
+  .choice button {
+    flex: 1;
+    padding: 4px 6px;
+  }
+  .unit {
+    color: var(--muted);
+  }
   .veil {
     fill: #000;
     opacity: 0.55;
