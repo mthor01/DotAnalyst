@@ -28,6 +28,7 @@ export type MatchRow = {
   lane: 'top' | 'mid' | 'bot' | 'jungle' | null
   lane_nw_diff: number | null
   with_tracked: boolean
+  position: 1 | 2 | 3 | 4 | 5 // from the lane and the farm, see IMPLEMENTATION.md
 }
 
 export type HeroRow = {

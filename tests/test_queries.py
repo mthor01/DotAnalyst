@@ -80,6 +80,8 @@ def test_matches_carry_side_lane_and_company(session):
         return tuple(rows[match_id][key] for key in ("radiant", "lane", "lane_nw_diff", "with_tracked"))
 
     assert extras(1) == (True, "mid", -250, True)
+    assert rows[1]["position"] == 2  # the only one in mid
+    assert {r["position"] for r in rows.values()} <= {1, 2, 3, 4, 5}
     assert extras(2) == (False, None, None, False)  # no replay stats; the friend was on the other team
     assert extras(3) == (True, None, None, True)
 
@@ -345,3 +347,26 @@ def test_team_games_narrowed_by_dates_and_season(league):
     assert (empty["name"], empty["games"], empty["heroes"], empty["players"]) == ("Us", [], [], [])
     heroes = {h["hero_id"]: h for h in queries.team(league, US, league_id=20408)["heroes"]}
     assert heroes[50]["banned_against"] == 1  # game 1, where Them banned it too, is not counted
+
+
+def player(slot, lane, last_hits, net_worth=0):
+    return {"player_slot": slot, "lane": lane, "last_hits": last_hits, "net_worth": net_worth}
+
+
+def test_positions_from_lanes_and_farm():
+    team = [player(0, "safe", 40), player(1, "safe", 200), player(2, "mid", 150), player(3, "off", 90), player(4, "off", 20)]
+    assert queries.positions(team) == {1: 1, 0: 5, 2: 2, 3: 3, 4: 4}
+
+
+def test_positions_leave_the_rest_to_farm():
+    # a solo safe lane and a jungler: the safe lane gives only 1, so the jungler takes the 5 left
+    team = [player(0, "safe", 220), player(1, "mid", 160), player(2, "off", 80), player(3, "off", 10), player(4, "jungle", 5, 900)]
+    assert queries.positions(team) == {0: 1, 1: 2, 2: 3, 3: 4, 4: 5}
+    # a trilane: its least farmed has no place in the lane and takes what is left
+    team = [player(0, "safe", 220), player(1, "mid", 160), player(2, "off", 80), player(3, "off", 10, 500), player(4, "off", 10, 400)]
+    assert queries.positions(team)[3] == 4 and queries.positions(team)[4] == 5  # net worth breaks a tie in last hits
+
+
+def test_positions_without_a_replay_rank_the_farm():
+    team = [player(s, None, lh) for s, lh in zip(range(5), (30, 250, 10, 120, 180))]
+    assert queries.positions(team) == {1: 1, 4: 2, 3: 3, 0: 4, 2: 5}

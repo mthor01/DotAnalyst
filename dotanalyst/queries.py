@@ -57,8 +57,46 @@ def _rows(session: Session, statement) -> list[dict]:
     return [dict(row._mapping) for row in session.execute(statement)]
 
 
+def positions(team: list[dict]) -> dict[int, int]:
+    """Position 1-5 of each player of one team, by player_slot. A player is a dict of player_slot, last_hits,
+    net_worth and lane: safe | mid | off | jungle, seen from the team's side, or None without a parsed replay.
+
+    The farm (last hits, then net worth) picks within a lane: the safe lane's most farmed is 1 and least farmed 5,
+    the mid's is 2, the off lane's 3 and 4. Whoever is left (jungle, roaming, a third in a lane, no replay) takes the
+    open positions in order of farm.
+    """
+    farm = lambda p: (p["last_hits"] or 0, p["net_worth"] or 0)  # noqa: E731
+    found: dict[int, int] = {}
+    for lane, places in (("safe", (1, 5)), ("mid", (2,)), ("off", (3, 4))):
+        laners = sorted((p for p in team if p["lane"] == lane), key=farm, reverse=True)
+        if len(laners) == 1:
+            places = places[:1]
+        found.update(zip((p["player_slot"] for p in laners), places))
+    rest = sorted((p for p in team if p["player_slot"] not in found), key=farm, reverse=True)
+    found.update(zip((p["player_slot"] for p in rest), (n for n in range(1, 6) if n not in found.values())))
+    return found
+
+
+def _positions(session: Session, where: list) -> dict[tuple[int, int], int]:
+    """Position of every player in the matches `where` finds, by (match_id, player_slot)."""
+    played = _mine(MatchPlayer.match_id).where(*where)
+    rows = session.execute(
+        select(OTHER.match_id, OTHER.player_slot, OTHER.last_hits, OTHER.net_worth, Lane.lane)
+        .outerjoin(Lane, and_(Lane.match_id == OTHER.match_id, Lane.player_slot == OTHER.player_slot))
+        .where(OTHER.match_id.in_(played))
+    )
+    teams: dict[tuple[int, bool], list[dict]] = {}
+    for r in rows:
+        radiant = r.player_slot < 128
+        safe = "bot" if radiant else "top"  # Radiant's safe lane is bottom, Dire's is top
+        lane = r.lane if r.lane not in ("top", "bot") else "safe" if r.lane == safe else "off"
+        teams.setdefault((r.match_id, radiant), []).append({**r._asdict(), "lane": lane})
+    return {(match_id, slot): n for (match_id, _), team in teams.items() for slot, n in positions(team).items()}
+
+
 def matches(session: Session, where: list) -> list[dict]:
-    """The account's matches, newest first. `lane` and `lane_nw_diff` are None without a parsed replay."""
+    """The account's matches, newest first. `lane` and `lane_nw_diff` are None without a parsed replay; `position`
+    is 1-5, see positions."""
     p = MatchPlayer
     with_tracked = (
         select(OTHER.match_id)
@@ -66,11 +104,11 @@ def matches(session: Session, where: list) -> list[dict]:
         .where(OTHER.match_id == p.match_id, OTHER.account_id != p.account_id, SAME_TEAM)
         .exists()
     )
-    return _rows(
+    rows = _rows(
         session,
         _mine(
             Match.match_id, Match.start_time, Match.duration, Match.game_mode, Match.lobby_type,
-            Match.replay_state, WON.label("win"), p.hero_id, p.kills, p.deaths, p.assists,
+            Match.replay_state, WON.label("win"), p.player_slot, p.hero_id, p.kills, p.deaths, p.assists,
             p.last_hits, p.denies, p.gold_per_min, p.xp_per_min, p.net_worth, p.items,
             IS_RADIANT.label("radiant"), Lane.lane, Metric.value.label("lane_nw_diff"),
             with_tracked.label("with_tracked"),
@@ -83,6 +121,10 @@ def matches(session: Session, where: list) -> list[dict]:
         .where(*where)
         .order_by(Match.start_time.desc()),
     )
+    found = _positions(session, where)
+    for r in rows:
+        r["position"] = found[r["match_id"], r.pop("player_slot")]
+    return rows
 
 
 def heroes(session: Session, where: list) -> list[dict]:

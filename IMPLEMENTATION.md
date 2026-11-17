@@ -174,6 +174,19 @@ Every account page and every team page take a time span and a season; account pa
 
 Steam's data does not say who queued together. A match counts as "with tracked players" when another active tracked account was on the same team.
 
+### Position 1–5 of a player
+
+Every row of an account's match list carries the player's position, 1 (carry) to 5 (hard support), worked out per team on each request (`positions` in `queries.py`).
+
+- **Lane** is the lane from the replay (see Lane of a player), seen from the team's side: the safe lane is bottom for Radiant and top for Dire.
+- **Farm** is the scoreboard's last hits at the end of the match; equal last hits go by net worth.
+- The safe lane's most farmed player is 1 and its least farmed 5, the mid is 2, the off lane's most farmed 3 and least farmed 4. A player alone in the safe or off lane gets only the first of those (1 or 3).
+- Everyone else (a jungler, a third player in a lane, a lane the replay could not tell, every player of a match without a parsed replay) takes the positions still open, the most farmed the lowest.
+
+Checked: the 7 tracked accounts' matches give each account one or two clear main positions; for the parsed ones, supports come out 4 and 5 and cores 1 to 3 (November 2026).
+
+Known limits: without a parsed replay (most matches) the position is only the team's farm order, so a mid who out-farms the carry is 1 and the carry 2, and a support with a big late game can rank above a core. With a replay, a support who lanes alone and a core who jungles take the open places by farm, which can swap 4 and 5 with 1 or 3.
+
 ### League teams
 
 Built from the drafts and scoreboards of the league games (`league_matches`).
