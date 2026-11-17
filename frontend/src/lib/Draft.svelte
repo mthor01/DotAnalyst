@@ -2,14 +2,14 @@
   import { heroIcon, heroName, heroPortrait } from './constants.svelte'
 
   type Turn = { hero_id: number; pick: boolean; radiant: boolean; n: number }
-  /** captains: the draft as the game shows it, turned on its side: Radiant's row on top, Dire's below, the turn
-   *  numbers between them; otherwise only the bans and the order of the picks. notes: a word under each side's name. */
+  /** captains: the draft as the game shows it: Radiant's heroes left, Dire's right, the turn numbers down the middle;
+   *  otherwise only the bans and the order of the picks. notes: a word under each side's name. */
   let { draft, captains, notes }: { draft: { hero_id: number; pick: boolean; radiant: boolean }[]; captains: boolean; notes?: [string, string] } = $props()
 
   const turns = $derived<Turn[]>(draft.map((d, i) => ({ ...d, n: i + 1 })))
-  /** A turn shares its column with the next when that is the other side's turn of the same kind (both picks or both
+  /** A turn shares its row with the next when that is the other side's turn of the same kind (both picks or both
    *  bans), as in the game. */
-  const columns = $derived.by(() => {
+  const rows = $derived.by(() => {
     const out: Turn[][] = []
     for (let i = 0; i < turns.length; i++) {
       const [a, b] = [turns[i], turns[i + 1]]
@@ -27,9 +27,9 @@
       <b class="dire">Dire{#if notes}<small>{notes[1]}</small>{/if}</b>
     </p>
     <ol aria-label="Picks and bans in draft order">
-      {#each columns as column}
+      {#each rows as row}
         <li>
-          {#each column as t, k}
+          {#each row as t, k}
             <img class="hero" class:dire={!t.radiant} class:ban={!t.pick} src={heroPortrait(t.hero_id)} alt={what(t)} title={what(t)} loading="lazy" />
             <span class="n" class:dire={!t.radiant} class:second={k === 1}>{t.n}</span>
           {/each}
@@ -62,44 +62,44 @@
 {/if}
 
 <style>
-  /* rows: Radiant's heroes, the numbers, Dire's heroes */
+  /* columns: Radiant's heroes, the turn numbers, Dire's heroes; as tall as its grid row when it has one */
   .cm {
-    --box: 64px;
+    --box: 60px;
     display: flex;
-    gap: 12px;
+    flex-direction: column;
+    gap: 8px;
     width: fit-content;
-    max-width: 100%;
     box-sizing: border-box;
     padding: 10px 12px;
-    overflow-x: auto;
     border-radius: 6px;
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--radiant) 20%, transparent), transparent 40%),
-      linear-gradient(0deg, color-mix(in srgb, var(--dire) 10%, transparent), transparent 40%),
+      linear-gradient(90deg, color-mix(in srgb, var(--radiant) 20%, transparent), transparent 40%),
+      linear-gradient(270deg, color-mix(in srgb, var(--dire) 10%, transparent), transparent 40%),
       var(--surface);
   }
   .sides,
   .cm li {
     display: grid;
-    grid-template-rows: calc(var(--box) * 9 / 16) 22px calc(var(--box) * 9 / 16);
+    grid-template-columns: var(--box) 28px var(--box);
+    column-gap: 10px;
   }
   .sides {
     margin: 0;
     font-size: 13px;
     line-height: 1.3;
     letter-spacing: 0.08em;
+    text-align: center;
   }
   .sides b {
     display: flex;
     flex-direction: column;
-    justify-content: center;
   }
   .sides .radiant {
     color: var(--radiant);
     text-shadow: 0 0 8px color-mix(in srgb, var(--radiant) 60%, transparent);
   }
   .sides .dire {
-    grid-row: 3;
+    grid-column: 3;
     color: var(--text-2);
   }
   .sides small {
@@ -108,8 +108,11 @@
     color: var(--muted);
   }
   .cm ol {
+    flex: 1;
     display: flex;
-    gap: 4px;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 3px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -117,7 +120,7 @@
   .hero {
     grid-row: 1;
     grid-column: 1;
-    justify-self: center;
+    justify-self: end;
     width: var(--box);
     aspect-ratio: 16 / 9;
     border: 1px solid var(--axis);
@@ -126,7 +129,8 @@
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
   }
   .hero.dire {
-    grid-row: 3;
+    grid-column: 3;
+    justify-self: start;
   }
   .hero.ban {
     width: calc(var(--box) * 0.75);
@@ -136,35 +140,33 @@
   }
   .n {
     position: relative;
-    grid-row: 2;
-    grid-column: 1;
+    grid-row: 1;
+    grid-column: 2;
     justify-self: center;
     align-self: center;
     font-size: 11px;
     line-height: 1;
     color: var(--muted);
   }
-  /* in a column of two, the first number sits left and the second right */
+  /* in a row of two, the first number sits at the top and the second at the bottom */
   li:has(.second) .n {
-    justify-self: start;
-    margin-left: 8px;
+    align-self: start;
   }
   li .n.second {
-    justify-self: end;
-    margin: 0 8px 0 0;
+    align-self: end;
   }
   /* a short line joins each number to its hero */
   .n::before {
     content: '';
     position: absolute;
-    left: 50%;
-    height: 6px;
-    border-left: 1px solid var(--axis);
-    bottom: calc(100% + 1px);
+    top: 50%;
+    width: 12px;
+    border-top: 1px solid var(--axis);
+    right: calc(100% + 2px);
   }
   .n.dire::before {
-    top: calc(100% + 1px);
-    bottom: auto;
+    left: calc(100% + 2px);
+    right: auto;
   }
 
   .simple {

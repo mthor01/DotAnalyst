@@ -480,6 +480,8 @@
   {/if}
 
   {#if shown === 'general'}
+    <!-- on a team page the draft stands right of the scoreboard, both as tall as the taller one -->
+    <div class:beside={brief && hasDraft}>
     <div class="card">
       <table>
         <thead>
@@ -516,10 +518,8 @@
         </tbody>
       </table>
     </div>
-
-    {#if brief && hasDraft}
-      <div class="draft"><Draft draft={match.draft} captains={match.game_mode === 2} {notes} /></div>
-    {/if}
+    {#if brief && hasDraft}<Draft draft={match.draft} captains={match.game_mode === 2} {notes} />{/if}
+    </div>
     {#if hasReplay}
       {#if brief}
         <h2>Lead</h2>
@@ -965,6 +965,11 @@
 <style>
   .draft {
     margin: 16px 0;
+  }
+  .beside {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
   }
   .back {
     margin: 0 0 12px;

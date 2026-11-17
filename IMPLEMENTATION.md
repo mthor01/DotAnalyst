@@ -292,7 +292,7 @@ Consumables, wards and recipes are left out (`UNLISTED` in `Match.svelte`). A pa
 
 ### Draft (match page)
 
-The match's `picks_bans` from Steam's answer, in draft order, so the Draft tab is there with or without a parsed replay, and missing in modes without a draft (no picks or bans recorded). In Captains Mode it is drawn as the game draws it, on its side: Radiant's heroes above the turn numbers, Dire's below, bans smaller and grey. A turn shares its column with the next when the next is the other side's and of the same kind (two bans, or two picks), as the game pairs them. In other modes it is only the bans and the picks numbered in the order they were made, each with a bar in its side's colour. An unfolded game on the team page shows the same draft right under the scoreboard, with "Them" and "Enemy" under the side names.
+The match's `picks_bans` from Steam's answer, in draft order, so the Draft tab is there with or without a parsed replay, and missing in modes without a draft (no picks or bans recorded). In Captains Mode it is drawn as the game draws it: Radiant's heroes on the left, Dire's on the right, the turn numbers down the middle, bans smaller and grey. A turn shares its row with the next when the next is the other side's and of the same kind (two bans, or two picks), as the game pairs them. In other modes it is only the bans and the picks numbered in the order they were made, each with a bar in its side's colour. An unfolded game on the team page shows the same draft right of the scoreboard, with "Them" and "Enemy" under the side names; the two boxes are made as tall as the taller one and the draft spreads its rows over that height.
 
 ### Ward numbers (Profile)
 
