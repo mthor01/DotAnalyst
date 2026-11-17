@@ -17,7 +17,7 @@ from .db import DATA, Ability, Account, Hero, Item, open_engine
 from .metrics import NAMES
 from .poll import poll_forever
 from .replay import ReplayError
-from .steam import LEAGUES, SteamError
+from .steam import LEAGUES, SteamError, team_logo
 
 engine = open_engine()
 FRONTEND = Path("frontend/dist")
@@ -171,6 +171,9 @@ def team(
     found = queries.team(session, team_id, date_from, date_to, league_id)
     if found is None:
         raise HTTPException(404, f"no league games of team {team_id} are stored")
+    logo_id = found.pop("logo_id")  # too big for a JavaScript number, so the page only gets the address
+    with httpx.Client() as client:
+        found["logo"] = logo_id and team_logo(client, os.environ.get("STEAM_API_KEY", ""), logo_id)
     return found
 
 

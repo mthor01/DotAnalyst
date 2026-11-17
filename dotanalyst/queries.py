@@ -279,6 +279,18 @@ def teams(session: Session) -> list[dict]:
     return sorted(found.values(), key=lambda t: (t["name"] or "").lower())
 
 
+def _logo_id(session: Session, team_id: int) -> int | None:
+    """The UGC id of the team's logo in its newest league game that has one, whatever the filters."""
+    m = LeagueMatch
+    for g in session.scalars(
+        select(m).where(or_(m.radiant_team_id == team_id, m.dire_team_id == team_id)).order_by(m.start_time.desc())
+    ):
+        logo = g.raw_json.get("radiant_logo" if g.radiant_team_id == team_id else "dire_logo")
+        if logo:
+            return logo
+    return None
+
+
 def team(
     session: Session,
     team_id: int,
@@ -430,7 +442,7 @@ def team(
             h.update({stat: h[stat] / h["games"] for stat in AVERAGED})
     firsts = list(tormentor.values())
     return {
-        "team_id": team_id, "name": names[team_id], "games": games,
+        "team_id": team_id, "name": names[team_id], "logo_id": _logo_id(session, team_id), "games": games,
         "heroes": sorted(heroes.values(), key=lambda h: (-h["banned_against"], -h["picked"])),
         "players": sorted(players.values(), key=lambda p: -p["games"]),
         "tormentors": {"games": len(side_of), "them": _tormentors_by(firsts, True), "enemy": _tormentors_by(firsts, False)},

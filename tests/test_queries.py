@@ -184,6 +184,9 @@ LEAGUE_GAMES = [
 ]  # fmt: skip
 LEAGUE_GAMES[3]["dire_name"] = LEAGUE_GAMES[4]["radiant_name"] = ""  # Steam sends some games with an empty team name
 LEAGUE_GAMES[0]["leagueid"] = 19418  # the first game is of the season before
+# Us's logo: 111 in the first game, 222 in the second, none (0) in the newest
+LEAGUE_GAMES[0]["radiant_logo"], LEAGUE_GAMES[1]["dire_logo"], LEAGUE_GAMES[2]["radiant_logo"] = 111, 222, 0
+LEAGUE_GAMES[1]["radiant_logo"] = 999  # Them's
 
 
 @pytest.fixture
@@ -209,7 +212,7 @@ def test_teams_with_games_and_wins(league):
 
 def test_team_games_newest_first_from_the_teams_side(league):
     found = queries.team(league, US)
-    assert (found["team_id"], found["name"]) == (US, "Us")
+    assert (found["team_id"], found["name"], found["logo_id"]) == (US, "Us", 222)
     assert [g["match_id"] for g in found["games"]] == [3, 2, 1]
     assert found["games"][1] == {
         "match_id": 2, "start_time": LEAGUE_GAMES[1]["start_time"], "league": "Season 8", "radiant": False,

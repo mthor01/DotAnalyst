@@ -293,3 +293,26 @@ def test_league_sync_stores_the_players_steam_names(session):
     assert session.get(PlayerName, 1001).name == "player 1001"
     assert session.get(PlayerName, NO_PROFILE) is None
     assert session.scalar(select(func.count()).select_from(PlayerName)) == 9
+
+
+def test_team_logo_is_asked_for_once_and_kept(tmp_path):
+    asked = []
+
+    def handle(request):
+        asked.append(request.url.params["ugcid"])
+        if request.url.params["ugcid"] == "10857040730413048903":
+            return httpx.Response(200, json=load("ugc_details.json"))
+        if request.url.params["ugcid"] == "1":
+            return httpx.Response(404, json={"status": {"code": 9}})
+        return httpx.Response(500)
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    url = load("ugc_details.json")["data"]["url"]
+    assert steam.team_logo(client, KEY, 10857040730413048903, tmp_path) == url
+    assert steam.team_logo(client, KEY, 10857040730413048903, tmp_path) == url
+    assert steam.team_logo(client, KEY, 1, tmp_path) is None
+    assert steam.team_logo(client, KEY, 1, tmp_path) is None
+    assert steam.team_logo(client, KEY, 2, tmp_path) is None  # a failure is not kept: asked again next time
+    assert steam.team_logo(client, KEY, 2, tmp_path) is None
+    assert steam.team_logo(client, "", 3, tmp_path) is None  # no key, no question
+    assert asked == ["10857040730413048903", "1", "2", "2"]

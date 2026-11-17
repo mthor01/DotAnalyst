@@ -1,12 +1,14 @@
+import json
 import logging
 import re
 import time
+from pathlib import Path
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import Ability, Account, Hero, Item, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
+from .db import DATA, Ability, Account, Hero, Item, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
 
 BASE = "https://api.steampowered.com"
 HISTORY = "IDOTA2Match_570/GetMatchHistory/V001/"
@@ -14,6 +16,7 @@ HISTORY = "IDOTA2Match_570/GetMatchHistory/V001/"
 DETAILS = "IDOTA2Match_570/GetMatchHistoryBySequenceNum/V001/"
 HEROES = "IEconDOTA2_570/GetHeroes/v1/"
 NAMES = "ISteamUser/GetPlayerSummaries/v2/"
+LOGO = "ISteamRemoteStorage/GetUGCFileDetails/v1/"
 STEAM_ID_BASE = 76561197960265728  # a 64-bit Steam id is this plus the 32-bit account id
 # REINCARNATION - D/A/CH Dota 2 by BEING ESPORTS: the seasons whose games the team pages are built from
 LEAGUES = {18795: "Season 6", 19418: "Season 7", 20408: "Season 8"}
@@ -217,3 +220,30 @@ def sync_constants(session: Session, client: httpx.Client, key: str) -> tuple[in
             session.merge(Recipe(item=name, components=components))
     session.commit()
     return len(heroes), len(items)
+
+
+def team_logo(client: httpx.Client, key: str, ugc_id: int, data: Path = DATA) -> str | None:
+    """The address of a team logo, from the UGC id a league game's details give it (`radiant_logo`, `dire_logo`).
+
+    Every answer, a logo or Steam's "no such file", is kept in data/logos.json and never asked for again. A failed
+    request is not kept, so the next page load asks again.
+    """
+    stored = data / "logos.json"
+    known = json.loads(stored.read_text()) if stored.exists() else {}
+    if str(ugc_id) in known or not key:
+        return known.get(str(ugc_id))
+    time.sleep(PAUSE)
+    try:
+        response = client.get(f"{BASE}/{LOGO}", params={"key": key, "appid": 570, "ugcid": ugc_id}, timeout=30)
+    except httpx.HTTPError:
+        return None
+    if response.status_code == 200:
+        url = (response.json().get("data") or {}).get("url")
+        known[str(ugc_id)] = url if isinstance(url, str) and url.startswith("https://") else None
+    elif response.status_code == 404:  # an id Steam has no file for
+        known[str(ugc_id)] = None
+    else:
+        return None
+    data.mkdir(parents=True, exist_ok=True)
+    stored.write_text(json.dumps(known))
+    return known[str(ugc_id)]
