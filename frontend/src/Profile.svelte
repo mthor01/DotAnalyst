@@ -2,10 +2,15 @@
   import { clock, get, percent, type Account, type MatchRow, type WardSpot } from './lib/api'
   import { heroIcon, heroName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
+  import Heroes from './Heroes.svelte'
+  import Matches from './Matches.svelte'
   import RoleWheel, { tally, type Role } from './lib/RoleWheel.svelte'
   import WardHeat from './lib/WardHeat.svelte'
 
-  let { query, account }: { query: string; account: Account | undefined } = $props()
+  let { query, account, tab }: { query: string; account: Account | undefined; tab: string } = $props()
+  const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', warding: 'Warding' }
+  const shown = $derived<keyof typeof TABS>(tab in TABS ? (tab as keyof typeof TABS) : 'overview')
+  const filtered = $derived(shown === 'overview' || shown === 'warding') // the tabs the role and the count apply to
   let rows = $state<MatchRow[]>([])
   let wards = $state.raw<WardSpot[]>([]) // of every match of these filters
   let error = $state('')
@@ -76,6 +81,33 @@
     ['Observer uptime', mean(recent.map((r) => r.obs_lifetime)), 'how long an observer stood'],
   ] as const)
 
+  // ---- activity: games per day over the last 3 months, of every role, one column per week from Monday
+  const dayOf = (d: Date) => d.toLocaleDateString('en-CA')
+  const perDay = $derived(
+    rows.reduce((m, r) => {
+      const day = dayOf(new Date(r.start_time * 1000))
+      return m.set(day, (m.get(day) ?? 0) + 1)
+    }, new Map<string, number>()),
+  )
+  const weeks = $derived.by(() => {
+    const day = new Date()
+    day.setHours(0, 0, 0, 0)
+    day.setMonth(day.getMonth() - 3)
+    day.setDate(day.getDate() - ((day.getDay() + 6) % 7)) // back to that week's Monday
+    const found: { date: Date; games: number }[][] = []
+    for (const now = new Date(); day <= now; day.setDate(day.getDate() + 1)) {
+      if (day.getDay() === 1) found.push([])
+      found.at(-1)!.push({ date: new Date(day), games: perDay.get(dayOf(day)) ?? 0 })
+    }
+    return found
+  })
+  const active = $derived(weeks.flat().filter((d) => d.games))
+  const busiest = $derived(Math.max(1, ...active.map((d) => d.games)))
+  const shade = (games: number) =>
+    games ? `color-mix(in oklab, var(--series-1) ${30 + (70 * games) / busiest}%, var(--raised))` : 'var(--raised)'
+  const dayNote = (d: { date: Date; games: number }) =>
+    `${d.date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}: ${d.games || 'no'} ${d.games === 1 ? 'game' : 'games'}`
+
   const laned = $derived(recent.filter((r) => r.lane_nw_diff !== null))
   const lanes = $derived({
     won: laned.filter((r) => r.lane_nw_diff! > EVEN).length,
@@ -94,23 +126,35 @@
       {#if account?.avatar}<img class="avatar" src={account.avatar} alt="" width="40" height="40" />{/if}
       {account?.label ?? account?.account_id}
     </h2>
-    <p class="muted">The last {recent.length} of {played.length} matches{as} for these filters</p>
-    <label class="role">
-      Role
-      <select bind:value={role}>
-        {#each ROLES as [name], i}<option value={i}>{name}</option>{/each}
-      </select>
-    </label>
-    <div class="choice" role="group" aria-label="How many matches">
-      {#each SIZES as n}
-        <button aria-pressed={size === n} onclick={() => (size = n)}>{n} matches</button>
-      {/each}
-    </div>
+    {#if filtered}
+      <p class="muted">The last {recent.length} of {played.length} matches{as} for these filters</p>
+      <label class="role">
+        Role
+        <select bind:value={role}>
+          {#each ROLES as [name], i}<option value={i}>{name}</option>{/each}
+        </select>
+      </label>
+      <div class="choice" role="group" aria-label="How many matches">
+        {#each SIZES as n}
+          <button aria-pressed={size === n} onclick={() => (size = n)}>{n} matches</button>
+        {/each}
+      </div>
+    {/if}
   </header>
 
-  {#if recent.length === 0}
+  <div class="tabs" role="tablist" aria-label="Profile">
+    {#each Object.entries(TABS) as [id, title]}
+      <button role="tab" aria-selected={shown === id} onclick={() => (location.hash = id === 'overview' ? 'profile' : `profile/${id}`)}>{title}</button>
+    {/each}
+  </div>
+
+  {#if shown === 'matches'}
+    <Matches {query} />
+  {:else if shown === 'heroes'}
+    <Heroes {query} />
+  {:else if recent.length === 0}
     <p class="muted">No matches{as} for these filters. Pick another role above.</p>
-  {:else}
+  {:else if shown === 'overview'}
   <div class="overview">
     <section class="card roles">
       <RoleWheel games={roles} none="No replay" />
@@ -136,7 +180,7 @@
         </tbody>
       </table>
       {#if heroes.length > TOP_HEROES}
-        <p class="muted more">The {TOP_HEROES} most played of {heroes.length} heroes. The Heroes page has them all.</p>
+        <p class="muted more">The {TOP_HEROES} most played of {heroes.length} heroes. The Heroes tab has them all.</p>
       {/if}
     </section>
   </div>
@@ -162,6 +206,48 @@
     </p>
   </section>
 
+  <section class="card activity">
+    <div class="calendar" role="img" aria-label="Games per day over the last 3 months: {active.length} days played">
+      {#each weeks as week}
+        {@const first = week.find((d) => d.date.getDate() === 1)}
+        <div class="week">
+          <span class="month">{first ? first.date.toLocaleDateString(undefined, { month: 'short' }) : ''}</span>
+          {#each week as d}<i style:background={shade(d.games)} title={dayNote(d)}></i>{/each}
+        </div>
+      {/each}
+    </div>
+    <div class="muted">
+      <h3>Activity</h3>
+      <p>
+        {active.reduce((n, d) => n + d.games, 0)} games on {active.length} days in the last 3 months, at most {busiest}
+        in one day. One square per day, a column per week from Monday; the darker, the more games. Every role counts here.
+      </p>
+    </div>
+  </section>
+
+  <dl class="card numbers">
+    <div>
+      <dt>Win rate</dt>
+      <dd>{share(wins)}</dd>
+      <dd class="muted">{wins} won, {recent.length - wins} lost</dd>
+    </div>
+    <div>
+      <dt>Lanes won, even, lost</dt>
+      <dd><span class="good">{lanes.won}</span> – {lanes.even} – <span class="bad">{lanes.lost}</span></dd>
+      <dd class="muted">even is within {EVEN} net worth at 10:00</dd>
+    </div>
+    <div>
+      <dt>Ranked</dt>
+      <dd>{share(recent.filter((r) => r.lobby_type === 7).length)}</dd>
+      <dd class="muted">of these matches</dd>
+    </div>
+    <div>
+      <dt>With tracked players</dt>
+      <dd>{share(recent.filter((r) => r.with_tracked).length)}</dd>
+      <dd class="muted">another tracked account on the team</dd>
+    </div>
+  </dl>
+  {:else}
   <section class="card vision">
     <div>
       <WardHeat wards={warded} games={recent.filter((r) => r.replay_state === 'parsed')} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches" />
@@ -191,29 +277,6 @@
       </p>
     </div>
   </section>
-
-  <dl class="card numbers">
-    <div>
-      <dt>Win rate</dt>
-      <dd>{share(wins)}</dd>
-      <dd class="muted">{wins} won, {recent.length - wins} lost</dd>
-    </div>
-    <div>
-      <dt>Lanes won, even, lost</dt>
-      <dd><span class="good">{lanes.won}</span> – {lanes.even} – <span class="bad">{lanes.lost}</span></dd>
-      <dd class="muted">even is within {EVEN} net worth at 10:00</dd>
-    </div>
-    <div>
-      <dt>Ranked</dt>
-      <dd>{share(recent.filter((r) => r.lobby_type === 7).length)}</dd>
-      <dd class="muted">of these matches</dd>
-    </div>
-    <div>
-      <dt>With tracked players</dt>
-      <dd>{share(recent.filter((r) => r.with_tracked).length)}</dd>
-      <dd class="muted">another tracked account on the team</dd>
-    </div>
-  </dl>
   {/if}
 {/if}
 
@@ -342,6 +405,68 @@
   .strip.dense .dot {
     width: 5px;
     height: 5px;
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 22px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tabs button {
+    padding: 10px 0 9px;
+    font: inherit;
+    font-weight: 500;
+    color: var(--muted);
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+  }
+  .tabs button:hover,
+  .tabs button[aria-selected='true'] {
+    color: var(--text);
+  }
+  .tabs button[aria-selected='true'] {
+    border-bottom-color: var(--text);
+  }
+
+  .activity {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 32px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+  .activity h3 {
+    margin: 0 0 8px;
+    color: var(--text);
+  }
+  .activity p {
+    max-width: 52ch;
+    margin: 0;
+  }
+  .calendar {
+    display: flex;
+    gap: 3px;
+  }
+  .week {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .month {
+    width: 14px; /* the name runs over into the next weeks */
+    height: 16px;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .week i {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
   }
 
   .vision {

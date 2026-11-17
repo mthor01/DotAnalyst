@@ -1,9 +1,7 @@
 <script lang="ts">
   import { GAME_MODES, LOBBY_TYPES, get, post, type Account } from './lib/api'
   import { constants, loadConstants } from './lib/constants.svelte'
-  import Heroes from './Heroes.svelte'
   import Match from './Match.svelte'
-  import Matches from './Matches.svelte'
   import Group from './Group.svelte'
   import Profile from './Profile.svelte'
   import Queue from './Queue.svelte'
@@ -12,11 +10,12 @@
   import Teams from './Teams.svelte'
   import Trends from './Trends.svelte'
 
-  const PAGES = { profile: 'Profile', matches: 'Matches', heroes: 'Heroes', teammates: 'Teammates & matchups', trends: 'Trends', group: 'Group', teams: 'Teams', queue: 'Queue' }
+  const PAGES = { profile: 'Profile', teammates: 'Teammates & matchups', trends: 'Trends', group: 'Group', teams: 'Teams', queue: 'Queue' }
   const ALL_ACCOUNTS: Page[] = ['trends', 'group'] // these pages show every tracked account at once
   type Page = keyof typeof PAGES
   let hash = $state(location.hash.slice(1))
-  const page = $derived<Page>(hash in PAGES ? (hash as Page) : 'profile')
+  const page = $derived<Page>(hash.split('/')[0] in PAGES ? (hash.split('/')[0] as Page) : 'profile')
+  const profileTab = $derived(/^profile\/(\w+)$/.exec(hash)?.[1] ?? '') // #profile/matches is a tab of the profile
   const matchId = $derived(/^match\/(\d+)$/.exec(hash)?.[1]) // #match/123 is one match, outside the pages above
   const teamId = $derived(/^team\/(\d+)$/.exec(hash)?.[1]) // #team/123 is one league team, under Teams
   // the league pages are about other people's games: no account and none of the filters apply
@@ -160,11 +159,7 @@
   {:else if !filters.account_id}
     <p class="muted">No tracked accounts yet. Add one with <code>dotanalyst add-account</code>.</p>
   {:else if page === 'profile'}
-    <Profile {query} account={accounts.find((a) => String(a.account_id) === filters.account_id)} />
-  {:else if page === 'matches'}
-    <Matches {query} />
-  {:else if page === 'heroes'}
-    <Heroes {query} />
+    <Profile {query} tab={profileTab} account={accounts.find((a) => String(a.account_id) === filters.account_id)} />
   {:else if page === 'trends'}
     <Trends {query} {accounts} />
   {:else if page === 'group'}

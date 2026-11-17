@@ -446,7 +446,7 @@
   {/each}
 {/snippet}
 
-{#if !brief}<p class="back"><a href="#matches">← Matches</a></p>{/if}
+{#if !brief}<p class="back"><a href="#profile/matches">← Matches</a></p>{/if}
 {#if error}
   <p class="error" role="alert">{error}</p>
 {:else if match}
