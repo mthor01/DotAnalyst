@@ -217,8 +217,8 @@
             <td class="num">{w.heroes === null ? 'â€“' : one(w.heroes)}</td>
             <td class="num">{w.taken} ({percent(w.taken, w.spawns)}%)</td>
             <td class="num">{lead(w.lead)}</td>
-            <td class="num">{w.kills === null ? '–' : one(w.kills)}</td>
-            <td class="num">{w.deaths === null ? '–' : one(w.deaths)}</td>
+            <td class="num">{w.kills === null ? 'â€“' : one(w.kills)}</td>
+            <td class="num">{w.deaths === null ? 'â€“' : one(w.deaths)}</td>
           </tr>
         {/each}
       </tbody>
