@@ -2,8 +2,9 @@
   import type { WardSpot } from './api'
   import MiniMap, { KINDS as KIND_NAMES, mapX, mapY } from './MiniMap.svelte'
 
-  /** byGame: the wards carry `league`, and a dropdown splits tournament games from the rest */
-  let { wards, label, byGame = false }: { wards: WardSpot[]; label: string; byGame?: boolean } = $props()
+  /** games: those the wards could come from, warded or not. byGame: wards and games carry `league`, and a dropdown
+   *  splits tournament games from the rest */
+  let { wards, games, label, byGame = false }: { wards: WardSpot[]; games: { radiant: boolean; league?: boolean }[]; label: string; byGame?: boolean } = $props()
 
   const SQUARE = 2 // map cells to a side of the squares that tell, on hover, how many wards went there
   const SCALE = 2 // pixels of the heat picture per map cell
@@ -13,6 +14,8 @@
     { '': 'Whole game', m0: '0–10 min', m10: '10–20 min', m20: '20–30 min', m30: '30–40 min', m40: '40 min on' },
   ]
   const GAMES = { '': 'All games', league: 'Tournament games', usual: 'Usual matches' }
+  /** Squares warded in more than this share of the chosen games: the number after the s, in percent */
+  const SHARES = { s0: 'Every warded spot', s5: 'In over 5% of games', s10: 'In over 10% of games', s25: 'In over 25% of games', s50: 'In over 50% of games' }
   /** The ten minutes a ward was placed in, as a key of the time dropdown; wards before the horn count to the first. */
   const period = (w: WardSpot) => `m${Math.min(40, Math.floor(Math.max(0, w.time) / 600) * 10)}`
   // the heat colours of each kind, from a lone ward to its busiest spot: [where on the scale, red, green, blue, opacity]
@@ -41,6 +44,18 @@
     wards.filter(
       (w) => on[w.type] && on[w.radiant ? 'radiant' : 'dire'] && on[period(w)] && (!byGame || on[w.league ? 'league' : 'usual']),
     )
+
+  /** How many games the buttons and dropdowns choose: the time dropdown picks wards, not games */
+  const chosen = (on: Record<string, boolean>) =>
+    games.filter((g) => on[g.radiant ? 'radiant' : 'dire'] && (!byGame || on[g.league ? 'league' : 'usual'])).length
+  const square = (w: WardSpot) => `${Math.floor(mapX(w.x) / SQUARE) * SQUARE} ${Math.floor(mapY(w.y) / SQUARE) * SQUARE}`
+  /** Only the wards in squares warded in more than the chosen share of the `of` games */
+  function common(shown: WardSpot[], on: Record<string, boolean>, of: number) {
+    const least = Number(Object.keys(SHARES).find((key) => on[key])!.slice(1)) / 100
+    const games = new Map<string, Set<number>>()
+    for (const w of shown) games.set(square(w), (games.get(square(w)) ?? new Set()).add(w.match_id))
+    return shown.filter((w) => games.get(square(w))!.size > least * of)
+  }
 
   /** The heat picture of one kind: every ward adds a small Gaussian hill, and the height is coloured along the ramp. */
   function heat(shown: WardSpot[], RAMP: number[][]) {
@@ -80,22 +95,23 @@
 
   /** The squares with wards in them, for the counts on hover. */
   function squares(shown: WardSpot[]) {
-    const found = new Map<string, { x: number; y: number; obs: number; sen: number }>()
+    const found = new Map<string, { x: number; y: number; obs: number; sen: number; games: Set<number> }>()
     for (const w of shown) {
-      const x = Math.floor(mapX(w.x) / SQUARE) * SQUARE
-      const y = Math.floor(mapY(w.y) / SQUARE) * SQUARE
-      const s = found.get(`${x} ${y}`) ?? { x, y, obs: 0, sen: 0 }
+      const [x, y] = square(w).split(' ').map(Number)
+      const s = found.get(square(w)) ?? { x, y, obs: 0, sen: 0, games: new Set() }
       s[w.type] += 1
-      found.set(`${x} ${y}`, s)
+      s.games.add(w.match_id)
+      found.set(square(w), s)
     }
     return [...found.values()]
   }
   const count = (type: string) => wards.filter((w) => w.type === type).length
 </script>
 
-<MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={byGame ? [GAMES, ...LAYERS] : LAYERS}>
+<MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), ...LAYERS, SHARES]}>
   {#snippet children(_, on)}
-    {@const shown = shownOf(on)}
+    {@const of = chosen(on)}
+    {@const shown = common(shownOf(on), on, of)}
     <!-- the map is darkened so that the heat stands out from its greens and greys -->
     <rect class="veil" width="127" height="127" />
     <!-- one picture per kind, each scaled to its own busiest spot; sentries on top, as there are fewer -->
@@ -107,7 +123,8 @@
     {/each}
     {#each squares(shown) as s (`${s.x} ${s.y}`)}
       <rect class="spot" x={s.x} y={s.y} width={SQUARE} height={SQUARE}>
-        <title>Placed here: {s.obs} {s.obs === 1 ? 'observer' : 'observers'}, {s.sen} {s.sen === 1 ? 'sentry' : 'sentries'}</title>
+        <!-- one string: in SVG, Svelte drops the spaces between expressions -->
+        <title>{`Placed here: ${s.obs} ${s.obs === 1 ? 'observer' : 'observers'}, ${s.sen} ${s.sen === 1 ? 'sentry' : 'sentries'}, in ${s.games.size} of ${of} games`}</title>
       </rect>
     {/each}
   {/snippet}

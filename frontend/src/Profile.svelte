@@ -7,7 +7,7 @@
 
   let { query, account }: { query: string; account: Account | undefined } = $props()
   let rows = $state<MatchRow[]>([])
-  let wards = $state.raw<(WardSpot & { match_id: number })[]>([]) // of every match of these filters
+  let wards = $state.raw<WardSpot[]>([]) // of every match of these filters
   let error = $state('')
   let size = $state(25)
   let role = $state(0) // index into ROLES
@@ -153,7 +153,7 @@
 
   <section class="card vision">
     <div>
-      <WardHeat wards={warded} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches" />
+      <WardHeat wards={warded} games={recent.filter((r) => r.replay_state === 'parsed')} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches" />
     </div>
     <div class="muted">
       <h3>Wards placed</h3>

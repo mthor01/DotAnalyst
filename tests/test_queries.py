@@ -266,8 +266,9 @@ def test_team_players_wards_come_from_the_games_with_a_parsed_replay(league):
     players = {p["account_id"]: p for p in found["players"]}
     assert players[1000]["replays"] == 1
     assert players[1000]["wards"] == [
-        {"type": "obs", "x": 150.0, "y": 140.0, "radiant": False, "time": 0, "league": True}
+        {"match_id": 2, "type": "obs", "x": 150.0, "y": 140.0, "radiant": False, "time": 0, "league": True}
     ]
+    assert players[1000]["parsed"] == [{"radiant": False, "league": True}]  # its games, wards or none
     assert players[1001]["wards"] == []
 
 
@@ -286,8 +287,9 @@ def test_team_players_wards_also_come_from_their_parsed_games_outside_the_league
     players = {p["account_id"]: p for p in queries.team(league, US)["players"]}
     assert (players[1000]["usual_replays"], players[1001]["usual_replays"]) == (1, 0)
     assert players[1000]["wards"] == [
-        {"type": "sen", "x": 60.0, "y": 70.0, "radiant": False, "time": 700, "league": False}
+        {"match_id": 90, "type": "sen", "x": 60.0, "y": 70.0, "radiant": False, "time": 700, "league": False}
     ]
+    assert players[1000]["parsed"] == [{"radiant": False, "league": False}]
     assert players[1001]["wards"] == []
     # the dates narrow them like the league games; the season does not, as they are in none
     assert queries.team(league, US, date_to=date(2026, 11, 2))["players"][0]["wards"] == []

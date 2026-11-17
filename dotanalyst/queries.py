@@ -324,10 +324,12 @@ def team(
             hero(p["hero_id"])["wins"] += win
             if p.get("account_id") in (None, ANONYMOUS):
                 continue
-            blank = {"account_id": p["account_id"], "games": 0, "replays": 0, "usual_replays": 0, "heroes": {}, "wards": []}
+            blank = {"account_id": p["account_id"], "games": 0, "replays": 0, "usual_replays": 0, "heroes": {}, "wards": [], "parsed": []}
             player = players.setdefault(p["account_id"], blank)
             player["games"] += 1
             player["replays"] += g.match_id in parsed
+            if g.match_id in parsed:  # the ward map's games, wards or none
+                player["parsed"].append({"radiant": radiant, "league": True})
             placed_by[g.match_id, p["player_slot"]] = player
             blank = {"hero_id": p["hero_id"], "games": 0, "wins": 0, **dict.fromkeys(AVERAGED, 0)}
             on = player["heroes"].setdefault(p["hero_id"], blank)
@@ -357,6 +359,7 @@ def team(
     )  # fmt: skip
     for row in session.execute(usual):
         players[row.account_id]["usual_replays"] += 1
+        players[row.account_id]["parsed"].append({"radiant": row.player_slot < 128, "league": False})
         placed_by[row.match_id, row.player_slot] = players[row.account_id]
     w = Ward
     league_ids = set(ids)
@@ -365,7 +368,7 @@ def team(
         if (ward.match_id, ward.player_slot) in placed_by:
             placed_by[ward.match_id, ward.player_slot]["wards"].append(
                 {
-                    "type": ward.type, "x": ward.x, "y": ward.y, "radiant": ward.player_slot < 128, "time": ward.placed,
+                    "match_id": ward.match_id, "type": ward.type, "x": ward.x, "y": ward.y, "radiant": ward.player_slot < 128, "time": ward.placed,
                     "league": ward.match_id in league_ids,
                 }
             )  # fmt: skip
