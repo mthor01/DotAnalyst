@@ -12,7 +12,7 @@
   const UNTIL = 30
   const LEAP = 8 // cells in one second: a teleport, not a walk (as in Playback)
   const GAMES = 6 // per side, one colour each
-  let picked = $state<boolean>() // the side chosen in the dropdown; until then the side of their newest game
+  let picked = $state<boolean>() // the side chosen with the buttons; until then the side of their newest game
   const radiant = $derived(picked ?? all[0]?.radiant ?? true)
   const games = $derived(all.filter((g) => g.radiant === radiant).slice(0, GAMES))
   let spots = $state.raw<Record<number, Spot[]>>({}) // match id -> where its heroes were, second by second
@@ -80,11 +80,11 @@
 <div class="board">
 <MiniMap label="Where the team's heroes walked from {clock(FROM)} to {clock(at)} in their last {games.length} games as {radiant ? 'Radiant' : 'Dire'}">
   {#snippet controls()}
-    <select aria-label="Side the games were played on" value={radiant ? 'radiant' : 'dire'}
-      onchange={(e) => (picked = e.currentTarget.value === 'radiant')}>
-      <option value="radiant">As Radiant</option>
-      <option value="dire">As Dire</option>
-    </select>
+    <!-- one side at a time: its six games take the six colours -->
+    {#each [true, false] as side}
+      <button class="toggle" style:--tint="var(--{side ? 'radiant' : 'dire'})" aria-pressed={radiant === side}
+        onclick={() => (picked = side)}><i></i>As {side ? 'Radiant' : 'Dire'}</button>
+    {/each}
   {/snippet}
   {#snippet children(size)}
     {#each ways.filter((w) => !hidden[games[w.n].match_id] && w.way.length) as w (w.key)}

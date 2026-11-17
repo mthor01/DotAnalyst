@@ -208,8 +208,9 @@
   .controls :global(select) {
     margin-left: 0;
   }
-  /* on: the key's colour fills the dot and edges the button; off: a hollow dot on a muted button */
-  .toggle {
+  /* on: the key's colour fills the dot and edges the button; off: a hollow dot on a muted button. Global inside
+     .controls so a map's own controls snippet can use the same buttons */
+  .controls :global(.toggle) {
     font: inherit;
     font-weight: 600;
     display: inline-flex;
@@ -222,18 +223,18 @@
     color: var(--muted);
     cursor: pointer;
   }
-  .toggle i {
+  .controls :global(.toggle i) {
     width: 9px;
     height: 9px;
     border-radius: 50%;
     border: 2px solid var(--tint);
   }
-  .toggle[aria-pressed='true'] {
+  .controls :global(.toggle[aria-pressed='true']) {
     border-color: var(--tint);
     background: var(--raised);
     color: var(--text);
   }
-  .toggle[aria-pressed='true'] i {
+  .controls :global(.toggle[aria-pressed='true'] i) {
     background: var(--tint);
   }
   p button:disabled {

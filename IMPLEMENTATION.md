@@ -240,7 +240,7 @@ Each point is the mean of that match's value and of up to 19 parsed matches befo
 
 ### First moves (team page)
 
-`lib/Openings.svelte`. For the team's 6 newest games on one side (`GAMES`; a dropdown picks Radiant or Dire, at first the side of their newest game), the positions of its five heroes from −1:30 to 0:30, read from each game's raw log, drawn as one line per hero. Buttons beside the map switch each game on and off, or all of them on again. A step of more than 8 cells in a second is a teleport and breaks the line. A game without a parsed replay is not drawn.
+`lib/Openings.svelte`. For the team's 6 newest games on one side (`GAMES`; two buttons above the map pick Radiant or Dire, at first the side of their newest game), the positions of its five heroes from −1:30 to 0:30, read from each game's raw log, drawn as one line per hero. Buttons beside the map switch each game on and off, or all of them on again. A step of more than 8 cells in a second is a teleport and breaks the line. A game without a parsed replay is not drawn.
 
 ### Map geometry
 
