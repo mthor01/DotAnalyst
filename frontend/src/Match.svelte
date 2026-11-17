@@ -3,7 +3,7 @@
   import Chart, { type Ink } from './lib/Chart.svelte'
   import { ATTRIBUTES, abilityIcon, abilityName, constants, heroIcon, heroName, heroPortrait, itemIcon, itemIconByName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
-  import MiniMap, { mapX, mapY, viewOf } from './lib/MiniMap.svelte'
+  import MiniMap, { KINDS, SIDES, mapX, mapY, viewOf } from './lib/MiniMap.svelte'
   import Playback from './lib/Playback.svelte'
 
   let { id }: { id: string } = $props()
@@ -52,7 +52,6 @@
   const TEAMS = ['Radiant', 'Dire'] as const
   const isRadiant = (slot: number) => slot < 128
   const teamOf = (slot: number) => (isRadiant(slot) ? 'radiant' : 'dire')
-  const SIDES = { '': 'Both sides', radiant: 'Radiant', dire: 'Dire' } // a map's side dropdown, by teamOf
   const number = (n: number | null | undefined) => (n == null ? '–' : n.toLocaleString()) // Steam omits some stats for older matches
   const thousands = (n: number) => (n === 0 ? '0' : `${Math.round(n / 100) / 10}k`)
   const sum = (values: number[]) => values.reduce((a, b) => a + b, 0)
@@ -514,12 +513,10 @@
     {#if hasReplay}
       <h2>Lanes and buildings</h2>
       <p class="legend">
-        <span><i class="swatch radiant"></i>Radiant</span>
-        <span><i class="swatch dire"></i>Dire</span>
         <span>■ building standing at the end</span>
         <span>□ destroyed</span>
       </p>
-      <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings} layers={[SIDES]}>
+      <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings} toggles={SIDES}>
         {#snippet children(size, on)}
           {#each onLanes.filter((at) => on[teamOf(at.player_slot)]) as at (at.player_slot)}
             {@render heroMark(at, size * 0.04, `${name(at.player_slot)}: ${LANES[at.lane]}`)}
@@ -733,12 +730,11 @@
       <section>
         <h3>Wards placed</h3>
         <p class="legend">
-          <span><i class="swatch radiant"></i>Radiant</span>
-          <span><i class="swatch dire"></i>Dire</span>
+          <span>Marks in their side's colour</span>
           <span>● Observer</span>
           <span>◆ Sentry</span>
         </p>
-        <MiniMap label="Map of the {wardsShown.length} wards placed {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd} layers={[SIDES, { '': 'Observers and sentries', obs: 'Observers', sen: 'Sentries' }]}>
+        <MiniMap label="Map of the {wardsShown.length} wards placed {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd} toggles={{ ...SIDES, ...KINDS }}>
           {#snippet children(size, on)}
             {#each wardsShown.filter((w) => on[teamOf(w.player_slot)] && on[w.type]) as w}{@render wardMark(w, size * 0.0134, '')}{/each}
           {/snippet}
@@ -750,7 +746,7 @@
           <span><i class="swatch radiant"></i>green edge: a Radiant hero died</span>
           <span><i class="swatch dire"></i>red edge: a Dire hero died</span>
         </p>
-        <MiniMap label="Map of the {deathsShown.length} hero deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd} layers={[SIDES]}>
+        <MiniMap label="Map of the {deathsShown.length} hero deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd} toggles={SIDES}>
           {#snippet children(size, on)}
             {#each deathsShown.filter((d) => on[teamOf(d.player_slot)]) as d}{@render heroMark(d, size * 0.043, deathNote(d))}{/each}
           {/snippet}

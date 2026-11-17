@@ -45,6 +45,11 @@
     if (kind.startsWith('tower')) return `${team} tier ${kind.slice(5)} ${rest.join(' ')} tower`.replace('  ', ' ')
     return `${team} ${rest[1]} ${kind} barracks`
   }
+
+  /** Toggles for MiniMap's `toggles`: each key a button in its own colour, see TINTS */
+  export const SIDES = { radiant: 'Radiant', dire: 'Dire' }
+  export const KINDS = { obs: 'Observers', sen: 'Sentries' }
+  const TINTS: Record<string, string> = { radiant: 'var(--radiant)', dire: 'var(--dire)', obs: 'var(--series-4)', sen: 'var(--series-1)' }
 </script>
 
 <script lang="ts">
@@ -62,13 +67,15 @@
     /** What the reader can show besides the buildings: one dropdown per group, key -> the name of its option. The
      *  first option is chosen at first; the key '' shows every key of its group. */
     layers?: Record<string, string>[]
+    /** What the reader can switch on and off, key -> name: one button each, all on at first (see SIDES, KINDS) */
+    toggles?: Record<string, string>
     /** More controls, in the row of the dropdowns */
     controls?: Snippet
     /** Gets the width of the picture in map cells, to size its marks by so that they stay as large on the screen
      *  when the reader zooms, and which layers are shown. */
     children?: Snippet<[number, Record<string, boolean>]>
   }
-  let { label, view = WHOLE, fallen, at = Infinity, layers = [], controls, children }: Props = $props()
+  let { label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = {}, controls, children }: Props = $props()
 
   const box = (v: View) => `${v.x} ${v.y} ${v.size} ${v.size}`
   let moved = $state<View | null>(null) // where the reader has taken the picture; null is the view given
@@ -105,9 +112,11 @@
   const groups = $derived([...layers, ...(fallen ? [{ buildings: 'Buildings shown', none: 'No buildings' }] : [])])
   // an option no longer offered (another game list, say) falls back to the group's first
   const picked = $derived(groups.map((g, i) => (chosen[i] in g ? chosen[i] : Object.keys(g)[0])))
-  const on = $derived(
-    Object.fromEntries(groups.flatMap((g, i) => Object.keys(g).map((key) => [key, picked[i] === '' || picked[i] === key]))),
-  )
+  let hidden = $state<Record<string, boolean>>({}) // the toggles the reader switched off
+  const on = $derived({
+    ...Object.fromEntries(groups.flatMap((g, i) => Object.keys(g).map((key) => [key, picked[i] === '' || picked[i] === key]))),
+    ...Object.fromEntries(Object.keys(toggles).map((key) => [key, !hidden[key]])),
+  })
 
   /** Side of a tower's square in cells: a share of the picture, but small enough on the whole map that a tier-3
    *  tower and the barracks behind it stay apart. */
@@ -128,6 +137,11 @@
   <p>
     <span class="controls">
       {@render controls?.()}
+      {#each Object.entries(toggles) as [key, name] (key)}
+        <button class="toggle" style:--tint={TINTS[key]} aria-pressed={!hidden[key]} onclick={() => (hidden[key] = !hidden[key])}>
+          <i></i>{name}
+        </button>
+      {/each}
       {#each groups as group, i}
         <select aria-label="What the map shows" value={picked[i]} onchange={(e) => (chosen[i] = e.currentTarget.value)}>
           {#each Object.entries(group) as [key, name] (key)}
@@ -193,6 +207,34 @@
   }
   .controls :global(select) {
     margin-left: 0;
+  }
+  /* on: the key's colour fills the dot and edges the button; off: a hollow dot on a muted button */
+  .toggle {
+    font: inherit;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border: 1px solid var(--axis);
+    border-radius: 4px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .toggle i {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 2px solid var(--tint);
+  }
+  .toggle[aria-pressed='true'] {
+    border-color: var(--tint);
+    background: var(--raised);
+    color: var(--text);
+  }
+  .toggle[aria-pressed='true'] i {
+    background: var(--tint);
   }
   p button:disabled {
     color: var(--muted);

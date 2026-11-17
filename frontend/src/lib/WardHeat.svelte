@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { WardSpot } from './api'
-  import MiniMap, { mapX, mapY } from './MiniMap.svelte'
+  import MiniMap, { KINDS as KIND_NAMES, mapX, mapY } from './MiniMap.svelte'
 
   /** byGame: the wards carry `league`, and a dropdown splits tournament games from the rest */
   let { wards, label, byGame = false }: { wards: WardSpot[]; label: string; byGame?: boolean } = $props()
@@ -8,10 +8,8 @@
   const SQUARE = 2 // map cells to a side of the squares that tell, on hover, how many wards went there
   const SCALE = 2 // pixels of the heat picture per map cell
   const SPREAD = 1.5 // cells: wards on the same spot run into one hill, wards a few cells apart stay apart
-  const KIND_NAMES = { obs: 'Observers', sen: 'Sentries' }
+  const TOGGLES = { radiant: 'As Radiant', dire: 'As Dire', ...KIND_NAMES }
   const LAYERS = [
-    { '': 'Observers and sentries', ...KIND_NAMES },
-    { '': 'Both sides', radiant: 'As Radiant', dire: 'As Dire' },
     { '': 'Whole game', m0: '0–10 min', m10: '10–20 min', m20: '20–30 min', m30: '30–40 min', m40: '40 min on' },
   ]
   const GAMES = { '': 'All games', league: 'Tournament games', usual: 'Usual matches' }
@@ -95,7 +93,7 @@
   const count = (type: string) => wards.filter((w) => w.type === type).length
 </script>
 
-<MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" layers={byGame ? [GAMES, ...LAYERS] : LAYERS}>
+<MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={byGame ? [GAMES, ...LAYERS] : LAYERS}>
   {#snippet children(_, on)}
     {@const shown = shownOf(on)}
     <!-- the map is darkened so that the heat stands out from its greens and greys -->
@@ -119,7 +117,7 @@
   {#each KINDS as kind}
     <span class="scale">{KIND_NAMES[kind]}: one <i class="ramp" style:background={strip(RAMPS[kind])}></i> the most</span>
   {/each}
-  <span>The dropdowns choose which wards count; hover a spot for its numbers.</span>
+  <span>The buttons and dropdowns above the map choose which wards count; hover a spot for its numbers.</span>
 </p>
 
 <style>

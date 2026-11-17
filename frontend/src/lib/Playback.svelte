@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte'
   import { clock, get, type MatchPlayer } from './api'
   import { heroIcon, heroName } from './constants.svelte'
-  import MiniMap, { mapX, mapY, viewOf } from './MiniMap.svelte'
+  import MiniMap, { SIDES, mapX, mapY, viewOf } from './MiniMap.svelte'
 
   type Spot = { time: number; player_slot: number; x: number; y: number; alive: boolean }
   type Props = {
@@ -91,7 +91,7 @@
 {:else if !spots}
   <p class="muted">Loading…</p>
 {:else}
-  <MiniMap label="Positions of the heroes at {clock(second)}, {label}" {view} {fallen} at={second} layers={[{ '': 'Both sides', radiant: 'Radiant', dire: 'Dire' }, { wards: 'Wards shown', none: 'No wards' }]}>
+  <MiniMap label="Positions of the heroes at {clock(second)}, {label}" {view} {fallen} at={second} toggles={SIDES} layers={[{ wards: 'Wards shown', none: 'No wards' }]}>
     {#snippet children(size, on)}
       {@const icon = size * 0.085}
       {#if on.wards}{@render wards(second, size)}{/if}
