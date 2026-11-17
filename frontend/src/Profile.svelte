@@ -1,7 +1,6 @@
 <script lang="ts">
   import { clock, get, percent, type Account, type MatchRow, type WardSpot } from './lib/api'
-  import { heroIcon, heroName } from './lib/constants.svelte'
-  import Hero from './lib/Hero.svelte'
+  import { heroIcon, heroName, heroPortrait } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
   import Matches from './Matches.svelte'
   import RoleWheel, { tally, type Role } from './lib/RoleWheel.svelte'
@@ -175,12 +174,14 @@
         </thead>
         <tbody>
           {#each heroes.slice(0, TOP_HEROES) as h (h.hero_id)}
+            {@const rate = percent(h.wins, h.games)}
             <tr>
-              <td><Hero id={h.hero_id} /></td>
+              <td><img class="icon" src={heroPortrait(h.hero_id)} alt={heroName(h.hero_id)} title={heroName(h.hero_id)} width="44" height="25" loading="lazy" /></td>
               <td class="num">{h.games}</td>
               <td>
-                <span class="rate" class:losing={h.wins * 2 < h.games}><i style:width="{percent(h.wins, h.games)}%"></i></span>
-                {percent(h.wins, h.games)}%
+                <!-- the bar grows from the middle line: right and green above 50 %, left and red below -->
+                <span class="rate"><i class:losing={rate < 50} style:left="{Math.min(rate, 50)}%" style:width="{Math.abs(rate - 50)}%"></i></span>
+                {rate}%
               </td>
               <td class="num">{(h.kills / h.games).toFixed(1)} / {(h.deaths / h.games).toFixed(1)} / {(h.assists / h.games).toFixed(1)}</td>
             </tr>
@@ -337,22 +338,29 @@
     align-content: center;
     padding: 18px;
   }
+  .icon {
+    display: block;
+    object-fit: cover;
+    border-radius: 3px;
+  }
   .rate {
+    position: relative;
     display: inline-block;
     width: 90px;
     height: 6px;
     margin-right: 8px;
     border-radius: 2px;
-    background: var(--raised);
+    background: linear-gradient(var(--axis), var(--axis)) center / 1px 100% no-repeat, var(--raised);
     vertical-align: 1px;
     overflow: hidden;
   }
   .rate i {
-    display: block;
-    height: 100%;
+    position: absolute;
+    top: 0;
+    bottom: 0;
     background: var(--good);
   }
-  .rate.losing i {
+  .rate i.losing {
     background: var(--critical);
   }
   .more {
