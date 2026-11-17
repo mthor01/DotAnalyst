@@ -15,6 +15,7 @@ PARSER_URL = "http://localhost:5600/"
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 OPENDOTA_MATCH = "https://api.opendota.com/api/matches/{}"
 SALT_SCRIPT = Path(__file__).parent.parent / "steam" / "salts.mjs"
+MAX_AGE_DAYS = 30  # how far back replays are downloaded; Valve keeps them about 100 days
 RETRY_DAYS = 14  # a match this old with no replay to get is given up on
 
 
@@ -121,24 +122,32 @@ def steam_salts(match_ids: list[int], data: Path = DATA) -> dict[int, int]:
     return known
 
 
-def replay_salt(match_id: int, client: httpx.Client, opendota_dir: Path) -> int | None:
-    """Replay salt from OpenDota, or None if it has none. A response with a salt is kept and never asked for again."""
+def opendota_match(match_id: int, client: httpx.Client, opendota_dir: Path) -> dict | None:
+    """OpenDota's answer for one match, or None if it has none. An answer with a replay salt is kept and never asked
+    for again."""
     stored = opendota_dir / f"{match_id}.json.gz"
     if stored.exists():
-        return json.loads(gzip.decompress(stored.read_bytes()))["replay_salt"]
+        return json.loads(gzip.decompress(stored.read_bytes()))
     response = client.get(OPENDOTA_MATCH.format(match_id), timeout=30)
     if response.status_code == 404:
         return None
     response.raise_for_status()
     try:
-        salt = response.json()["replay_salt"]
-    except (ValueError, KeyError, TypeError):
+        found = response.json()
+    except ValueError:
         return None
-    if type(salt) is not int:  # it goes into a URL, so nothing but a number passes
+    if not isinstance(found, dict):
         return None
-    opendota_dir.mkdir(parents=True, exist_ok=True)
-    stored.write_bytes(gzip.compress(response.content))
-    return salt
+    if type(found.get("replay_salt")) is int:
+        opendota_dir.mkdir(parents=True, exist_ok=True)
+        stored.write_bytes(gzip.compress(response.content))
+    return found
+
+
+def replay_salt(match_id: int, client: httpx.Client, opendota_dir: Path) -> int | None:
+    """Replay salt from OpenDota, or None if it has none."""
+    salt = (opendota_match(match_id, client, opendota_dir) or {}).get("replay_salt")
+    return salt if type(salt) is int else None  # it goes into a URL, so nothing but a number passes
 
 
 def download_replay(url: str, dem: Path, client: httpx.Client) -> bool:

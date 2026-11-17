@@ -318,6 +318,11 @@
               "First moves" on the General tab, or with the button on a game's page.
             </p>
           {/if}
+          {#if p.usual_waiting === null}
+            <p class="muted">Refresh fetches the replays of their usual matches from the last 30 days, about ten a minute.</p>
+          {:else if p.usual_waiting}
+            <p class="muted">{p.usual_waiting} more of their usual matches from the last 30 days wait for their replay.</p>
+          {/if}
         </section>
         <section class="outside">
           <h3>Their last {p.outside.length || ''} games outside the league</h3>

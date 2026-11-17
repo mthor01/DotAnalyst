@@ -93,10 +93,12 @@ class PlayerGameList(Base):
 
     account_id: Mapped[int] = mapped_column(primary_key=True)
     fetched_at: Mapped[int]
+    replays_wanted: Mapped[bool] = mapped_column(default=False)  # their team was checked: the poller gets replays of their games
 
 
 class PlayerGame(Base):
-    """One of a league player's last games outside the league, as OpenDota lists it. Its replay is never fetched."""
+    """One of a league player's last games outside the league, as OpenDota lists it. Its replay is fetched only
+    when the player's list has replays_wanted, while the game is young enough."""
 
     __tablename__ = "player_games"
 
@@ -310,6 +312,8 @@ def open_engine() -> Engine:
     with engine.begin() as c:  # create_all adds no columns to a table that exists
         if "avatar" not in {col["name"] for col in inspect(c).get_columns("accounts")}:
             c.exec_driver_sql("ALTER TABLE accounts ADD COLUMN avatar VARCHAR")
+        if "replays_wanted" not in {col["name"] for col in inspect(c).get_columns("player_game_lists")}:
+            c.exec_driver_sql("ALTER TABLE player_game_lists ADD COLUMN replays_wanted BOOLEAN NOT NULL DEFAULT 0")
     return engine
 
 

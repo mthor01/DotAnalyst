@@ -87,6 +87,9 @@ def test_refresh_asks_at_once_for_the_players_never_asked_for(session, monkeypat
     assert poll.refresh_players(session.get_bind(), [PLAYER, 1002]) == 1
     assert [c.url.path for c in calls] == ["/api/players/1002/matches"]
     assert session.get(PlayerGameList, 1002) is not None
+    # from now on the poller fetches the replays of both players' usual games
+    session.expire_all()
+    assert session.get(PlayerGameList, PLAYER).replays_wanted and session.get(PlayerGameList, 1002).replays_wanted
 
 
 def test_unlisted_players_come_from_the_newest_league_games(session):

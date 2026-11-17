@@ -11,18 +11,22 @@ import httpx
 from sqlalchemy import Engine, and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from .db import DATA, LeagueMatch, Match, PlayerGameList, PlayerMinute
+from .db import DATA, LeagueMatch, Match, PlayerGame, PlayerGameList, PlayerMinute
 from .derive import derive_match
-from .opendota import fetch_player_games, unlisted_players
-from .replay import PARSER_URL, ReplayError, fetch_replay, parse_replay, replay_complete, steam_salts
+from .opendota import fetch_player_games, unlisted_players, usual_match
+from .replay import (
+    MAX_AGE_DAYS, PARSER_URL, ReplayError, fetch_replay, opendota_match, parse_replay, replay_complete, steam_salts,
+)  # fmt: skip
 from .steam import store_match, sync, sync_leagues
 
 log = logging.getLogger("uvicorn.error")  # the logger uvicorn already prints
 REPLAY_DIR = Path(r"C:\Program Files (x86)\Steam\steamapps\common\dota 2 beta\game\dota\replays")
 RETRY_SECONDS = 3600
-MAX_AGE_DAYS = 30  # how far back replays are downloaded; Valve keeps them about 100 days
 DOWNLOADS_PER_POLL = 10  # about 40 MB each; also keeps OpenDota calls far below its 60 a minute
 PLAYERS_PER_POLL = 5  # league players whose own games are asked of OpenDota, one call each
+USUAL_PER_POLL = 10  # usual games of a checked team's players turned into matches, one OpenDota call each
+# shortcut: forgotten on restart, so OpenDota is asked once more per run for a game it cannot give; store it if that adds up
+NO_MATCH: set[int] = set()
 BUSY = threading.Lock()  # the timed poll and a refresh from the site never fetch at the same time
 # for the queue page; kept in memory only, so a restart starts them empty
 NOW = {"doing": "starting", "since": time.time(), "last_poll": None, "next_poll": None}
@@ -84,6 +88,30 @@ def poll_once(
     for raw in session.scalars(recent).all():
         store_match(session, raw)
     session.commit()
+
+    # the usual games of a checked team's players become matches too, from OpenDota's answer, which also holds the
+    # salt the download below needs; they join nobody's stats either, only the players' ward maps
+    usual = (
+        select(PlayerGame.match_id).distinct()
+        .join(PlayerGameList, and_(PlayerGameList.account_id == PlayerGame.account_id, PlayerGameList.replays_wanted))
+        .where(PlayerGame.start_time > time.time() - MAX_AGE_DAYS * 86400, PlayerGame.match_id.not_in(select(Match.match_id)))
+        .where(PlayerGame.match_id.not_in(NO_MATCH))
+        .order_by(PlayerGame.match_id.desc())
+        .limit(USUAL_PER_POLL)
+    )  # fmt: skip
+    for match_id in session.scalars(usual).all():
+        doing(f"asking OpenDota for usual match {match_id} of a checked team's player")
+        try:
+            found = usual_match(opendota_match(match_id, client, data / "opendota"), match_id)
+        except httpx.HTTPError as error:
+            event(match_id, f"usual match from OpenDota, the rest waits for the next poll: {error!r}")
+            break
+        if found is None:
+            NO_MATCH.add(match_id)
+            event(match_id, "OpenDota does not know this usual match", warn=False)
+            continue
+        store_match(session, found)
+        session.commit()
 
     parsed = 0
     for dem in folder_replays(session, replay_dir):
@@ -275,8 +303,9 @@ def refresh_leagues(engine: Engine) -> dict:
 
 
 def refresh_players(engine: Engine, account_ids: list[int]) -> int:
-    """The games outside the league of those of these players never asked for, now rather than at the poller's pace.
-    Returns how many players were asked for; an OpenDota failure raises httpx.HTTPError, keeping those before it."""
+    """The games outside the league of those of these players never asked for, now rather than at the poller's pace,
+    and from then on the replays of those games young enough (see poll_once). Returns how many players were asked
+    for; an OpenDota failure raises httpx.HTTPError, keeping those before it."""
     with BUSY, Session(engine) as session, httpx.Client() as client:
         unlisted = [a for a in account_ids if session.get(PlayerGameList, a) is None]
         try:
@@ -285,6 +314,10 @@ def refresh_players(engine: Engine, account_ids: list[int]) -> int:
                 fetch_player_games(session, client, account_id)
         finally:
             doing("waiting for the next poll")
+        # their usual games' replays are fetched from now on, at the poller's pace
+        for listed in session.scalars(select(PlayerGameList).where(PlayerGameList.account_id.in_(account_ids))):
+            listed.replays_wanted = True
+        session.commit()
         return len(unlisted)
 
 

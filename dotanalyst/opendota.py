@@ -1,4 +1,5 @@
-"""A league player's last games outside the league, from OpenDota: the basic numbers only, never the replays."""
+"""A league player's last games outside the league, from OpenDota: the basic numbers, and for the players of a
+checked team the match itself, so that the poller can fetch its replay."""
 import time
 
 import httpx
@@ -6,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db import LeagueMatch, PlayerGame, PlayerGameList
-from .steam import ANONYMOUS
+from .steam import ANONYMOUS, STATS
 
 PLAYER_MATCHES = "https://api.opendota.com/api/players/{}/matches"
 GAMES = 100  # kept per player
@@ -69,3 +70,23 @@ def _valid(r) -> bool:
     """A row with what every game needs, in the types the tables take."""
     ints = ("match_id", "start_time", "hero_id", "player_slot")
     return isinstance(r, dict) and all(isinstance(r.get(k), int) for k in ints) and isinstance(r.get("radiant_win"), bool)
+
+
+MATCH_KEYS = ("match_id", "match_seq_num", "start_time", "duration", "game_mode", "lobby_type", "cluster")
+PLAYER_KEYS = ("player_slot", "hero_id", "account_id", *(f"item_{i}" for i in range(6)), "item_neutral", *STATS)
+
+
+def usual_match(found: dict | None, match_id: int) -> dict | None:
+    """OpenDota's answer for a match cut down to what Steam's match details hold, so that it is stored like those;
+    None when it lacks what a match needs. The cluster goes into the replay's URL, so only a number passes."""
+    if not isinstance(found, dict) or found.get("match_id") != match_id:
+        return None
+    if not all(type(found.get(k)) is int for k in MATCH_KEYS) or not isinstance(found.get("players"), list):
+        return None
+    players = found["players"]
+    if not all(isinstance(p, dict) and type(p.get("player_slot")) is int and type(p.get("hero_id")) is int for p in players):
+        return None
+    return {
+        **{k: found[k] for k in MATCH_KEYS}, "radiant_win": bool(found.get("radiant_win")),
+        "players": [{k: p[k] for k in PLAYER_KEYS if k in p} for p in players],
+    }  # fmt: skip

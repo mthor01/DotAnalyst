@@ -131,10 +131,13 @@ export type TeamDetail = {
   games: { match_id: number; start_time: number; league: string; radiant: boolean; win: boolean; opponent_id: number; opponent: string | null; picks: number[]; picks_against: number[]; bans: number[]; bans_against: number[]; replay: boolean }[]
   heroes: TeamHero[]
   /** `wards` are those of the `replays` games of the player whose replay is parsed. `outside` are the player's last
-   *  games outside the league, newest first, whatever the filters; `outside_listed` is false until they were asked for. */
+   *  games outside the league, newest first, whatever the filters; `outside_listed` is false until they were asked for.
+   *  `usual_waiting`: usual games of the last 30 days whose replay the poller still means to get, null until Refresh
+   *  on the team page asked for them. */
   players: {
     account_id: number; name: string | null; games: number; replays: number; usual_replays: number; heroes: TeamPlayerHero[]; wards: WardSpot[]; parsed: { radiant: boolean; league: boolean; win: boolean }[]
     outside_listed: boolean
+    usual_waiting: number | null
     outside: { match_id: number; hero_id: number; win: boolean; role: 'safe' | 'mid' | 'off' | 'jungle' | 'none'; kills: number | null; deaths: number | null; assists: number | null }[]
   }[]
   /** From the parsed games, seen from their side: a lead is their net worth minus the enemy's, null with nothing to

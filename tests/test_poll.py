@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from dotanalyst.db import Base, Derived, Match, MatchPlayer, PlayerMinute
+from dotanalyst.db import Base, Derived, Match, MatchPlayer, PlayerGame, PlayerGameList, PlayerMinute
 from dotanalyst import poll
 from dotanalyst.poll import poll_once, request_replay
 from dotanalyst.replay import replay_complete
@@ -346,3 +346,45 @@ def test_a_broken_download_is_retried_not_parsed(session, tmp_path, body):
     assert to("localhost", calls) == []
     assert session.get(Match, GOOD).replay_state == "pending"
     assert list((tmp_path / "tmp").iterdir()) == []
+
+
+def player_game(session: Session, account_id: int, match_id: int, age_days: float, wanted: bool) -> None:
+    if session.get(PlayerGameList, account_id) is None:
+        session.add(PlayerGameList(account_id=account_id, fetched_at=0, replays_wanted=wanted))
+    session.add(
+        PlayerGame(
+            account_id=account_id, match_id=match_id, start_time=int(time.time() - age_days * DAY), hero_id=1,
+            player_slot=0, radiant_win=True,
+        )
+    )  # fmt: skip
+    session.commit()
+
+
+USUAL = json.loads(OPENDOTA)["match_id"]
+
+
+def test_the_usual_games_of_a_checked_teams_players_become_matches(session, tmp_path, monkeypatch):
+    monkeypatch.setattr(poll, "NO_MATCH", set())
+    player_game(session, 1001, USUAL, age_days=1, wanted=True)
+    player_game(session, 1001, 44, age_days=40, wanted=True)  # too old for its replay
+    player_game(session, 1002, 55, age_days=1, wanted=False)  # their team was never checked
+    calls = []
+    poll_once(session, network(calls, opendota=(200, OPENDOTA)), "", tmp_path / "nowhere", tmp_path)
+
+    assert to("opendota", calls) == [f"https://api.opendota.com/api/matches/{USUAL}"]  # its salt is kept from this answer
+    match = session.get(Match, USUAL)
+    assert (match.cluster, match.lobby_type, len(match.raw_json["players"])) == (CLUSTER, 7, 10)
+    assert "replay_salt" not in match.raw_json  # cut down to what Steam's match details hold
+    assert session.query(MatchPlayer).filter_by(match_id=USUAL).count() == 10
+    assert session.get(Match, 44) is None and session.get(Match, 55) is None
+
+
+def test_a_usual_game_opendota_does_not_know_is_asked_for_once(session, tmp_path, monkeypatch):
+    monkeypatch.setattr(poll, "NO_MATCH", set())
+    player_game(session, 1001, 66, age_days=1, wanted=True)
+    calls = []
+    client = network(calls)  # OpenDota answers 404
+    poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
+    poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
+    assert to("opendota", calls) == ["https://api.opendota.com/api/matches/66"]
+    assert session.get(Match, 66) is None

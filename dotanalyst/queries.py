@@ -8,6 +8,7 @@ from .db import (
     TABLES, Account, Lane, LeagueMatch, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerName, Tormentor,
     Ward, WisdomRune,
 )  # fmt: skip
+from .replay import MAX_AGE_DAYS
 from .steam import ANONYMOUS, LEAGUES, match_rows
 
 OTHER = aliased(MatchPlayer)
@@ -290,7 +291,8 @@ def team(
     A hero is open in a game when neither side banned it and the other side did not pick it, so banned_against +
     banned + picked_against + open is the number of games. A player's wards come from the games whose replay is
     parsed (`replays` says how many of the player's games those are), and from their parsed games outside any
-    league (`usual_replays`, wards with `league` False). The dates and the league narrow the games counted; a team
+    league (`usual_replays`, wards with `league` False). `usual_waiting` counts the usual games whose replay the
+    poller still means to get, None for a player whose team was never checked. The dates and the league narrow the games counted; a team
     with no game in them has an empty answer, not None.
     """
     names = {t["team_id"]: t["name"] for t in teams(session)}
@@ -388,7 +390,21 @@ def team(
     n = PlayerName
     known = dict(session.execute(select(n.account_id, n.name).where(n.account_id.in_(players))).all())
     # their games outside the league, for the role wheel: the time and season filters do not apply to them
-    listed = set(session.scalars(select(PlayerGameList.account_id).where(PlayerGameList.account_id.in_(players))))
+    pgl = PlayerGameList
+    listed = dict(session.execute(select(pgl.account_id, pgl.replays_wanted).where(pgl.account_id.in_(players))).all())
+    wanted = [account_id for account_id, replays_wanted in listed.items() if replays_wanted]
+    # of a checked team's players: their usual games young enough whose replay the poller has not got to yet
+    waiting = dict(
+        session.execute(
+            select(PlayerGame.account_id, func.count())
+            .outerjoin(Match, Match.match_id == PlayerGame.match_id)
+            .where(
+                PlayerGame.account_id.in_(wanted), PlayerGame.start_time > datetime.now().timestamp() - MAX_AGE_DAYS * 86400,
+                or_(Match.match_id.is_(None), Match.replay_state.in_(("none", "pending"))),
+            )
+            .group_by(PlayerGame.account_id)
+        ).all()
+    )  # fmt: skip
     outside = {account_id: [] for account_id in players}
     pg = PlayerGame
     for g in session.scalars(select(pg).where(pg.account_id.in_(players)).order_by(pg.start_time.desc())):
@@ -401,6 +417,7 @@ def team(
     for player in players.values():
         player["name"] = known.get(player["account_id"])
         player["outside_listed"] = player["account_id"] in listed
+        player["usual_waiting"] = waiting.get(player["account_id"], 0) if player["account_id"] in wanted else None
         player["outside"] = outside[player["account_id"]]
         player["heroes"] = sorted(player["heroes"].values(), key=lambda h: -h["games"])
         for h in player["heroes"]:
