@@ -117,8 +117,8 @@
         onclick={() => (hidden = { ...hidden, [g.match_id]: !hidden[g.match_id] })}>
         <i></i>{date(g.start_time)}
       </button>
-      against {g.opponent || 'a side without a team'}, {g.win ? 'won' : 'lost'}{g.replay ? '' : ': no replay'}
-      <a href="#match/{g.match_id}" aria-label="Open the game of {date(g.start_time)}">open</a>
+      against {g.opponent || 'a side without a team'}, {g.win ? 'won' : 'lost'},
+      <a href="#match/{g.match_id}" aria-label="Open the game of {date(g.start_time)}">{g.match_id}</a>{g.replay ? '' : ', no replay'}
     </li>
   {:else}
     <li>No games of theirs as {radiant ? 'Radiant' : 'Dire'} in this season and time frame.</li>
