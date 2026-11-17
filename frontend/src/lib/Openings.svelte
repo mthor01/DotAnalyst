@@ -18,6 +18,8 @@
   let spots = $state.raw<Record<number, Spot[]>>({}) // match id -> where its heroes were, second by second
   let error = $state('')
   let at = $state(UNTIL)
+  let hidden = $state<Record<number, boolean>>({}) // match id -> switched off beside the map
+  const all_on = $derived(games.every((g) => !hidden[g.match_id]))
 
   $effect(() => {
     let current = true
@@ -52,9 +54,6 @@
     return d
   }
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-  const layers = $derived([
-    { '': 'All games', ...Object.fromEntries(games.map((g, n) => [`game${n}`, `${n + 1}: ${date(g.start_time)}`])) },
-  ])
 
   // ---- the replays that are not here yet: asked for one after the other, each about 15 seconds
   const missing = $derived(games.filter((g) => !g.replay))
@@ -77,7 +76,9 @@
   }
 </script>
 
-<MiniMap label="Where the team's heroes walked from {clock(FROM)} to {clock(at)} in their last {games.length} games as {radiant ? 'Radiant' : 'Dire'}" {layers}>
+<div class="openings">
+<div class="board">
+<MiniMap label="Where the team's heroes walked from {clock(FROM)} to {clock(at)} in their last {games.length} games as {radiant ? 'Radiant' : 'Dire'}">
   {#snippet controls()}
     <select aria-label="Side the games were played on" value={radiant ? 'radiant' : 'dire'}
       onchange={(e) => (picked = e.currentTarget.value === 'radiant')}>
@@ -85,8 +86,8 @@
       <option value="dire">As Dire</option>
     </select>
   {/snippet}
-  {#snippet children(size, on)}
-    {#each ways.filter((w) => on[`game${w.n}`] && w.way.length) as w (w.key)}
+  {#snippet children(size)}
+    {#each ways.filter((w) => !hidden[games[w.n].match_id] && w.way.length) as w (w.key)}
       {@const here = w.way.findLast((s) => s.time <= at)}
       <g style:--game="var(--series-{w.n + 1})">
         <path d={line(w.way, at)} stroke-width={size * 0.006} />
@@ -105,17 +106,26 @@
   <input type="range" min={FROM} max={UNTIL} step="1" bind:value={at} aria-label="Game second the map shows the heroes at" />
   <span>{clock(at)}</span>
 </p>
-<ol>
+</div>
+<!-- beside the map: which games it draws, each a button in its game's colour -->
+<ol aria-label="Games drawn on the map">
+  {#if games.length}
+    <li><button class="game" aria-pressed={all_on} onclick={() => (hidden = {})}>All games</button></li>
+  {/if}
   {#each games as g, n (g.match_id)}
     <li class:none={!g.replay}>
-      <i class="swatch" style:background="var(--series-{n + 1})"></i>
-      <a href="#match/{g.match_id}">{date(g.start_time)}</a>
+      <button class="game" style:--game="var(--series-{n + 1})" aria-pressed={!hidden[g.match_id]}
+        onclick={() => (hidden = { ...hidden, [g.match_id]: !hidden[g.match_id] })}>
+        <i></i>{date(g.start_time)}
+      </button>
       against {g.opponent || 'a side without a team'}, {g.win ? 'won' : 'lost'}{g.replay ? '' : ': no replay'}
+      <a href="#match/{g.match_id}" aria-label="Open the game of {date(g.start_time)}">open</a>
     </li>
   {:else}
     <li>No games of theirs as {radiant ? 'Radiant' : 'Dire'} in this season and time frame.</li>
   {/each}
 </ol>
+</div>
 {#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if missing.length}
   <p>
@@ -151,11 +161,53 @@
     margin: 0;
     padding: 0;
   }
+  .openings {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px 24px;
+  }
+  .board {
+    flex: 1 1 320px;
+    max-width: 520px;
+  }
   ol {
+    display: grid;
+    gap: 6px;
     margin: 0 0 12px;
     padding: 0;
     list-style: none;
     color: var(--text-2);
+  }
+  /* on: the game's colour fills the dot and edges the button; off: a hollow dot on a muted button */
+  .game {
+    font: inherit;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 92px;
+    margin-right: 6px;
+    padding: 3px 10px;
+    border: 1px solid var(--axis);
+    border-radius: 4px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .game i {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 2px solid var(--game);
+  }
+  .game[aria-pressed='true'] {
+    border-color: var(--game, var(--text-2));
+    background: var(--raised);
+    color: var(--text);
+  }
+  .game[aria-pressed='true'] i {
+    background: var(--game);
   }
   li.none {
     color: var(--muted);
