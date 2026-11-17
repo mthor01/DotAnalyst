@@ -226,6 +226,8 @@ Rules that live in the frontend (`frontend/src`), applied to what the API sends.
 
 The lane seen from the player's side: Radiant's safe lane is bottom and Dire's is top, the other side lane is the off lane; mid and jungle are themselves. A match without a parsed replay has no role.
 
+The Role dropdown above the page keeps only the matches the account played in one position, or in the cores (1–3) or the supports (4–5) together (see Position 1–5 of a player). It applies before the 25, 100 or 500 newest are taken, so every part of the page (heroes, role wheel, strip, wards, numbers) counts only those matches.
+
 A lane counts as won or lost when `lane_nw_diff` is beyond ±500 net worth, and as even inside that (`EVEN` in `Profile.svelte`).
 
 The role wheel (`RoleWheel.svelte`) gives each lane its share of the middle ring and the heroes played there their share of the outer ring. Clicking a lane in the middle ring turns the wheel in 0.7 s (cubic in-out, at once with reduced motion) until that lane fills the middle ring and its heroes fill the outer one. The number in the centre then counts that lane's matches, and "Show all lanes" turns the wheel back.

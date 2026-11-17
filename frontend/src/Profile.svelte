@@ -10,6 +10,7 @@
   let wards = $state.raw<(WardSpot & { match_id: number })[]>([]) // of every match of these filters
   let error = $state('')
   let size = $state(25)
+  let role = $state(0) // index into ROLES
 
   $effect(() => {
     let current = true
@@ -20,10 +21,23 @@
     return () => (current = false)
   })
 
-  const SIZES = [25, 100]
+  const SIZES = [25, 100, 500]
+  /** The role picker: a name and the positions it takes in (see Position 1–5 in IMPLEMENTATION.md) */
+  const ROLES: [string, number[]][] = [
+    ['All roles', [1, 2, 3, 4, 5]],
+    ['Pos 1 (carry)', [1]],
+    ['Pos 2 (mid)', [2]],
+    ['Pos 3 (offlane)', [3]],
+    ['Pos 4 (soft support)', [4]],
+    ['Pos 5 (hard support)', [5]],
+    ['Cores (pos 1–3)', [1, 2, 3]],
+    ['Supports (pos 4–5)', [4, 5]],
+  ]
   const TOP_HEROES = 10
   const EVEN = 500 // a lane within this much net worth at 10:00 counts as even
-  const recent = $derived(rows.slice(0, size)) // the API returns newest first
+  const played = $derived(rows.filter((r) => ROLES[role][1].includes(r.position)))
+  const recent = $derived(played.slice(0, size)) // the API returns newest first
+  const as = $derived(role ? ` as ${ROLES[role][0].toLowerCase()}` : '')
   const wins = $derived(recent.filter((r) => r.win).length)
   const share = (part: number) => `${percent(part, recent.length)}%`
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
@@ -69,14 +83,23 @@
       {#if account?.avatar}<img class="avatar" src={account.avatar} alt="" width="40" height="40" />{/if}
       {account?.label ?? account?.account_id}
     </h2>
-    <p class="muted">The last {recent.length} of {rows.length} matches for these filters</p>
-    <div class="choice sizes" role="group" aria-label="How many matches">
+    <p class="muted">The last {recent.length} of {played.length} matches{as} for these filters</p>
+    <label class="role">
+      Role
+      <select bind:value={role}>
+        {#each ROLES as [name], i}<option value={i}>{name}</option>{/each}
+      </select>
+    </label>
+    <div class="choice" role="group" aria-label="How many matches">
       {#each SIZES as n}
         <button aria-pressed={size === n} onclick={() => (size = n)}>{n} matches</button>
       {/each}
     </div>
   </header>
 
+  {#if recent.length === 0}
+    <p class="muted">No matches{as} for these filters. Pick another role above.</p>
+  {:else}
   <div class="overview">
     <section class="card roles">
       <RoleWheel games={roles} none="No replay" />
@@ -108,7 +131,7 @@
   </div>
 
   <section class="card form">
-    <div class="strip" class:dense={size > 25}>
+    <div class="strip" class:dense={size > 25} class:packed={size > 100}>
       {#each strip as r (r.match_id)}
         {@const lead = r.lane_nw_diff}
         <a href="#match/{r.match_id}" title={note(r)} aria-label={note(r)}>
@@ -167,6 +190,7 @@
       <dd class="muted">another tracked account on the team</dd>
     </div>
   </dl>
+  {/if}
 {/if}
 
 <style>
@@ -191,7 +215,7 @@
   .title p {
     margin: 0;
   }
-  .sizes {
+  .role {
     margin-left: auto;
   }
 
@@ -259,6 +283,9 @@
   }
   .strip.dense {
     gap: 1px;
+  }
+  .strip.packed {
+    gap: 0;
   }
   .strip.dense img {
     display: none;
