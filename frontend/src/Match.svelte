@@ -6,7 +6,8 @@
   import MiniMap, { KINDS, SIDES, mapX, mapY, viewOf } from './lib/MiniMap.svelte'
   import Playback from './lib/Playback.svelte'
 
-  let { id }: { id: string } = $props()
+  /** brief: only the scoreboard, the lead chart and the lanes map, for a game unfolded on a team page */
+  let { id, brief = false }: { id: string; brief?: boolean } = $props()
   let match = $state<MatchDetail | null>(null)
   let error = $state('')
 
@@ -61,7 +62,7 @@
   const hero = $derived(new Map(players.map((p) => [p.player_slot, p.hero_id])))
   const name = (slot: number | null) => (slot === null ? '' : heroName(hero.get(slot) ?? 0))
   const hasReplay = $derived(!!match?.player_minute.length)
-  const shown = $derived(hasReplay ? tab : 'general')
+  const shown = $derived(hasReplay && !brief ? tab : 'general')
   const lastMinute = $derived(Math.max(0, ...(match?.player_minute ?? []).map((r) => r.minute)))
   const minuteRow = $derived(new Map((match?.player_minute ?? []).map((r) => [`${r.player_slot}:${r.minute}`, r])))
 
@@ -441,10 +442,11 @@
   {/each}
 {/snippet}
 
-<p class="back"><a href="#matches">← Matches</a></p>
+{#if !brief}<p class="back"><a href="#matches">← Matches</a></p>{/if}
 {#if error}
   <p class="error" role="alert">{error}</p>
 {:else if match}
+  {#if !brief}
   <header class="faceoff">
     {@render side(teams[0], match.radiant_win)}
     <div class="score">
@@ -463,8 +465,9 @@
     </div>
     {@render side(teams[1], !match.radiant_win)}
   </header>
+  {/if}
 
-  {#if hasReplay}
+  {#if hasReplay && !brief}
     <div class="tabs" role="tablist" aria-label="Parts of the match">
       {#each Object.entries(TABS) as [id, title]}
         <button role="tab" aria-selected={tab === id} onclick={() => (tab = id as keyof typeof TABS)}>{title}</button>
@@ -511,6 +514,16 @@
     </div>
 
     {#if hasReplay}
+      {#if brief}
+        <h2>Lead</h2>
+        <p class="legend">
+          <span><i class="swatch radiant"></i>Radiant ahead</span>
+          <span><i class="swatch dire"></i>Dire ahead</span>
+        </p>
+        <div class="card chart">
+          <Chart option={leadChart(leadOf(players, lastMinute))} height={320} label="Radiant's lead over Dire in net worth and in experience over time; above zero Radiant is ahead, below zero Dire" />
+        </div>
+      {/if}
       <h2>Lanes and buildings</h2>
       <p class="legend">
         <span>■ building standing at the end</span>

@@ -127,8 +127,16 @@ export type TeamPlayerHero = { hero_id: number; games: number; wins: number; kil
 export type TeamDetail = {
   team_id: number
   name: string | null
+  /** URL of the team's logo, null when Steam has none */
+  logo: string | null
   /** Newest first. `picks` are in player slot order; `replay` says whether the game's replay is parsed. */
-  games: { match_id: number; start_time: number; league: string; radiant: boolean; win: boolean; opponent_id: number; opponent: string | null; picks: number[]; picks_against: number[]; bans: number[]; bans_against: number[]; replay: boolean }[]
+  games: { match_id: number; start_time: number; league: string; radiant: boolean; win: boolean; opponent_id: number; opponent: string | null; picks: number[]; picks_against: number[]; bans: number[]; bans_against: number[]; replay: boolean
+    /** From the parsed replay, null without one: the game's first Tormentor and whether they drew first blood */
+    tormentor: { time: number; taken: boolean; enemies_dead: number; lead: number } | null
+    first_blood: boolean | null
+    /** Picks and bans in draft order; `ours` is theirs */
+    draft: { hero_id: number; pick: boolean; ours: boolean }[]
+  }[]
   heroes: TeamHero[]
   /** `wards` are those of the `replays` games of the player whose replay is parsed. `outside` are the player's last
    *  games outside the league, newest first, whatever the filters; `outside_listed` is false until they were asked for.
@@ -140,15 +148,17 @@ export type TeamDetail = {
     usual_waiting: number | null
     outside: { match_id: number; hero_id: number; win: boolean; role: 'safe' | 'mid' | 'off' | 'jungle' | 'none'; kills: number | null; deaths: number | null; assists: number | null }[]
   }[]
-  /** From the parsed games, seen from their side: a lead is their net worth minus the enemy's, null with nothing to
-   *  average. `first` counts only each game's first Tormentor. */
-  tormentors: { games: number; all: TeamTormentors; first: TeamTormentors }
+  /** Each parsed game's first Tormentor, taken by them or by the enemy: how many, and the mean time, enemies dead and
+   *  net worth lead of the side that took it (null with none to average) */
+  tormentors: { games: number; them: TeamTormentors; enemy: TeamTormentors }
+  /** Their safe, mid and off lane at 10:00 of the parsed games: games, games ahead in net worth, mean leads */
+  lanes: Record<'safe' | 'mid' | 'off', { games: number; ahead: number; net_worth: number | null; xp: number | null }>
   /** `own` is the wisdom rune in their half of the map. Contested: at least one of their heroes came to it. */
   wisdom: { own: TeamWisdom; enemy: TeamWisdom }
   /** draft[k][p]: how often their (k+1)-th pick played position p+1, in their parsed Captains Mode games */
   draft: number[][]
 }
-export type TeamTormentors = { taken: number; against: number; enemies_dead: number | null; lead: number | null }
+export type TeamTormentors = { count: number; time: number | null; enemies_dead: number | null; lead: number | null }
 export type TeamWisdom = { spawns: number; contested: number; heroes: number | null; taken: number; lead: number | null }
 
 export type MetricPoint ={ match_id: number; start_time: number; value: number }
