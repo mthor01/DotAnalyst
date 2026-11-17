@@ -53,6 +53,11 @@
   const one = (n: number) => n.toFixed(1)
   /** An average net worth lead from their side: +1234, -560, or – with none to average */
   const lead = (n: number | null) => (n === null ? '–' : `${n > 0 ? '+' : ''}${Math.round(n)}`)
+  const TABS = ['General', 'Draft', 'Games', 'Players'] as const
+  let tab = $state<(typeof TABS)[number]>('General')
+  /** The wards of all their players in the team's own games, for the General tab's map */
+  const teamWards = $derived(team?.players.flatMap((p) => p.wards.filter((w) => w.league)) ?? [])
+  const parsed = $derived(team?.games.filter((g) => g.replay).map((g) => ({ radiant: g.radiant, win: g.win })) ?? [])
   const PICKS = ['1st pick (first phase)', '2nd pick (second phase)', '3rd pick (second phase)', '4th pick (second phase)', '5th pick (last phase)']
 </script>
 
@@ -79,6 +84,90 @@
   {:else}
   <p class="muted">{games} league games, {wins} won ({percent(wins, games)}%). {seasons}. <a href="#teams">All teams</a></p>
 
+  <div class="choice tabs" role="group" aria-label="Part of the team page">
+    {#each TABS as name}
+      <button aria-pressed={tab === name} onclick={() => (tab = name)}>{name}</button>
+    {/each}
+  </div>
+
+  {#if tab === 'General'}
+  <h2>Tormentor</h2>
+  <p class="muted">
+    The Tormentors killed in the {team.tormentors.games} of their games whose replay is parsed. Enemies dead and the net
+    worth lead (theirs minus the enemy's, negative when behind) are averages over the ones they took, at the moment they
+    took it.
+  </p>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th></th><th class="num">Taken by them</th><th class="num">Taken by the enemy</th>
+          <th class="num">Enemies dead when they took it</th><th class="num">Net worth lead when they took it</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each [{ title: 'Every Tormentor', t: team.tormentors.all }, { title: "A game's first Tormentor", t: team.tormentors.first }] as { title, t }}
+          <tr>
+            <td>{title}</td>
+            <td class="num">{t.taken} ({percent(t.taken, t.taken + t.against)}%)</td>
+            <td class="num">{t.against}</td>
+            <td class="num">{t.enemies_dead === null ? '–' : one(t.enemies_dead)}</td>
+            <td class="num">{lead(t.lead)}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Wisdom runes</h2>
+  <p class="muted">
+    Every wisdom rune of their parsed games, from 7:00 on. They contested one when at least one of their heroes came within
+    ten cells of it between 20 seconds before it appeared and its pickup; heroes and the net worth lead are averages over
+    the ones they contested.
+  </p>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th></th><th class="num">Runes</th><th class="num">Contested</th><th class="num">Heroes they brought</th>
+          <th class="num">Taken by them</th><th class="num">Net worth lead when contested</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each [{ title: 'In their half', w: team.wisdom.own }, { title: 'In the enemy half', w: team.wisdom.enemy }] as { title, w }}
+          <tr>
+            <td>{title}</td>
+            <td class="num">{w.spawns}</td>
+            <td class="num">{w.contested} ({percent(w.contested, w.spawns)}%)</td>
+            <td class="num">{w.heroes === null ? '–' : one(w.heroes)}</td>
+            <td class="num">{w.taken} ({percent(w.taken, w.spawns)}%)</td>
+            <td class="num">{lead(w.lead)}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Wards placed</h2>
+  {#if parsed.length}
+    <p class="muted">
+      Every ward their players placed in the {parsed.length} of their {games} games whose replay is parsed; their usual
+      matches are on each player's own map under Players.
+    </p>
+    <WardHeat wards={teamWards} games={parsed} label="Heatmap of the wards the team placed in its tournament games" />
+  {:else}
+    <p class="muted">None of their games has a parsed replay yet, and wards are only in replays. Request the replays under "First moves" below.</p>
+  {/if}
+
+  <h2>First moves</h2>
+  <p class="muted">
+    Where their five heroes walked from the start of the pre-game to 0:30, in their last six games on one side. One
+    colour per game; the button above the map switches between Radiant and Dire, the buttons beside it switch games on and off, the
+    slider moves the clock.
+  </p>
+  <Openings games={team.games} onfetched={() => (fetched += 1)} />
+
+  {:else if tab === 'Draft'}
   <h2>Heroes in their drafts</h2>
   <p class="muted">
     A hero is open in a game when neither side banned it and the enemy team did not pick it. The percentages beside a
@@ -139,64 +228,48 @@
       </tbody>
     </table>
   </div>
-
-  <h2>Tormentor</h2>
-  <p class="muted">
-    The Tormentors killed in the {team.tormentors.games} of their games whose replay is parsed. Enemies dead and the net
-    worth lead (theirs minus the enemy's, negative when behind) are averages over the ones they took, at the moment they
-    took it.
-  </p>
+  {:else if tab === 'Games'}
+  <h2>Games</h2>
+  <p class="muted">The date opens the game like any match. One without a replay has a button there that requests it.</p>
   <div class="card">
     <table>
       <thead>
         <tr>
-          <th></th><th class="num">Taken by them</th><th class="num">Taken by the enemy</th>
-          <th class="num">Enemies dead when they took it</th><th class="num">Net worth lead when they took it</th>
+          <th>Date</th>
+          <th>Season</th>
+          <th>Against</th>
+          <th>Result</th>
+          <th>Their picks</th>
+          <th>Enemy picks</th>
+          <th>Banned against them</th>
+          <th>Banned by them</th>
+          <th>Replay</th>
         </tr>
       </thead>
       <tbody>
-        {#each [{ title: 'Every Tormentor', t: team.tormentors.all }, { title: "A game's first Tormentor", t: team.tormentors.first }] as { title, t }}
+        {#each team.games as g (g.match_id)}
           <tr>
-            <td>{title}</td>
-            <td class="num">{t.taken} ({percent(t.taken, t.taken + t.against)}%)</td>
-            <td class="num">{t.against}</td>
-            <td class="num">{t.enemies_dead === null ? '–' : one(t.enemies_dead)}</td>
-            <td class="num">{lead(t.lead)}</td>
+            <td><a href="#match/{g.match_id}">{date(g.start_time)}</a></td>
+            <td class="muted">{g.league}</td>
+            <td>
+              {#if g.opponent_id}
+                <a href="#team/{g.opponent_id}">{g.opponent || `Team ${g.opponent_id}`}</a>
+              {:else}
+                <span class="muted">No team</span>
+              {/if}
+            </td>
+            <td><span class="dot {g.win ? 'won' : 'lost'}"></span>{g.win ? 'Won' : 'Lost'}</td>
+            <td>{@render icons(g.picks)}</td>
+            <td>{@render icons(g.picks_against)}</td>
+            <td>{@render icons(g.bans_against)}</td>
+            <td>{@render icons(g.bans)}</td>
+            <td class="muted">{g.replay ? 'Parsed' : '–'}</td>
           </tr>
         {/each}
       </tbody>
     </table>
   </div>
-
-  <h2>Wisdom runes</h2>
-  <p class="muted">
-    Every wisdom rune of their parsed games, from 7:00 on. They contested one when at least one of their heroes came within
-    ten cells of it between 20 seconds before it appeared and its pickup; heroes and the net worth lead are averages over
-    the ones they contested.
-  </p>
-  <div class="card">
-    <table>
-      <thead>
-        <tr>
-          <th></th><th class="num">Runes</th><th class="num">Contested</th><th class="num">Heroes they brought</th>
-          <th class="num">Taken by them</th><th class="num">Net worth lead when contested</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each [{ title: 'In their half', w: team.wisdom.own }, { title: 'In the enemy half', w: team.wisdom.enemy }] as { title, w }}
-          <tr>
-            <td>{title}</td>
-            <td class="num">{w.spawns}</td>
-            <td class="num">{w.contested} ({percent(w.contested, w.spawns)}%)</td>
-            <td class="num">{w.heroes === null ? '–' : one(w.heroes)}</td>
-            <td class="num">{w.taken} ({percent(w.taken, w.spawns)}%)</td>
-            <td class="num">{lead(w.lead)}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </div>
-
+  {:else}
   <h2>Players</h2>
   <p class="muted">
     Everyone who played a league game for them. Click a player for their heroes, with the averages of a game on each,
@@ -242,7 +315,7 @@
           {:else}
             <p class="muted">
               None of their games has a parsed replay yet, and wards are only in replays. Request the replays under
-              "First moves" below, or with the button on a game's page.
+              "First moves" on the General tab, or with the button on a game's page.
             </p>
           {/if}
         </section>
@@ -263,55 +336,7 @@
       </div>
     </details>
   {/each}
-
-  <h2>First moves</h2>
-  <p class="muted">
-    Where their five heroes walked from the start of the pre-game to 0:30, in their last six games on one side. One
-    colour per game; the button above the map switches between Radiant and Dire, the buttons beside it switch games on and off, the
-    slider moves the clock.
-  </p>
-  <Openings games={team.games} onfetched={() => (fetched += 1)} />
-
-  <h2>Games</h2>
-  <p class="muted">The date opens the game like any match. One without a replay has a button there that requests it.</p>
-  <div class="card">
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Season</th>
-          <th>Against</th>
-          <th>Result</th>
-          <th>Their picks</th>
-          <th>Enemy picks</th>
-          <th>Banned against them</th>
-          <th>Banned by them</th>
-          <th>Replay</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each team.games as g (g.match_id)}
-          <tr>
-            <td><a href="#match/{g.match_id}">{date(g.start_time)}</a></td>
-            <td class="muted">{g.league}</td>
-            <td>
-              {#if g.opponent_id}
-                <a href="#team/{g.opponent_id}">{g.opponent || `Team ${g.opponent_id}`}</a>
-              {:else}
-                <span class="muted">No team</span>
-              {/if}
-            </td>
-            <td><span class="dot {g.win ? 'won' : 'lost'}"></span>{g.win ? 'Won' : 'Lost'}</td>
-            <td>{@render icons(g.picks)}</td>
-            <td>{@render icons(g.picks_against)}</td>
-            <td>{@render icons(g.bans_against)}</td>
-            <td>{@render icons(g.bans)}</td>
-            <td class="muted">{g.replay ? 'Parsed' : '–'}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </div>
+  {/if}
   {/if}
 {/if}
 
@@ -323,6 +348,9 @@
   }
   td .icons {
     flex-wrap: nowrap; /* a game's five picks read as one row */
+  }
+  .tabs {
+    margin: 4px 0 6px;
   }
   .player {
     margin-bottom: 6px;
