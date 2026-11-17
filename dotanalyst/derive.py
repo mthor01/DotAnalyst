@@ -367,11 +367,13 @@ def tormentors(log: Log) -> list[dict]:
     return rows
 
 
-def wisdom_runes(log: Log) -> list[dict]:
-    """Each wisdom rune that appeared: who took it, how many heroes of each side came for it, and the lead then.
+def wisdom_runes(log: Log, death_rows: list[dict]) -> list[dict]:
+    """Each wisdom rune that appeared: who took it, how many heroes of each side came for it and died at it, and the
+    lead then.
 
     A hero came for it when it was alive within WISDOM_REACH cells of the rune from 20 seconds before it appeared
-    until it was taken, or for 30 seconds when nobody took it before the next one appeared.
+    until it was taken, or for 30 seconds when nobody took it before the next one appeared. A hero died at it when
+    it died within WISDOM_REACH cells in that time or the FIGHT_GAP seconds after.
     """
     picks = [e for e in log.events if e["type"] == "CHAT_MESSAGE_RUNE_PICKUP" and e.get("value") == WISDOM_RUNE]
     rows = []
@@ -384,10 +386,16 @@ def wisdom_runes(log: Log) -> list[dict]:
             )  # fmt: skip
             until = taken["time"] if taken else time + WISDOM_WAIT
             came = {s for s in log.player_slot for t in range(time - WISDOM_BEFORE, until + 1) if log.near(t, s, x, y, WISDOM_REACH)}
+            died = [
+                d["player_slot"] < 128 for d in death_rows
+                if time - WISDOM_BEFORE <= d["time"] <= until + FIGHT_GAP and d["x"] is not None
+                and hypot(d["x"] - x, d["y"] - y) <= WISDOM_REACH
+            ]  # fmt: skip
             rows.append(
                 {
                     "time": time, "rune": rune, "radiant_heroes": sum(map(log.radiant, came)),
                     "dire_heroes": sum(not log.radiant(s) for s in came),
+                    "radiant_deaths": died.count(True), "dire_deaths": died.count(False),
                     "taken_by_radiant": None if taken is None else log.radiant(taken["player1"]),
                     "radiant_lead": log.lead(time),
                 }  # fmt: skip
@@ -434,7 +442,7 @@ def derive(events: list[dict], recipes: dict[str, list[str]] | None = None) -> d
         Building: buildings(log),
         Lane: lanes(log),
         Tormentor: tormentors(log),
-        WisdomRune: wisdom_runes(log),
+        WisdomRune: wisdom_runes(log, death_rows),
     }
 
 

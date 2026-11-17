@@ -158,13 +158,14 @@ export type TeamDetail = {
   tormentors: { games: number; them: TeamTormentors; enemy: TeamTormentors }
   /** Their safe, mid and off lane at 10:00 of the parsed games: games, games ahead in net worth, mean leads */
   lanes: Record<'safe' | 'mid' | 'off', { games: number; ahead: number; net_worth: number | null; xp: number | null }>
-  /** `own` is the wisdom rune in their half of the map. Contested: at least one of their heroes came to it. */
+  /** `own` is the wisdom rune in their half of the map. Contested: at least one of their heroes came to it. Kills and
+   *  deaths: heroes of the enemy and of theirs that died at the rune, per game (null without games). */
   wisdom: { own: TeamWisdom; enemy: TeamWisdom }
   /** draft[k][p]: how often their (k+1)-th pick played position p+1, in their parsed Captains Mode games */
   draft: number[][]
 }
 export type TeamTormentors = { count: number; time: number | null; enemies_dead: number | null; lead: number | null }
-export type TeamWisdom = { spawns: number; contested: number; heroes: number | null; taken: number; lead: number | null }
+export type TeamWisdom = { spawns: number; contested: number; heroes: number | null; taken: number; lead: number | null; kills: number | null; deaths: number | null }
 
 export type MetricPoint ={ match_id: number; start_time: number; value: number }
 export type MetricAverage = { name: string; average: number; matches: number }

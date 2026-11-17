@@ -290,10 +290,10 @@ def test_team_tormentors_wisdom_runes_and_draft_from_its_side(league):
             Tormentor(match_id=1, time=1400, radiant=True, enemies_dead=3, radiant_lead=2000),
             Tormentor(match_id=2, time=1300, radiant=False, enemies_dead=2, radiant_lead=-1000),  # Us, 1000 ahead
             Tormentor(match_id=2, time=1900, radiant=True, enemies_dead=0, radiant_lead=500),
-            WisdomRune(match_id=1, time=420, rune="radiant", radiant_heroes=2, dire_heroes=1, taken_by_radiant=True, radiant_lead=300),
-            WisdomRune(match_id=1, time=420, rune="dire", radiant_heroes=0, dire_heroes=1, taken_by_radiant=False, radiant_lead=300),
-            WisdomRune(match_id=2, time=420, rune="dire", radiant_heroes=1, dire_heroes=1, taken_by_radiant=False, radiant_lead=-600),
-            WisdomRune(match_id=2, time=420, rune="radiant", radiant_heroes=1, dire_heroes=1, taken_by_radiant=True, radiant_lead=-600),
+            WisdomRune(match_id=1, time=420, rune="radiant", radiant_heroes=2, dire_heroes=1, taken_by_radiant=True, radiant_lead=300, radiant_deaths=0, dire_deaths=1),
+            WisdomRune(match_id=1, time=420, rune="dire", radiant_heroes=0, dire_heroes=1, taken_by_radiant=False, radiant_lead=300, radiant_deaths=0, dire_deaths=0),
+            WisdomRune(match_id=2, time=420, rune="dire", radiant_heroes=1, dire_heroes=1, taken_by_radiant=False, radiant_lead=-600, radiant_deaths=1, dire_deaths=2),
+            WisdomRune(match_id=2, time=420, rune="radiant", radiant_heroes=1, dire_heroes=1, taken_by_radiant=True, radiant_lead=-600, radiant_deaths=1, dire_deaths=0),
         ]
     )  # fmt: skip
     # Us pick into slots in slot order, and the slots farm in that order. Game 1 (Radiant, safe lane bot): the
@@ -348,8 +348,10 @@ def test_team_tormentors_wisdom_runes_and_draft_from_its_side(league):
         "off": {"games": 1, "ahead": 1, "net_worth": 4000, "xp": 0},
     }
     assert found["wisdom"] == {
-        "own": {"spawns": 2, "contested": 2, "heroes": 1.5, "taken": 2, "lead": 450},
-        "enemy": {"spawns": 2, "contested": 1, "heroes": 1, "taken": 0, "lead": 600},
+        # own: game 1 (Radiant) one Dire death; game 2 (Dire) two Dire deaths, one Radiant -> kills 2/2, deaths 2/2
+        "own": {"spawns": 2, "contested": 2, "heroes": 1.5, "taken": 2, "lead": 450, "kills": 1, "deaths": 1},
+        # enemy: nobody died in game 1; game 2 one Radiant death -> kills 1/2
+        "enemy": {"spawns": 2, "contested": 1, "heroes": 1, "taken": 0, "lead": 600, "kills": 0.5, "deaths": 0},
     }
     assert found["draft"] == [[1, 1, 0, 0, 0], [1, 1, 0, 0, 0], [0, 0, 2, 0, 0], [0, 0, 0, 2, 0], [0, 0, 0, 0, 2]]
 

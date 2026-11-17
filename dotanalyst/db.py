@@ -286,6 +286,8 @@ class WisdomRune(Derived):
     rune: Mapped[str] = mapped_column(primary_key=True)  # radiant | dire: the half of the map it is in
     radiant_heroes: Mapped[int]
     dire_heroes: Mapped[int]
+    radiant_deaths: Mapped[int]  # heroes of each side that died at it, see derive.wisdom_runes
+    dire_deaths: Mapped[int]
     taken_by_radiant: Mapped[bool | None]  # None when nobody took it before the next one appeared
     radiant_lead: Mapped[int]  # Radiant's net worth minus Dire's when it appeared
 

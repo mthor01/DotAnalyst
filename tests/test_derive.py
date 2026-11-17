@@ -11,7 +11,9 @@ from dotanalyst.db import (
     AbilityUpgrade, Base, Building, Death, Derived, Lane, Match, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Tormentor, Ward,
     WisdomRune,
 )  # fmt: skip
-from dotanalyst.derive import TABLES, Log, derive, fights, positions, read_log, recompute, tormentors, zone
+from dotanalyst.derive import (
+    TABLES, WISDOM_SPOTS, Log, derive, fights, positions, read_log, recompute, tormentors, wisdom_runes, zone,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MATCH_ID = 8810606282
@@ -185,12 +187,30 @@ def test_wisdom_runes(rows):
     """The game ended at 15:11: two spawns. Muerta (Dire) took Radiant's rune at 7:03 with Phoenix standing by."""
     found = {(r["time"], r["rune"]): r for r in rows[WisdomRune]}
     assert set(found) == {(420, "radiant"), (420, "dire"), (840, "radiant"), (840, "dire")}
-    lead = {"radiant_lead": -4601}
+    lead = {"radiant_lead": -4601, "radiant_deaths": 0, "dire_deaths": 0}  # the nearest death, 394, is 10.5 cells away
     assert found[420, "radiant"] == {"time": 420, "rune": "radiant", "radiant_heroes": 1, "dire_heroes": 1, "taken_by_radiant": False, **lead}
     assert found[420, "dire"] == {"time": 420, "rune": "dire", "radiant_heroes": 1, "dire_heroes": 1, "taken_by_radiant": False, **lead}
-    lead = {"radiant_lead": -11765}
+    lead = {"radiant_lead": -11765, "radiant_deaths": 0, "dire_deaths": 0}
     assert found[840, "radiant"] == {"time": 840, "rune": "radiant", "radiant_heroes": 1, "dire_heroes": 0, "taken_by_radiant": True, **lead}
     assert found[840, "dire"] == {"time": 840, "rune": "dire", "radiant_heroes": 0, "dire_heroes": 0, "taken_by_radiant": None, **lead}
+
+
+def test_wisdom_rune_deaths():
+    """A made-up log ending at 7:30 in which nobody takes the runes: deaths at Radiant's rune from 20 seconds before
+    it appears until 15 seconds after the 30 that count without a pickup."""
+    events = [{"type": "player_slot", "key": str(k), "value": v} for k, v in enumerate((0, 128))]
+    events += [{"type": "interval", "time": 450, "slot": k, "networth": 0, "life_state": 0} for k in (0, 1)]
+    x, y = WISDOM_SPOTS["radiant"]
+    deaths = [
+        {"player_slot": 0, "time": 400, "x": x + 5, "y": y},  # counts
+        {"player_slot": 128, "time": 465, "x": x, "y": y - 9},  # counts
+        {"player_slot": 128, "time": 466, "x": x, "y": y},  # too late
+        {"player_slot": 0, "time": 399, "x": x, "y": y},  # too early
+        {"player_slot": 0, "time": 430, "x": x + 11, "y": y},  # too far
+        {"player_slot": 128, "time": 430, "x": None, "y": None},  # no position
+    ]
+    found = {r["rune"]: (r["radiant_deaths"], r["dire_deaths"]) for r in wisdom_runes(Log(events), deaths)}
+    assert found == {"radiant": (1, 1), "dire": (0, 0)}
 
 
 def test_tormentors():

@@ -196,7 +196,8 @@
   <p class="muted">
     Every wisdom rune of their parsed games, from 7:00 on. They contested one when at least one of their heroes came within
     ten cells of it between 20 seconds before it appeared and its pickup; heroes and the net worth lead are averages over
-    the ones they contested.
+    the ones they contested. Kills and deaths per game count the heroes that died within those ten cells from then
+    until 15 seconds after the pickup.
   </p>
   <div class="card">
     <table>
@@ -204,6 +205,7 @@
         <tr>
           <th></th><th class="num">Runes</th><th class="num">Contested</th><th class="num">Heroes they brought</th>
           <th class="num">Taken by them</th><th class="num">Net worth lead when contested</th>
+          <th class="num">Kills per game</th><th class="num">Deaths per game</th>
         </tr>
       </thead>
       <tbody>
@@ -215,6 +217,8 @@
             <td class="num">{w.heroes === null ? 'â€“' : one(w.heroes)}</td>
             <td class="num">{w.taken} ({percent(w.taken, w.spawns)}%)</td>
             <td class="num">{lead(w.lead)}</td>
+            <td class="num">{w.kills === null ? '–' : one(w.kills)}</td>
+            <td class="num">{w.deaths === null ? '–' : one(w.deaths)}</td>
           </tr>
         {/each}
       </tbody>

@@ -523,7 +523,8 @@ def _team_lanes(session: Session, side_of: dict[int, bool]) -> dict:
 
 def _team_wisdom(session: Session, side_of: dict[int, bool]) -> dict:
     """The wisdom runes of the team's parsed games, its own (in its half of the map) and the enemy's: how many
-    appeared, how many it came for, with how many heroes and what net worth lead, and how many it took."""
+    appeared, how many it came for, with how many heroes and what net worth lead, how many it took, and the heroes
+    that died at them per game: the enemy's are its kills, its own its deaths."""
     found: dict[str, list[WisdomRune]] = {"own": [], "enemy": []}
     for r in session.scalars(select(WisdomRune).where(WisdomRune.match_id.in_(side_of))):
         found["own" if (r.rune == "radiant") == side_of[r.match_id] else "enemy"].append(r)
@@ -533,10 +534,14 @@ def _team_wisdom(session: Session, side_of: dict[int, bool]) -> dict:
             return r.radiant_heroes if side_of[r.match_id] else r.dire_heroes
 
         came = [r for r in runes if heroes(r)]
+        games = len({r.match_id for r in runes})
+        kills = sum(r.dire_deaths if side_of[r.match_id] else r.radiant_deaths for r in runes)
+        deaths = sum(r.radiant_deaths if side_of[r.match_id] else r.dire_deaths for r in runes)
         return {
             "spawns": len(runes), "contested": len(came), "heroes": _mean([heroes(r) for r in came]),
             "taken": sum(r.taken_by_radiant is side_of[r.match_id] for r in runes),
             "lead": _mean([r.radiant_lead if side_of[r.match_id] else -r.radiant_lead for r in came]),
+            "kills": kills / games if games else None, "deaths": deaths / games if games else None,
         }  # fmt: skip
 
     return {side: summary(runes) for side, runes in found.items()}
