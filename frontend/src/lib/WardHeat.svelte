@@ -4,7 +4,7 @@
 
   /** games: those the wards could come from, warded or not. byGame: wards and games carry `league`, and a dropdown
    *  splits tournament games from the rest */
-  let { wards, games, label, byGame = false }: { wards: WardSpot[]; games: { radiant: boolean; win: boolean; league?: boolean }[]; label: string; byGame?: boolean } = $props()
+  let { wards, games, label, byGame = false }: { wards: WardSpot[]; games: { radiant: boolean; win: boolean | number; league?: boolean }[]; label: string; byGame?: boolean } = $props()
 
   const SQUARE = 2 // map cells to a side of the squares that tell, on hover, how many wards went there
   const SCALE = 2 // pixels of the heat picture per map cell
@@ -47,7 +47,7 @@
     )
 
   /** Whether a game (or a ward, by its game) is one the side button and the game dropdowns choose */
-  const picked = (g: { radiant: boolean; win: boolean; league?: boolean }, on: Record<string, boolean>) =>
+  const picked = (g: { radiant: boolean; win: boolean | number; league?: boolean }, on: Record<string, boolean>) =>
     on[g.radiant ? 'radiant' : 'dire'] && on[g.win ? 'won' : 'lost'] && (!byGame || on[g.league ? 'league' : 'usual'])
   /** How many games the buttons and dropdowns choose: the time dropdown picks wards, not games */
   const chosen = (on: Record<string, boolean>) => games.filter((g) => picked(g, on)).length
