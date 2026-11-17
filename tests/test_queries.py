@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from dotanalyst import queries
 from dotanalyst.db import (
-    Account, Base, Derived, Lane, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerName, Tormentor, Ward,
-    WisdomRune,
+    Account, Base, Death, Derived, Lane, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerMinute,
+    PlayerName, Tormentor, Ward, WisdomRune,
 )  # fmt: skip
 from dotanalyst.steam import ANONYMOUS, store_league_match, store_match
 
@@ -215,7 +215,13 @@ def test_team_games_newest_first_from_the_teams_side(league):
         "match_id": 2, "start_time": LEAGUE_GAMES[1]["start_time"], "league": "Season 8", "radiant": False,
         "win": False, "opponent_id": THEM, "opponent": "Them", "picks": [1, 2, 3, 4, 11],
         "picks_against": [6, 7, 8, 9, 10], "bans": [51],
-        "bans_against": [50], "replay": False,
+        "bans_against": [50], "replay": False, "tormentor": None, "first_blood": None,
+        # the draft in its order; the recorded one numbers every step 0, so it stays as stored
+        "draft": [
+            {"hero_id": 50, "pick": False, "ours": False}, {"hero_id": 51, "pick": False, "ours": True},
+            *({"hero_id": h, "pick": True, "ours": False} for h in (6, 7, 8, 9, 10)),
+            *({"hero_id": h, "pick": True, "ours": True} for h in (1, 2, 3, 4, 11)),
+        ],
     }  # fmt: skip
     assert [g["win"] for g in found["games"]] == [True, False, True]
 
@@ -298,11 +304,49 @@ def test_team_tormentors_wisdom_runes_and_draft_from_its_side(league):
         for i, (slot, lane) in enumerate(zip(slots, lanes[match_id])):
             league.add(Lane(match_id=match_id, player_slot=slot, lane=lane))
             league.get(MatchPlayer, (match_id, slot)).last_hits = 500 - 100 * i
+    # the enemies' lanes: in game 1 every lane has both sides, in game 2 only mid
+    for slot, lane in zip(SLOTS[5:], ("mid", "top", "bot", "top", "jungle")):
+        league.add(Lane(match_id=1, player_slot=slot, lane=lane))
+    league.add(Lane(match_id=2, player_slot=SLOTS[0], lane="mid"))
+    # at 10:00 Us have 1000, 2000, ... 5000 net worth in slot order, every enemy 1500; everyone 100 xp, but Us' 2nd
+    # slot 200
+    for match_id, ours in ((1, SLOTS[:5]), (2, SLOTS[5:])):
+        for slot in SLOTS:
+            i = ours.index(slot) if slot in ours else None
+            league.add(
+                PlayerMinute(
+                    match_id=match_id, player_slot=slot, minute=10, gold=0, xp=200 if i == 1 else 100,
+                    net_worth=1500 if i is None else 1000 * (i + 1), last_hits=0, denies=0, hero_damage=0, healing=0,
+                    camps_stacked=0, camps_pulled=0, lotuses=0,
+                )
+            )  # fmt: skip
+    league.add_all(
+        [
+            Death(match_id=1, player_slot=SLOTS[0], time=100, killer_slot=SLOTS[1], in_teamfight=False, x=None, y=None),  # denied
+            Death(match_id=1, player_slot=SLOTS[5], time=150, killer_slot=None, in_teamfight=False, x=None, y=None),  # a tower
+            Death(match_id=2, player_slot=SLOTS[6], time=200, killer_slot=SLOTS[1], in_teamfight=False, x=None, y=None),
+            Death(match_id=2, player_slot=SLOTS[1], time=210, killer_slot=SLOTS[6], in_teamfight=False, x=None, y=None),
+        ]
+    )  # fmt: skip
     found = queries.team(league, US)
+    # each game's first Tormentor: Them take it in game 1 with one of Us dead and even, Us in game 2, 1000 ahead
+    assert [g["tormentor"] for g in found["games"]] == [
+        None,
+        {"time": 1300, "taken": True, "enemies_dead": 2, "lead": 1000},
+        {"time": 1250, "taken": False, "enemies_dead": 1, "lead": 0},
+    ]
     assert found["tormentors"] == {
         "games": 2,
-        "all": {"taken": 2, "against": 2, "enemies_dead": 2.5, "lead": 1500},
-        "first": {"taken": 1, "against": 1, "enemies_dead": 2, "lead": 1000},
+        "them": {"count": 1, "time": 1300, "enemies_dead": 2, "lead": 1000},
+        "enemy": {"count": 1, "time": 1250, "enemies_dead": 1, "lead": 0},
+    }
+    assert [g["first_blood"] for g in found["games"]] == [None, False, True]
+    # game 1 (Radiant): safe lane bot 7000 against 1500, off lane top 7000 against 3000, mid 1000 against 1500;
+    # game 2 (Dire): mid 2000 against 1500, and no other lane with both sides
+    assert found["lanes"] == {
+        "safe": {"games": 1, "ahead": 1, "net_worth": 5500, "xp": 200},
+        "mid": {"games": 2, "ahead": 1, "net_worth": 0, "xp": 50},
+        "off": {"games": 1, "ahead": 1, "net_worth": 4000, "xp": 0},
     }
     assert found["wisdom"] == {
         "own": {"spawns": 2, "contested": 2, "heroes": 1.5, "taken": 2, "lead": 450},

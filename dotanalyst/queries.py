@@ -5,8 +5,8 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from .db import (
-    TABLES, Account, Lane, LeagueMatch, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerName, Tormentor,
-    Ward, WisdomRune,
+    TABLES, Account, Death, Lane, LeagueMatch, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerMinute,
+    PlayerName, Tormentor, Ward, WisdomRune,
 )  # fmt: skip
 from .replay import MAX_AGE_DAYS
 from .steam import ANONYMOUS, LEAGUES, match_rows
@@ -314,6 +314,8 @@ def team(
     ids = [g.match_id for g in rows]
     parsed = set(session.scalars(select(Match.match_id).where(Match.match_id.in_(ids), Match.replay_state == "parsed")))
     placed_by: dict[tuple[int, int], dict] = {}  # (match, player slot) -> the player
+    side_of = {g.match_id: g.radiant_team_id == team_id for g in rows if g.match_id in parsed}  # True: Radiant
+    tormentor, blood = _first_tormentors(session, side_of), _first_bloods(session, side_of)
     for g in rows:
         radiant = g.radiant_team_id == team_id
         win = radiant == g.radiant_win
@@ -355,7 +357,11 @@ def team(
                 "radiant": radiant, "win": win, "opponent_id": opponent, "opponent": names.get(opponent),
                 "picks": [p["hero_id"] for p in side], "picks_against": [p["hero_id"] for p in ten if p not in side],
                 "bans": own, "bans_against": against,
-                "replay": g.match_id in parsed,
+                "replay": g.match_id in parsed, "tormentor": tormentor.get(g.match_id), "first_blood": blood.get(g.match_id),
+                "draft": [
+                    {"hero_id": b["hero_id"], "pick": b["is_pick"], "ours": (b["team"] == 0) == radiant}
+                    for b in sorted(g.raw_json.get("picks_bans") or [], key=lambda b: b["order"])
+                ],
             }
         )  # fmt: skip
     for h in heroes.values():
@@ -422,12 +428,13 @@ def team(
         player["heroes"] = sorted(player["heroes"].values(), key=lambda h: -h["games"])
         for h in player["heroes"]:
             h.update({stat: h[stat] / h["games"] for stat in AVERAGED})
-    side_of = {g.match_id: g.radiant_team_id == team_id for g in rows if g.match_id in parsed}  # True: Radiant
+    firsts = list(tormentor.values())
     return {
         "team_id": team_id, "name": names[team_id], "games": games,
         "heroes": sorted(heroes.values(), key=lambda h: (-h["banned_against"], -h["picked"])),
         "players": sorted(players.values(), key=lambda p: -p["games"]),
-        "tormentors": _team_tormentors(session, side_of), "wisdom": _team_wisdom(session, side_of),
+        "tormentors": {"games": len(side_of), "them": _tormentors_by(firsts, True), "enemy": _tormentors_by(firsts, False)},
+        "lanes": _team_lanes(session, side_of), "wisdom": _team_wisdom(session, side_of),
         "draft": _team_draft(session, [g for g in rows if g.match_id in parsed], side_of),
     }  # fmt: skip
 
@@ -436,23 +443,66 @@ def _mean(values: list) -> float | None:
     return sum(values) / len(values) if values else None
 
 
-def _team_tormentors(session: Session, side_of: dict[int, bool]) -> dict:
-    """The Tormentors of the team's parsed games, every one and each game's first, from the team's side: how many it
-    took and the other side took, and when it took one, the enemies dead and its net worth lead (negative: behind)."""
-    kills = session.scalars(select(Tormentor).where(Tormentor.match_id.in_(side_of)).order_by(Tormentor.time, Tormentor.id))
-    kills = kills.all()
-    first: dict[int, Tormentor] = {}
-    for k in kills:
-        first.setdefault(k.match_id, k)
+def _first_tormentors(session: Session, side_of: dict[int, bool]) -> dict[int, dict]:
+    """Each parsed game's first Tormentor, from the team's side: when, whether the team took it, the dead heroes of
+    the side that did not take it, and the taker's net worth lead (negative: behind)."""
+    first: dict[int, dict] = {}
+    for k in session.scalars(select(Tormentor).where(Tormentor.match_id.in_(side_of)).order_by(Tormentor.time, Tormentor.id)):
+        if k.match_id not in first:
+            first[k.match_id] = {
+                "time": k.time, "taken": k.radiant == side_of[k.match_id], "enemies_dead": k.enemies_dead,
+                "lead": k.radiant_lead if k.radiant else -k.radiant_lead,
+            }  # fmt: skip
+    return first
 
-    def summary(found: list[Tormentor]) -> dict:
-        taken = [k for k in found if k.radiant == side_of[k.match_id]]
-        return {
-            "taken": len(taken), "against": len(found) - len(taken), "enemies_dead": _mean([k.enemies_dead for k in taken]),
-            "lead": _mean([k.radiant_lead if k.radiant else -k.radiant_lead for k in taken]),
+
+def _tormentors_by(firsts: list[dict], taken: bool) -> dict:
+    """The first Tormentors one side took (the team: `taken` True): how many, and their mean time, enemies dead and lead."""
+    found = [t for t in firsts if t["taken"] == taken]
+    return {"count": len(found), **{key: _mean([t[key] for t in found]) for key in ("time", "enemies_dead", "lead")}}
+
+
+def _first_bloods(session: Session, side_of: dict[int, bool]) -> dict[int, bool]:
+    """Whether the team drew each parsed game's first blood: the first death not at the hands of the dead hero's own
+    side. A death to creeps, towers or neutrals counts for the other side."""
+    found: dict[int, bool] = {}
+    for d in session.scalars(select(Death).where(Death.match_id.in_(side_of)).order_by(Death.time, Death.id)):
+        denied = d.killer_slot is not None and (d.killer_slot < 128) == (d.player_slot < 128)
+        if d.match_id not in found and not denied:
+            found[d.match_id] = (d.player_slot < 128) != side_of[d.match_id]
+    return found
+
+
+LANE_MINUTE = 10
+
+
+def _team_lanes(session: Session, side_of: dict[int, bool]) -> dict:
+    """The team's safe, mid and off lane at 10:00 of the parsed games where both sides had heroes in it: in how many
+    games, in how many the team was ahead in net worth, and its mean net worth and experience lead there."""
+    lane_of = {(r.match_id, r.player_slot): r.lane for r in session.scalars(select(Lane).where(Lane.match_id.in_(side_of)))}
+    totals: dict[tuple[int, str], list[int]] = {}  # (match, lane on the map) -> [own heroes, enemies, net worth, xp]
+    pm = PlayerMinute
+    for r in session.scalars(select(pm).where(pm.match_id.in_(side_of), pm.minute == LANE_MINUTE)):
+        lane = lane_of.get((r.match_id, r.player_slot))
+        if lane not in ("top", "mid", "bot"):
+            continue
+        ours = (r.player_slot < 128) == side_of[r.match_id]
+        t = totals.setdefault((r.match_id, lane), [0, 0, 0, 0])
+        t[0 if ours else 1] += 1
+        t[2] += r.net_worth if ours else -r.net_worth
+        t[3] += r.xp if ours else -r.xp
+    found: dict[str, list[tuple[int, int]]] = {"safe": [], "mid": [], "off": []}
+    for (match_id, lane), (own, enemies, net_worth, xp) in totals.items():
+        if own and enemies:  # a lead needs both sides in the lane
+            safe = "bot" if side_of[match_id] else "top"
+            found["mid" if lane == "mid" else "safe" if lane == safe else "off"].append((net_worth, xp))
+    return {
+        name: {
+            "games": len(leads), "ahead": sum(nw > 0 for nw, _ in leads),
+            "net_worth": _mean([nw for nw, _ in leads]), "xp": _mean([xp for _, xp in leads]),
         }  # fmt: skip
-
-    return {"games": len(side_of), "all": summary(kills), "first": summary(list(first.values()))}
+        for name, leads in found.items()
+    }
 
 
 def _team_wisdom(session: Session, side_of: dict[int, bool]) -> dict:
