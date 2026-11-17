@@ -315,7 +315,7 @@ def test_team_tormentors_wisdom_runes_and_draft_from_its_side(league):
             league.add(
                 PlayerMinute(
                     match_id=match_id, player_slot=slot, minute=10, gold=0, xp=200 if i == 1 else 100,
-                    net_worth=1500 if i is None else 1000 * (i + 1), last_hits=0, denies=0, hero_damage=0, healing=0,
+                    net_worth=1500 if i is None else 1000 * (i + 1), last_hits=0, denies=0, hero_damage=0, damage_taken=0, healing=0,
                     camps_stacked=0, camps_pulled=0, lotuses=0,
                 )
             )  # fmt: skip

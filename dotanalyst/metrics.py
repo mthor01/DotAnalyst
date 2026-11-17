@@ -7,9 +7,14 @@ fixture replay, give it a label in the frontend, and run `recompute`.
 from statistics import mean
 
 
-def _lane_diff(match: dict, slot: int, stat: str) -> int | None:
-    """The player's side of their lane, summed at 10:00, minus the enemies in that lane. None outside the three lanes,
-    with nobody to compare with, or in a match that ended before 10:00."""
+def _ten(match: dict, slot: int, stat: str) -> int | None:
+    """The player's `stat` at 10:00; None in a match that ended before."""
+    return next((r[stat] for r in match["player_minute"] if r["minute"] == 10 and r["player_slot"] == slot), None)
+
+
+def _lane_sides(match: dict, slot: int, stat: str) -> tuple[int, int] | None:
+    """`stat` at 10:00 summed over the player's side of their lane, and over the enemies in that lane. None outside
+    the three lanes, with nobody to compare with, or in a match that ended before 10:00."""
     lane = next((row["lane"] for row in match["lanes"] if row["player_slot"] == slot), None)
     if lane not in ("top", "mid", "bot"):
         return None
@@ -17,7 +22,13 @@ def _lane_diff(match: dict, slot: int, stat: str) -> int | None:
     there = [row["player_slot"] for row in match["lanes"] if row["lane"] == lane and row["player_slot"] in ten]
     mine = [ten[s] for s in there if (s < 128) == (slot < 128)]
     theirs = [ten[s] for s in there if (s < 128) != (slot < 128)]
-    return sum(mine) - sum(theirs) if mine and theirs else None
+    return (sum(mine), sum(theirs)) if mine and theirs else None
+
+
+def _lane_diff(match: dict, slot: int, stat: str) -> int | None:
+    """The player's side of their lane at 10:00 minus the enemies in that lane, see _lane_sides."""
+    sides = _lane_sides(match, slot, stat)
+    return sides and sides[0] - sides[1]
 
 
 def lane_cs_diff(match: dict, slot: int) -> int | None:
@@ -28,6 +39,57 @@ def lane_cs_diff(match: dict, slot: int) -> int | None:
 def lane_nw_diff(match: dict, slot: int) -> int | None:
     """Net worth of the player's lane at 10:00 minus the enemy lane's."""
     return _lane_diff(match, slot, "net_worth")
+
+
+def last_hits_at_10(match: dict, slot: int) -> int | None:
+    return _ten(match, slot, "last_hits")
+
+
+def denies_at_10(match: dict, slot: int) -> int | None:
+    return _ten(match, slot, "denies")
+
+
+def net_worth_at_10(match: dict, slot: int) -> int | None:
+    return _ten(match, slot, "net_worth")
+
+
+def xp_at_10(match: dict, slot: int) -> int | None:
+    return _ten(match, slot, "xp")
+
+
+def damage_at_10(match: dict, slot: int) -> int | None:
+    """Damage the player dealt to enemy heroes by 10:00."""
+    return _ten(match, slot, "hero_damage")
+
+
+def damage_taken_at_10(match: dict, slot: int) -> int | None:
+    """Damage the player took from enemy heroes by 10:00, whichever lane they came from."""
+    return _ten(match, slot, "damage_taken")
+
+
+def lane_damage_at_10(match: dict, slot: int) -> int | None:
+    """Damage to enemy heroes by 10:00 of the player's side of their lane: the player and their lane partners."""
+    sides = _lane_sides(match, slot, "hero_damage")
+    return sides and sides[0]
+
+
+def enemy_lane_damage_at_10(match: dict, slot: int) -> int | None:
+    """Damage the enemies in the player's lane dealt by 10:00, to any hero of the player's side."""
+    sides = _lane_sides(match, slot, "hero_damage")
+    return sides and sides[1]
+
+
+def kills_by_10(match: dict, slot: int) -> int | None:
+    """Heroes the player killed before 10:00 (the last hit, not assists)."""
+    if _ten(match, slot, "xp") is None:
+        return None
+    return sum(d["killer_slot"] == slot and d["time"] < 600 for d in match["deaths"])
+
+
+def deaths_by_10(match: dict, slot: int) -> int | None:
+    if _ten(match, slot, "xp") is None:
+        return None
+    return sum(d["player_slot"] == slot and d["time"] < 600 for d in match["deaths"])
 
 
 def obs_placed(match: dict, slot: int) -> int:
@@ -82,7 +144,8 @@ def deaths_outside_fights(match: dict, slot: int) -> int:
 
 
 METRICS = (
-    lane_cs_diff, lane_nw_diff, obs_placed, sen_placed, obs_bought, sen_bought, wards_destroyed, obs_lifetime,
+    lane_cs_diff, lane_nw_diff, last_hits_at_10, denies_at_10, net_worth_at_10, xp_at_10, damage_at_10,
+    damage_taken_at_10, lane_damage_at_10, enemy_lane_damage_at_10, kills_by_10, deaths_by_10, obs_placed, sen_placed, obs_bought, sen_bought, wards_destroyed, obs_lifetime,
     fight_participation, kill_participation, deaths_outside_fights,
 )  # fmt: skip
 NAMES = tuple(metric.__name__ for metric in METRICS)

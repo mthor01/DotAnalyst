@@ -32,6 +32,19 @@ export type MatchRow = {
   sen_bought: number | null
   wards_destroyed: number | null
   obs_lifetime: number | null
+  /** the laning numbers at 10:00 (kills and deaths before it), see dotanalyst/metrics.py; null without a replay, in
+   *  a match that ended before 10:00, and (lane_cs_diff and the two lane damages) outside the three lanes */
+  lane_cs_diff: number | null
+  last_hits_at_10: number | null
+  denies_at_10: number | null
+  net_worth_at_10: number | null
+  xp_at_10: number | null
+  damage_at_10: number | null
+  damage_taken_at_10: number | null
+  lane_damage_at_10: number | null
+  enemy_lane_damage_at_10: number | null
+  kills_by_10: number | null
+  deaths_by_10: number | null
   with_tracked: boolean
   position: 1 | 2 | 3 | 4 | 5 // from the lane and the farm, see IMPLEMENTATION.md
 }

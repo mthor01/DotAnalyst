@@ -7,9 +7,9 @@
   import WardHeat from './lib/WardHeat.svelte'
 
   let { query, account, tab }: { query: string; account: Account | undefined; tab: string } = $props()
-  const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', warding: 'Warding' }
+  const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding' }
   const shown = $derived<keyof typeof TABS>(tab in TABS ? (tab as keyof typeof TABS) : 'overview')
-  const filtered = $derived(shown === 'overview' || shown === 'warding') // the tabs the role and the count apply to
+  const filtered = $derived(!['matches', 'heroes'].includes(shown)) // the tabs the role and the count apply to
   let rows = $state<MatchRow[]>([])
   let wards = $state.raw<WardSpot[]>([]) // of every match of these filters
   let error = $state('')
@@ -79,6 +79,32 @@
     ['Enemy wards destroyed', mean(recent.map((r) => r.wards_destroyed)), 'per match'],
     ['Observer uptime', mean(recent.map((r) => r.obs_lifetime)), 'how long an observer stood'],
   ] as const)
+
+  // ---- laning: averages of the first 10 minutes. 'signed' stats are differences to the enemy lane, 'tenths' are counts
+  const at10 = (key: keyof MatchRow) => mean(recent.map((r) => r[key] as number | null))
+  const laneMatches = $derived(recent.filter((r) => r.xp_at_10 !== null).length)
+  const laning = $derived([
+    ['Damage to heroes before 10:00', [
+      ['You dealt', at10('damage_at_10'), 'to enemy heroes', ''],
+      ['Your lane dealt', at10('lane_damage_at_10'), 'you and your lane partner together', ''],
+      ['Enemy lane dealt', at10('enemy_lane_damage_at_10'), 'the heroes you laned against, to your lane', ''],
+      ['You took', at10('damage_taken_at_10'), 'from all enemy heroes', ''],
+    ]],
+    ['Farm at 10:00', [
+      ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals', ''],
+      ['Denies', at10('denies_at_10'), '', ''],
+      ['Net worth', at10('net_worth_at_10'), '', ''],
+      ['Experience', at10('xp_at_10'), '', ''],
+    ]],
+    ['Your lane against theirs', [
+      ['Net worth lead', at10('lane_nw_diff'), 'your lane minus the enemy lane at 10:00', 'signed'],
+      ['Last-hit lead', at10('lane_cs_diff'), 'your lane minus the enemy lane at 10:00', 'signed'],
+      ['Kills', at10('kills_by_10'), 'before 10:00', 'tenths'],
+      ['Deaths', at10('deaths_by_10'), 'before 10:00', 'tenths'],
+    ]],
+  ] as const) // prettier-ignore
+  const shownStat = (value: number | null, kind: string) =>
+    value === null ? '–' : kind === 'signed' ? signed(value) : kind === 'tenths' ? value.toFixed(1) : Math.round(value).toLocaleString()
 
   // ---- activity: games per day over the last 3 months, of every role, one column per week from Monday
   const dayOf = (d: Date) => d.toLocaleDateString('en-CA')
@@ -263,6 +289,27 @@
     </div>
   </section>
 
+  {:else if shown === 'laning'}
+  {#each laning as [title, stats]}
+    <h3 class="group">{title}</h3>
+    <dl class="card numbers">
+      {#each stats as [label, value, unit, kind]}
+        <div>
+          <dt>{label}</dt>
+          <dd class:good={kind === 'signed' && value !== null && value > 0} class:bad={kind === 'signed' && value !== null && value < 0}>
+            {shownStat(value, kind)}
+          </dd>
+          <dd class="muted">{unit}</dd>
+        </div>
+      {/each}
+    </dl>
+  {/each}
+  <p class="muted laning">
+    Averages over the {laneMatches} of these {recent.length} matches that have a parsed replay and lasted 10 minutes. Your
+    lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is
+    usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log
+    records it.
+  </p>
   {:else}
   <section class="card vision">
     <div>
@@ -535,6 +582,12 @@
     color: var(--text);
   }
 
+  .group {
+    margin: 20px 0 8px;
+  }
+  .laning {
+    max-width: 72ch;
+  }
   .numbers {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

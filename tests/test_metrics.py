@@ -96,6 +96,26 @@ def test_fight_participation(match):
     assert metrics.fight_participation({**match, "teamfight_players": []}, PHOENIX) is None
 
 
+def test_laning_at_ten(match):
+    # Dawnbreaker's own numbers at 10:00; damage taken is every hit by an enemy hero in the combat log up to 10:00
+    assert [f(match, DAWNBREAKER) for f in (metrics.last_hits_at_10, metrics.denies_at_10, metrics.net_worth_at_10)] == [
+        46, 1, 3188,
+    ]  # fmt: skip
+    assert (metrics.damage_at_10(match, DAWNBREAKER), metrics.damage_taken_at_10(match, DAWNBREAKER)) == (2707, 4820)
+    # mid alone against Shadow Fiend (4906); top: Phoenix 4195 and Legion Commander 1744 against Muerta 7477 and
+    # Rubick 3589
+    assert (metrics.lane_damage_at_10(match, DAWNBREAKER), metrics.enemy_lane_damage_at_10(match, DAWNBREAKER)) == (
+        2707, 4906,
+    )  # fmt: skip
+    assert metrics.lane_damage_at_10(match, PHOENIX) == 4195 + 1744
+    assert metrics.enemy_lane_damage_at_10(match, PHOENIX) == 7477 + 3589
+    # Shadow Fiend killed Dawnbreaker at 2:10, 2:52, 3:37 and 4:13, and Phoenix at 8:54
+    assert (metrics.kills_by_10(match, SHADOW_FIEND), metrics.deaths_by_10(match, SHADOW_FIEND)) == (5, 0)
+    assert metrics.deaths_by_10(match, DAWNBREAKER) == 4
+    short = {**match, "player_minute": [r for r in match["player_minute"] if r["minute"] < 10]}
+    assert metrics.xp_at_10(short, DAWNBREAKER) is metrics.kills_by_10(short, DAWNBREAKER) is None  # ended before 10:00
+
+
 def test_kill_participation(match):
     assert metrics.kill_participation(match, DAWNBREAKER) == (2 + 1) / 8
     assert metrics.kill_participation(match, SHADOW_FIEND) == (9 + 2) / 28

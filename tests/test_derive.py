@@ -35,6 +35,8 @@ def test_per_minute_numbers(rows):
     assert [(ten[slot]["hero_damage"], ten[slot]["healing"]) for slot in (DAWNBREAKER, PHOENIX, MUERTA)] == [
         (2707, 14), (4195, 0), (7477, 0),
     ]  # fmt: skip
+    # damage taken: every hit by an enemy hero up to 10:00 in the combat log; Radiant took what Dire dealt
+    assert [ten[slot]["damage_taken"] for slot in (DAWNBREAKER, PHOENIX, MUERTA)] == [4820, 4461, 2589]
     fifteen = {r["player_slot"]: r for r in rows[PlayerMinute] if r["minute"] == 15}
     # Muerta healed only herself (6,812 of regeneration), which does not count. Dawnbreaker healed Lich for 194,
     # Phoenix for 92 and Luna for 135; Legion Commander (slot 4) healed Dawnbreaker twelve times for 24

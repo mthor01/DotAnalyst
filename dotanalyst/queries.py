@@ -102,7 +102,11 @@ def _positions_in(session: Session, played) -> dict[tuple[int, int], int]:
     return {(match_id, slot): n for (match_id, _), team in teams.items() for slot, n in positions(team).items()}
 
 
-ROW_METRICS = ("lane_nw_diff", "obs_bought", "sen_bought", "wards_destroyed", "obs_lifetime")
+ROW_METRICS = (
+    "lane_nw_diff", "obs_bought", "sen_bought", "wards_destroyed", "obs_lifetime", "lane_cs_diff", "last_hits_at_10",
+    "denies_at_10", "net_worth_at_10", "xp_at_10", "damage_at_10", "damage_taken_at_10", "lane_damage_at_10",
+    "enemy_lane_damage_at_10", "kills_by_10", "deaths_by_10",
+)  # fmt: skip
 
 
 def matches(session: Session, where: list) -> list[dict]:

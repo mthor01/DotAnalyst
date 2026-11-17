@@ -108,6 +108,8 @@ Known limit: a heal from a summoned unit is not credited to its owner.
 
 Not worked out: `player_minute.hero_damage` is the replay's own running count from the interval of each full minute. The damage inside a teamfight is added up from the combat log instead (see Teamfights), so the two do not have to agree.
 
+`player_minute.damage_taken` is worked out: the combat log's damage hits on the player's hero by an enemy hero (not an illusion target, attacker credited as for teamfights) up to that minute, after armour and resistances. On the sample replay a side's total dealt by this count equals the other side's total taken, and a hero's dealt damage matches the replay's own `hero_damage`.
+
 ### Camps stacked
 
 Not worked out: the replay's own count from the interval.
@@ -167,6 +169,9 @@ One function each in `dotanalyst/metrics.py`, stored per player and match in `me
 | Metric | Rule |
 |---|---|
 | `lane_cs_diff`, `lane_nw_diff` | Last hits (or net worth) at 10:00 of all heroes of the player's side in the player's lane, minus the same sum of the enemies in that lane. No value for a jungler, for a lane without enemies, or in a match shorter than 10 minutes. Both players of a lane get the same value |
+| `last_hits_at_10`, `denies_at_10`, `net_worth_at_10`, `xp_at_10`, `damage_at_10`, `damage_taken_at_10` | The player's own number in the 10:00 minute row (`hero_damage`, `damage_taken`). No value in a match shorter than 10 minutes |
+| `lane_damage_at_10`, `enemy_lane_damage_at_10` | Hero damage by 10:00 summed over the player's side in the player's lane, and over the enemies in that lane. Same lanes and same gaps as `lane_nw_diff`. The enemies' damage counts on any hero of the player's side, so a rotating mid or support taking hits in the lane counts too |
+| `kills_by_10`, `deaths_by_10` | The player's kills and deaths before 10:00, from the deaths list. No value in a match shorter than 10 minutes |
 | `obs_placed`, `sen_placed` | Wards of that kind the player placed |
 | `obs_bought`, `sen_bought` | Wards of that kind the player bought (`ward_observer`, `ward_sentry` purchases). A `ward_dispenser` purchase is the game merging or splitting wards already bought and is not counted. Known limit: wards a teammate bought and handed over count for the buyer, not the one who placed them |
 | `wards_destroyed` | Enemy wards of either kind the player destroyed |
@@ -302,6 +307,10 @@ The match's `picks_bans` from Steam's answer, in draft order, so the Draft tab i
 ### Ward numbers (Profile)
 
 Above the ward heatmap: observers bought, sentries bought and enemy wards destroyed per match, and the observer uptime, each the mean of that metric (see Metrics) over the profile's matches that have it, so only matches with a parsed replay count. Uptime is the mean of the matches' `obs_lifetime`, so a match with few observers weighs as much as one with many; an observer still standing at the end is left out.
+
+### Laning (Profile)
+
+The Laning tab: the means of the 10:00 metrics (see Metrics) over the profile's matches, with the role and count picker above it. Damage before 10:00: your hero damage, your lane's (`lane_damage_at_10`), the enemy lane's (`enemy_lane_damage_at_10`) and what you took from all enemy heroes. Farm at 10:00: last hits, denies, net worth and experience. Your lane against theirs: `lane_nw_diff` and `lane_cs_diff` (green above 0, red below), kills and deaths before 10:00. Each mean covers only the matches that have that metric, so a lane stat leaves out jungle games while the farm stats keep them; the count under the tab is of the matches with a 10:00 row.
 
 ### Lead charts
 
