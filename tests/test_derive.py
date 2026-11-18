@@ -62,6 +62,14 @@ def test_stacks_pulls_and_lotuses(rows):
     assert sum(at[slot, 15]["lotuses"] for slot in (0, 1, 2, 3, 4, 128, 129, 130, 131, 132)) == 6
 
 
+
+def test_twin_gates(rows):
+    # Lich (slot 2) channelled a twin gate from 12:59 to 13:03, the full four seconds: the only trip of the match, counted from the 14:00 row on
+    at = {(r["player_slot"], r["minute"]): r for r in rows[PlayerMinute]}
+    assert [at[2, minute]["twin_gates"] for minute in (13, 14, 15)] == [0, 1, 1]
+    assert sum(at[slot, 15]["twin_gates"] for slot in (0, 1, 2, 3, 4, 128, 129, 130, 131, 132)) == 1
+
+
 def test_purchases(rows):
     luna = [(r["time"], r["item"]) for r in rows[Purchase] if r["player_slot"] == 1]
     assert luna[:2] == [(-89, "magic_stick"), (-89, "tango")]

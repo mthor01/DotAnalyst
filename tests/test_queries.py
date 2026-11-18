@@ -72,6 +72,8 @@ def test_matches_carry_side_lane_and_company(session):
     session.add_all(
         [
             Lane(match_id=1, player_slot=0, lane="mid"),
+            Lane(match_id=1, player_slot=128, lane="mid"),  # hero 6, against me
+            Lane(match_id=1, player_slot=129, lane="top"),
             Metric(match_id=1, player_slot=0, name="lane_nw_diff", value=-250),
             Metric(match_id=1, player_slot=0, name="obs_bought", value=3),
             Metric(match_id=1, player_slot=0, name="obs_placed", value=2),  # a metric rows do not carry must not double them
@@ -86,6 +88,7 @@ def test_matches_carry_side_lane_and_company(session):
     assert extras(1) == (True, "mid", -250, True)
     assert (rows[1]["obs_bought"], rows[1]["sen_bought"]) == (3, None)
     assert rows[1]["position"] == 2  # the only one in mid
+    assert (rows[1]["lane_enemies"], rows[2]["lane_enemies"]) == ([6], [])  # match 2 has no lanes
     assert {r["position"] for r in rows.values()} <= {1, 2, 3, 4, 5}
     assert extras(2) == (False, None, None, False)  # no replay stats; the friend was on the other team
     assert extras(3) == (True, None, None, True)
@@ -316,7 +319,7 @@ def test_team_tormentors_wisdom_runes_and_draft_from_its_side(league):
                 PlayerMinute(
                     match_id=match_id, player_slot=slot, minute=10, gold=0, xp=200 if i == 1 else 100,
                     net_worth=1500 if i is None else 1000 * (i + 1), last_hits=0, denies=0, hero_damage=0, damage_taken=0, healing=0,
-                    camps_stacked=0, camps_pulled=0, lotuses=0,
+                    camps_stacked=0, camps_pulled=0, lotuses=0, twin_gates=0,
                 )
             )  # fmt: skip
     league.add_all(

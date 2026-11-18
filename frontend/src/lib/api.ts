@@ -45,6 +45,12 @@ export type MatchRow = {
   enemy_lane_damage_at_10: number | null
   kills_by_10: number | null
   deaths_by_10: number | null
+  /** whole-match totals from the replay (lotuses collected, camps pulled, trips through a twin gate), null without one */
+  lotuses: number | null
+  camps_pulled: number | null
+  twin_gates: number | null
+  /** the enemy heroes in the player's lane, empty without a replay or outside the three lanes */
+  lane_enemies: number[]
   with_tracked: boolean
   position: 1 | 2 | 3 | 4 | 5 // from the lane and the farm, see IMPLEMENTATION.md
 }

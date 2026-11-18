@@ -39,6 +39,7 @@
     ['Supports (pos 4–5)', [4, 5]],
   ]
   const TOP_HEROES = 10
+  const WORST_MATCHUPS = 5
   const EVEN = 500 // a lane within this much net worth at 10:00 counts as even
   const played = $derived(rows.filter((r) => ROLES[role][1].includes(r.position)))
   const recent = $derived(played.slice(0, size)) // the API returns newest first
@@ -95,11 +96,14 @@
       ['Enemy lane dealt', at10('enemy_lane_damage_at_10'), 'the heroes you laned against, to your lane', ''],
       ['You took', at10('damage_taken_at_10'), 'from all enemy heroes', ''],
     ]],
-    ['Farm at 10:00', [
-      ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals', ''],
-      ['Denies', at10('denies_at_10'), '', ''],
-      ['Net worth', at10('net_worth_at_10'), '', ''],
-      ['Experience', at10('xp_at_10'), '', ''],
+    ['General', [
+      ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals at 10:00', ''],
+      ['Denies', at10('denies_at_10'), 'at 10:00', ''],
+      ['Net worth', at10('net_worth_at_10'), 'at 10:00', ''],
+      ['Experience', at10('xp_at_10'), 'at 10:00', ''],
+      ['Lotuses collected', at10('lotuses'), 'per match', 'tenths'],
+      ['Camps pulled', at10('camps_pulled'), 'per match', 'tenths'],
+      ['Twin gate trips', at10('twin_gates'), 'per match', 'tenths'],
     ]],
     ['Your lane against theirs', [
       ['Net worth lead', at10('lane_nw_diff'), 'your lane minus the enemy lane at 10:00', 'signed'],
@@ -108,6 +112,23 @@
       ['Deaths', at10('deaths_by_10'), 'before 10:00', 'tenths'],
     ]],
   ] as const) // prettier-ignore
+  // the enemy heroes met in lane at least twice, the ones you fell furthest behind against first
+  const matchups = $derived.by(() => {
+    const met = new Map<number, MatchRow[]>()
+    for (const r of laneGames) for (const hero of r.lane_enemies) met.set(hero, [...(met.get(hero) ?? []), r])
+    return [...met]
+      .filter(([, games]) => games.length >= 2)
+      .map(([hero_id, games]) => ({
+        hero_id,
+        games: games.length,
+        wins: games.filter((r) => r.win).length,
+        nw: mean(games.map((r) => r.lane_nw_diff)),
+        cs: mean(games.map((r) => r.lane_cs_diff)),
+        deaths: mean(games.map((r) => r.deaths_by_10)),
+      }))
+      .sort((a, b) => (a.nw ?? Infinity) - (b.nw ?? Infinity))
+      .slice(0, WORST_MATCHUPS)
+  })
   const shownStat = (value: number | null, kind: string) =>
     value === null ? '–' : kind === 'signed' ? signed(value) : kind === 'tenths' ? value.toFixed(1) : Math.round(value).toLocaleString()
 
@@ -311,11 +332,37 @@
       {/each}
     </dl>
   {/each}
+  <h3 class="group">Worst lane matchups</h3>
+  {#if matchups.length}
+    <section class="card">
+      <table>
+        <thead>
+          <tr><th>Enemy hero</th><th class="num">Matches</th><th>Win rate</th><th class="num">Net worth lead</th><th class="num">Last-hit lead</th><th class="num">Deaths</th></tr>
+        </thead>
+        <tbody>
+          {#each matchups as m (m.hero_id)}
+            <tr>
+              <td class="hero"><img src={heroPortrait(m.hero_id)} alt="" width="44" height="25" loading="lazy" />{heroName(m.hero_id)}</td>
+              <td class="num">{m.games}</td>
+              <td><WinRate wins={m.wins} games={m.games} /></td>
+              <td class="num" class:good={m.nw !== null && m.nw > 0} class:bad={m.nw !== null && m.nw < 0}>{shownStat(m.nw, 'signed')}</td>
+              <td class="num" class:good={m.cs !== null && m.cs > 0} class:bad={m.cs !== null && m.cs < 0}>{shownStat(m.cs, 'signed')}</td>
+              <td class="num">{shownStat(m.deaths, 'tenths')}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </section>
+  {:else}
+    <p class="muted">No enemy hero met in lane twice in these matches.</p>
+  {/if}
   <p class="muted laning">
     Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your
     lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is
     usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log
-    records it.
+    records it. Lotuses, pulls and twin gate trips count the whole match. The matchups are the enemy heroes you
+    laned against in at least two of these matches, the {WORST_MATCHUPS} you fell furthest behind against in net worth
+    at 10:00 first; the leads and deaths are at 10:00, as above.
   </p>
   {:else}
   <section class="card vision">
@@ -572,6 +619,15 @@
 
   .group {
     margin: 20px 0 8px;
+  }
+  .hero {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .hero img {
+    object-fit: cover;
+    border-radius: 3px;
   }
   .pick select {
     margin-left: 6px;

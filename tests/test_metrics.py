@@ -116,6 +116,15 @@ def test_laning_at_ten(match):
     assert metrics.xp_at_10(short, DAWNBREAKER) is metrics.kills_by_10(short, DAWNBREAKER) is None  # ended before 10:00
 
 
+
+def test_match_totals(match):
+    # the last whole minute (15:00) of the 15:11 game: Legion Commander (slot 4) pulled once and ate three lotuses,
+    # Lich (slot 2) went through a twin gate once
+    assert [f(match, 4) for f in (metrics.lotuses, metrics.camps_pulled, metrics.twin_gates)] == [3, 1, 0]
+    assert metrics.twin_gates(match, 2) == 1
+    assert metrics.lotuses({**match, "player_minute": []}, 4) is None
+
+
 def test_kill_participation(match):
     assert metrics.kill_participation(match, DAWNBREAKER) == (2 + 1) / 8
     assert metrics.kill_participation(match, SHADOW_FIEND) == (9 + 2) / 28

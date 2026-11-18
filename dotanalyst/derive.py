@@ -29,6 +29,8 @@ LOTUS_GREAT, LOTUS_GREATER = 2100, 3600  # from 35:00 it grows great lotuses (wo
 TREADS_STAT = {"belt_of_strength", "boots_of_elves", "robe"}
 PULL_GAP = 25  # seconds without a kill between lane creeps and neutral creeps that end a pull
 PULL_LEAD = 30  # how long before the first such kill the puller drew the camp
+GATE_CHANNEL = 4  # seconds a twin gate's channel takes; one that ends sooner was cancelled
+GATE_MODIFIER = "modifier_twin_gate_warp_channel"
 FIGHT_GAP = 15  # seconds without a death that end a fight; also how long before the first death it starts
 FIGHT_DEATHS = 3
 LANING_END = 600
@@ -45,7 +47,8 @@ BUILDING = re.compile(r"npc_dota_(good|bad)guys_(tower\d\w*|(melee|range)_rax_\w
 
 def read_log(path: Path) -> list[dict]:
     with gzip.open(path, "rt", encoding="utf-8") as lines:
-        return [event for event in map(json.loads, lines) if event["type"] in USED]
+        # of the many buff events only the twin gate channel is needed
+        return [e for e in map(json.loads, lines) if e["type"] in USED or e.get("inflictor") == GATE_MODIFIER]
 
 
 def positions(path: Path, start: int, end: int) -> list[dict]:
@@ -184,8 +187,24 @@ def pulls(log: Log) -> list[tuple[int, int]]:
     return found
 
 
+def twin_gates(log: Log) -> list[tuple[int, int]]:
+    """(time, slot) for each trip a hero made through a twin gate: a warp channel that lasted its full time."""
+    started, found = {}, []
+    for e in log.events:
+        slot = log.hero_slot.get(e.get("targetname"))
+        if slot is None or e.get("inflictor") != GATE_MODIFIER:
+            continue
+        if e["type"] == "DOTA_COMBATLOG_MODIFIER_ADD":
+            started[slot] = e["time"]
+        elif e["type"] == "DOTA_COMBATLOG_MODIFIER_REMOVE" and slot in started:
+            if e["time"] - started.pop(slot) >= GATE_CHANNEL:
+                found.append((e["time"], slot))
+    return found
+
+
 def minutes(log: Log) -> list[dict]:
     collected, pulled, heals, hits = lotuses(log), pulls(log), list(log.hero_heals()), list(log.hero_hits())
+    gated = twin_gates(log)
     rows = []
     for slot, player_slot in sorted(log.player_slot.items()):
         for minute in range(log.end // 60 + 1):
@@ -201,6 +220,7 @@ def minutes(log: Log) -> list[dict]:
                         "camps_stacked": e.get("camps_stacked", 0),
                         "camps_pulled": sum(who == slot and time <= minute * 60 for time, who in pulled),
                         "lotuses": sum(n for time, who, n in collected if who == slot and time <= minute * 60),
+                        "twin_gates": sum(who == slot and time <= minute * 60 for time, who in gated),
                     }  # fmt: skip
                 )
     return rows

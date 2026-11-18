@@ -79,6 +79,26 @@ def enemy_lane_damage_at_10(match: dict, slot: int) -> int | None:
     return sides and sides[1]
 
 
+def _last(match: dict, slot: int, stat: str) -> int | None:
+    """The player's `stat` at the last whole minute of the match."""
+    mine = [r for r in match["player_minute"] if r["player_slot"] == slot]
+    return max(mine, key=lambda r: r["minute"])[stat] if mine else None
+
+
+def lotuses(match: dict, slot: int) -> int | None:
+    """Lotuses the player collected in the match, see derive.lotuses."""
+    return _last(match, slot, "lotuses")
+
+
+def camps_pulled(match: dict, slot: int) -> int | None:
+    return _last(match, slot, "camps_pulled")
+
+
+def twin_gates(match: dict, slot: int) -> int | None:
+    """Trips the player made through a twin gate, see derive.twin_gates."""
+    return _last(match, slot, "twin_gates")
+
+
 def kills_by_10(match: dict, slot: int) -> int | None:
     """Heroes the player killed before 10:00 (the last hit, not assists)."""
     if _ten(match, slot, "xp") is None:
@@ -145,7 +165,8 @@ def deaths_outside_fights(match: dict, slot: int) -> int:
 
 METRICS = (
     lane_cs_diff, lane_nw_diff, last_hits_at_10, denies_at_10, net_worth_at_10, xp_at_10, damage_at_10,
-    damage_taken_at_10, lane_damage_at_10, enemy_lane_damage_at_10, kills_by_10, deaths_by_10, obs_placed, sen_placed, obs_bought, sen_bought, wards_destroyed, obs_lifetime,
+    damage_taken_at_10, lane_damage_at_10, enemy_lane_damage_at_10, kills_by_10, deaths_by_10, lotuses, camps_pulled,
+    twin_gates, obs_placed, sen_placed, obs_bought, sen_bought, wards_destroyed, obs_lifetime,
     fight_participation, kill_participation, deaths_outside_fights,
 )  # fmt: skip
 NAMES = tuple(metric.__name__ for metric in METRICS)

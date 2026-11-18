@@ -105,13 +105,31 @@ def _positions_in(session: Session, played) -> dict[tuple[int, int], int]:
 ROW_METRICS = (
     "lane_nw_diff", "obs_bought", "sen_bought", "wards_destroyed", "obs_lifetime", "lane_cs_diff", "last_hits_at_10",
     "denies_at_10", "net_worth_at_10", "xp_at_10", "damage_at_10", "damage_taken_at_10", "lane_damage_at_10",
-    "enemy_lane_damage_at_10", "kills_by_10", "deaths_by_10",
+    "enemy_lane_damage_at_10", "kills_by_10", "deaths_by_10", "lotuses", "camps_pulled", "twin_gates",
 )  # fmt: skip
+
+
+def _lane_enemies(session: Session, where: list) -> dict[tuple[int, int], list[int]]:
+    """Heroes of the other team in each player's lane (top, mid or bot), by (match_id, player_slot), for the matches
+    `where` finds. A player outside the three lanes or without a parsed replay has no entry."""
+    rows = session.execute(
+        select(OTHER.match_id, OTHER.player_slot, OTHER.hero_id, Lane.lane)
+        .join(Lane, and_(Lane.match_id == OTHER.match_id, Lane.player_slot == OTHER.player_slot))
+        .where(OTHER.match_id.in_(_mine(MatchPlayer.match_id).where(*where)), Lane.lane.in_(("top", "mid", "bot")))
+    )
+    lanes: dict[tuple[int, str], list[tuple[int, int]]] = {}
+    for r in rows:
+        lanes.setdefault((r.match_id, r.lane), []).append((r.player_slot, r.hero_id))
+    return {
+        (match_id, slot): [hero for other, hero in laners if (other < 128) != (slot < 128)]
+        for (match_id, _), laners in lanes.items()
+        for slot, _ in laners
+    }
 
 
 def matches(session: Session, where: list) -> list[dict]:
     """The account's matches, newest first. `lane` and the ROW_METRICS are None without a parsed replay; `position`
-    is 1-5, see positions."""
+    is 1-5, see positions; `lane_enemies` the enemy heroes in the player's lane, see _lane_enemies."""
     p = MatchPlayer
     joined = {name: aliased(Metric) for name in ROW_METRICS}
     with_tracked = (
@@ -137,9 +155,10 @@ def matches(session: Session, where: list) -> list[dict]:
             m, and_(m.match_id == p.match_id, m.player_slot == p.player_slot, m.name == name)
         )
     rows = _rows(session, statement)
-    found = _positions(session, where)
+    found, enemies = _positions(session, where), _lane_enemies(session, where)
     for r in rows:
-        r["position"] = found[r["match_id"], r.pop("player_slot")]
+        key = r["match_id"], r.pop("player_slot")
+        r["position"], r["lane_enemies"] = found[key], enemies.get(key, [])
     return rows
 
 

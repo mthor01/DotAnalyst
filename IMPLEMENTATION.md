@@ -94,6 +94,16 @@ Known limits: a wave that walks into a camp the enemy pulled counts for whoever 
 
 Not checked against anything: no other source records pulls.
 
+### Twin gates
+
+Read from: the combat log's buff events. A hero who starts a twin gate warp gets the buff `modifier_twin_gate_warp_channel`; it ends when the channel finishes and the hero is moved, or sooner when they cancel or are stunned.
+
+- A trip counts when the buff stood at least 4 seconds (`GATE_CHANNEL`), at the second it ended. In 60 replays the 470 buffs lasted 0 s ×15, 1 s ×20, 2 s ×11, 3 s ×7 and 4 s ×417, so nothing sits between a cancelled channel and a full one.
+- The `twin_gate_portal_warp` ability event is not used: it marks the start of a channel, cancelled ones included.
+- `player_minute.twin_gates` holds the trips up to each minute.
+
+Known limit: a channel that ends in the same second as a stun after 4 seconds counts, although the hero may not have been moved.
+
 ### Healing
 
 Read from: the combat log's heals whose source and target are both heroes. Illusions as targets are left out.
@@ -176,6 +186,7 @@ One function each in `dotanalyst/metrics.py`, stored per player and match in `me
 | `obs_bought`, `sen_bought` | Wards of that kind the player bought (`ward_observer`, `ward_sentry` purchases). A `ward_dispenser` purchase is the game merging or splitting wards already bought and is not counted. Known limit: wards a teammate bought and handed over count for the buyer, not the one who placed them |
 | `wards_destroyed` | Enemy wards of either kind the player destroyed |
 | `obs_lifetime` | Mean seconds the player's observers stood. One still standing at the end is left out |
+| `lotuses`, `camps_pulled`, `twin_gates` | The whole match's lotuses collected, camps pulled and twin gate trips: the player's number in the last whole minute row, so anything in the final under-a-minute is left out |
 | `fight_participation` | Share of the match's teamfights the player took part in |
 | `kill_participation` | (kills + assists) / kills of the team, from the scoreboard |
 | `deaths_outside_fights` | Deaths outside every fight window |
@@ -310,7 +321,9 @@ Above the ward heatmap: observers bought, sentries bought and enemy wards destro
 
 ### Laning (Profile)
 
-The Laning tab: the means of the 10:00 metrics (see Metrics) over the profile's matches, with the role and count picker above it. A Hero dropdown lists the heroes of those matches, most played first with their game count, and narrows every mean to that hero's matches; a hero no longer among them (another role or count) falls back to all heroes. Damage before 10:00: your hero damage, your lane's (`lane_damage_at_10`), the enemy lane's (`enemy_lane_damage_at_10`) and what you took from all enemy heroes. Farm at 10:00: last hits, denies, net worth and experience. Your lane against theirs: `lane_nw_diff` and `lane_cs_diff` (green above 0, red below), kills and deaths before 10:00. Each mean covers only the matches that have that metric, so a lane stat leaves out jungle games while the farm stats keep them; the count under the tab is of the matches with a 10:00 row.
+The Laning tab: the means of the 10:00 metrics (see Metrics) over the profile's matches, with the role and count picker above it. A Hero dropdown lists the heroes of those matches, most played first with their game count, and narrows every mean to that hero's matches; a hero no longer among them (another role or count) falls back to all heroes. Damage before 10:00: your hero damage, your lane's (`lane_damage_at_10`), the enemy lane's (`enemy_lane_damage_at_10`) and what you took from all enemy heroes. General: last hits, denies, net worth and experience at 10:00, and lotuses collected, camps pulled and twin gate trips per match (`lotuses`, `camps_pulled`, `twin_gates`). Your lane against theirs: `lane_nw_diff` and `lane_cs_diff` (green above 0, red below), kills and deaths before 10:00. Each mean covers only the matches that have that metric, so a lane stat leaves out jungle games while the farm stats keep them; the count under the tab is of the matches with a 10:00 row.
+
+Worst lane matchups: the enemy heroes the player laned against (the enemies of the player's lane, see Lane of a player) in at least 2 of the matches shown, with matches, win rate and the means of `lane_nw_diff`, `lane_cs_diff` and `deaths_by_10` in those matches. The 5 lowest net worth leads come first. It follows the Hero dropdown. A jungle game has no lane enemies and is not counted. Known limit: a lane of two against two puts both enemies' matchups on the same lane numbers, so a weak lane partner shows as a bad matchup too.
 
 ### Lead charts
 

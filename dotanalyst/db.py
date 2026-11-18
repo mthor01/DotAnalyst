@@ -166,6 +166,7 @@ class PlayerMinute(Derived):
     camps_stacked: Mapped[int]  # so far, like every column here
     camps_pulled: Mapped[int]  # into the own lane creeps; worked out from creep deaths, see derive.pulls
     lotuses: Mapped[int]  # collected from the pools; worked out from the positions, see derive.lotuses
+    twin_gates: Mapped[int]  # trips through a twin gate, see derive.twin_gates
 
 
 class Purchase(Derived):
@@ -317,6 +318,8 @@ def open_engine() -> Engine:
             c.exec_driver_sql("ALTER TABLE accounts ADD COLUMN avatar VARCHAR")
         if "replays_wanted" not in {col["name"] for col in inspect(c).get_columns("player_game_lists")}:
             c.exec_driver_sql("ALTER TABLE player_game_lists ADD COLUMN replays_wanted BOOLEAN NOT NULL DEFAULT 0")
+        if "twin_gates" not in {col["name"] for col in inspect(c).get_columns("player_minute")}:  # 0 until recompute
+            c.exec_driver_sql("ALTER TABLE player_minute ADD COLUMN twin_gates INTEGER NOT NULL DEFAULT 0")
     return engine
 
 
