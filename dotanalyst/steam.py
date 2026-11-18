@@ -18,8 +18,6 @@ HEROES = "IEconDOTA2_570/GetHeroes/v1/"
 NAMES = "ISteamUser/GetPlayerSummaries/v2/"
 LOGO = "ISteamRemoteStorage/GetUGCFileDetails/v1/"
 STEAM_ID_BASE = 76561197960265728  # a 64-bit Steam id is this plus the 32-bit account id
-# REINCARNATION - D/A/CH Dota 2 by BEING ESPORTS: the tournaments a new database starts with, see leagues()
-LEAGUES = {18795: "Season 6", 19418: "Season 7", 20408: "Season 8"}
 ITEM_IDS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/item_ids.json"
 ITEMS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/items.json"
 ABILITIES = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/abilities.json"
@@ -159,10 +157,7 @@ def store_league_match(session: Session, m: dict) -> None:
 
 
 def leagues(session: Session) -> dict[int, str]:
-    """The tracked tournaments by id, oldest id first. An empty table is given LEAGUES first."""
-    if session.scalar(select(League.league_id).limit(1)) is None:
-        session.add_all(League(league_id=i, name=n) for i, n in LEAGUES.items())
-        session.commit()
+    """The tracked tournaments by id, oldest id first. A new database tracks none: they are added on the site."""
     return dict(session.execute(select(League.league_id, League.name).order_by(League.league_id)).all())
 
 

@@ -116,9 +116,9 @@ def test_filters(session):
     assert found(date_to=date(2026, 7, 10)) == [2, 1]  # the end day is included
     assert found(date_from=date(2026, 7, 11), date_to=date(2026, 8, 9)) == []
     assert ids(queries.matches(session, queries.conditions(FRIEND))) == [3, 2, 1]
-    store_league_match(session, {**MATCHES[1], "leagueid": 19418})  # match 2 was a league game
-    assert found(league_id=19418) == [2]
-    assert found(league_id=20408) == []
+    store_league_match(session, {**MATCHES[1], "leagueid": 9002})  # match 2 was a league game
+    assert found(league_id=9002) == [2]
+    assert found(league_id=9003) == []
 
 
 def test_heroes_counts_and_averages(session):
@@ -175,7 +175,7 @@ def league_game(match_id, day, radiant, dire, radiant_win, radiant_bans, dire_ba
     """The recorded league game with a known draft. Player i of team T is always account 100 * T + i."""
     m = copy.deepcopy(LEAGUE_TEMPLATE)
     m.update(
-        match_id=match_id, start_time=int(datetime(2026, 11, day, 12).timestamp()), leagueid=20408,
+        match_id=match_id, start_time=int(datetime(2026, 11, day, 12).timestamp()), leagueid=9003,
         radiant_team_id=radiant, dire_team_id=dire, radiant_name=TEAM_NAMES.get(radiant),
         dire_name=TEAM_NAMES.get(dire), radiant_win=radiant_win,
     )
@@ -200,10 +200,13 @@ LEAGUE_GAMES = [
     league_game(5, 5, OTHER, NO_TEAM, False, radiant_bans=[], dire_bans=[]),  # the Dire side has no team
 ]  # fmt: skip
 LEAGUE_GAMES[3]["dire_name"] = LEAGUE_GAMES[4]["radiant_name"] = ""  # Steam sends some games with an empty team name
-LEAGUE_GAMES[0]["leagueid"] = 19418  # the first game is of the season before
+LEAGUE_GAMES[0]["leagueid"] = 9002  # the first game is of the season before
 # Us's logo: 111 in the first game, 222 in the second, none (0) in the newest
 LEAGUE_GAMES[0]["radiant_logo"], LEAGUE_GAMES[1]["dire_logo"], LEAGUE_GAMES[2]["radiant_logo"] = 111, 222, 0
 LEAGUE_GAMES[1]["radiant_logo"] = 999  # Them's
+
+
+SEASONS = {9001: "Season 6", 9002: "Season 7", 9003: "Season 8"}  # made-up league ids
 
 
 @pytest.fixture
@@ -215,6 +218,7 @@ def league():
         for m in LEAGUE_GAMES:
             store_league_match(s, m)
         s.add(PlayerName(account_id=1000, name="Carry"))
+        s.add_all(League(league_id=i, name=n) for i, n in SEASONS.items())
         s.commit()
         yield s
 
@@ -409,7 +413,7 @@ def test_team_players_wards_also_come_from_their_parsed_games_outside_the_league
     assert players[1001]["wards"] == []
     # the dates narrow them like the league games; the season does not, as they are in none
     assert queries.team(league, US, date_to=date(2026, 11, 2))["players"][0]["wards"] == []
-    assert queries.team(league, US, league_id=20408)["players"][0]["usual_replays"] == 1
+    assert queries.team(league, US, league_id=9003)["players"][0]["usual_replays"] == 1
 
 
 def test_team_players_games_outside_the_league_whatever_the_filters(league):
@@ -422,7 +426,7 @@ def test_team_players_games_outside_the_league_whatever_the_filters(league):
                        **{**game, "start_time": 2}),
         ]
     )  # fmt: skip
-    players = {p["account_id"]: p for p in queries.team(league, US, league_id=19418)["players"]}
+    players = {p["account_id"]: p for p in queries.team(league, US, league_id=9002)["players"]}
     assert players[1000]["outside_listed"]
     assert players[1000]["outside"] == [  # newest first; a Dire player wins when Radiant loses
         {"match_id": 92, "hero_id": 8, "win": False, "role": "none", "kills": 4, "deaths": 2, "assists": 9},
@@ -464,11 +468,11 @@ def test_team_games_narrowed_by_dates_and_season(league):
 
     assert games(date_from=date(2026, 11, 2)) == [3, 2]
     assert games(date_to=date(2026, 11, 2)) == [2, 1]  # the end day is included
-    assert games(league_id=20408) == [3, 2]
-    assert games(league_id=19418) == [1]
+    assert games(league_id=9003) == [3, 2]
+    assert games(league_id=9002) == [1]
     empty = queries.team(league, US, date_from=date(2026, 12, 1))  # a known team without a game in the time frame
     assert (empty["name"], empty["games"], empty["heroes"], empty["players"]) == ("Us", [], [], [])
-    heroes = {h["hero_id"]: h for h in queries.team(league, US, league_id=20408)["heroes"]}
+    heroes = {h["hero_id"]: h for h in queries.team(league, US, league_id=9003)["heroes"]}
     assert heroes[50]["banned_against"] == 1  # game 1, where Them banned it too, is not counted
 
 
@@ -527,13 +531,13 @@ def test_frequent_teammates_are_on_my_team_in_enough_of_my_newest_matches(sessio
     assert queries.frequent_teammates(session, ME) == []  # only match 3 is counted
 
 
-def test_tournaments_start_with_the_seasons_and_count_their_games_and_teams(league):
+def test_tournaments_count_their_games_and_teams(league):
     t = {m["match_id"]: m["start_time"] for m in LEAGUE_GAMES}
     assert queries.tournaments(league) == [
-        {"league_id": 20408, "name": "Season 8", "games": 4, "teams": 3, "first_game": t[2], "last_game": t[5]},
-        {"league_id": 19418, "name": "Season 7", "games": 1, "teams": 2, "first_game": t[1], "last_game": t[1]},
-        {"league_id": 18795, "name": "Season 6", "games": 0, "teams": 0, "first_game": None, "last_game": None},
+        {"league_id": 9003, "name": "Season 8", "games": 4, "teams": 3, "first_game": t[2], "last_game": t[5]},
+        {"league_id": 9002, "name": "Season 7", "games": 1, "teams": 2, "first_game": t[1], "last_game": t[1]},
+        {"league_id": 9001, "name": "Season 6", "games": 0, "teams": 0, "first_game": None, "last_game": None},
     ]
     league.add(League(league_id=99999, name="Cup"))
     league.commit()
-    assert [x["league_id"] for x in queries.tournaments(league)] == [99999, 20408, 19418, 18795]  # the seasons stay
+    assert [x["league_id"] for x in queries.tournaments(league)] == [99999, 9003, 9002, 9001]  # the seasons stay

@@ -79,7 +79,7 @@ class LeagueMatch(Base):
 
 
 class League(Base):
-    """A tracked tournament: steam.LEAGUES to start with, then those added on the site."""
+    """A tracked tournament, added on the site."""
 
     __tablename__ = "leagues"
 

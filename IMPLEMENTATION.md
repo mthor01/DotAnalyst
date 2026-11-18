@@ -244,7 +244,7 @@ Known limits: without a parsed replay (most matches) the position is only the te
 
 ### Tracked tournaments (Tournaments page)
 
-The tracked tournaments are the `leagues` table, league id to name. An empty table is first given `LEAGUES` in `steam.py`, so those are tracked on a new database. The add form on the Tournaments page takes a league id; the name is OpenDota's (`/leagues/{id}`), or "League {id}" when OpenDota has none or does not answer. The league sync reads every tracked tournament, so a new one is read in full on the poller's next round for league games, up to Steam's newest 500 games of a league.
+The tracked tournaments are the `leagues` table, league id to name. A new database tracks none. The add form on the Tournaments page takes a league id; the name is OpenDota's (`/leagues/{id}`), or "League {id}" when OpenDota has none or does not answer. The league sync reads every tracked tournament, so a new one is read in full on the poller's next round for league games, up to Steam's newest 500 games of a league.
 
 The list gives per tournament its stored games, the teams that played in them (a side without a team is none), and the start of its first and last stored game. The Teams tab of the page is the League teams list.
 

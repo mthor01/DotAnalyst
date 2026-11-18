@@ -204,10 +204,10 @@ Known limit: the lane differences describe the lane, not the player, and a lane 
 
 For preparing a tournament match: what do other teams ban against this team, and does the team pick those heroes when they are left open? Built from drafts and scoreboards. The replay of a league game younger than 30 days is downloaded by the poller (since 2026-11-16), an older one only when asked for on the site: the wards and the first moves below need it.
 
-- **Which games**: the leagues in `LEAGUES` in `steam.py`, for now seasons 6 to 8 of "REINCARNATION - D/A/CH Dota 2 by BEING ESPORTS" (league ids 18795, 19418, 20408). Adding a league is one entry there.
+- **Which games**: the tournaments in the `leagues` table. A new database has none; they are added by league id on the Tournaments page (since 2026-11-18; before, a list in `steam.py` gave a new database three seasons of one league).
 - **Fetching**: the button in the top bar (see below) or `dotanalyst sync-leagues`, and every poll (since 2026-11-16). `GetMatchHistory` with `league_id` lists a league's games, each with both team ids; every game not stored yet is fetched once through `GetMatchHistoryBySequenceNum`, like an account's match. The first run took half an hour (1,130 games); a later run only fetches new games. The players' Steam names come last, from `GetPlayerSummaries`, 100 per request.
-- **Facts about the league list**: Steam has no query for a team's games, only for a league's. The list is paged by series, about 40 games a page, and `results_remaining` reaches 0 with games still to come, so pages are read until one is empty. Checked against dota2.com's `GetLeagueData`, which lists every series of a league without a key: all 198 games of season 8 came back, and 423 of 424 of season 6.
-- **Known limit**: the list reaches back 500 games per league and no further, whatever `start_at_match_id` says. Season 7 has 561 games, so its oldest 67 (the first weeks, March 2026) are not stored. Asking with `account_id` of a player next to `league_id` does list that player's older league games; that route is not built.
+- **Facts about the league list**: Steam has no query for a team's games, only for a league's. The list is paged by series, about 40 games a page, and `results_remaining` reaches 0 with games still to come, so pages are read until one is empty. Checked against dota2.com's `GetLeagueData`, which lists every series of a league without a key: all 198 games of one season came back, and 423 of 424 of another.
+- **Known limit**: the list reaches back 500 games per league and no further, whatever `start_at_match_id` says. A season of 561 games lost its oldest 67 (its first weeks) this way. Asking with `account_id` of a player next to `league_id` does list that player's older league games; that route is not built.
 - **Teams page** (`#teams`): every team with a game in those leagues, with games, wins and last game, and a name search.
 - **Team page** (`#team/<team_id>`):
   - Heroes in their drafts, one sortable table: games played, win rate, banned against them, picked by the enemy team, open, picked when open. A hero is open in a game when neither side banned it and the enemy did not pick it. Counts come with their share of the team's games, as "5 (17%)"; the two rates are percentages alone. The first 15 rows show, the rest on request.
@@ -216,7 +216,7 @@ For preparing a tournament match: what do other teams ban against this team, and
   - Games, newest first: season, opponent (a link to that team), side, result, their picks, the bans against them, their own bans, and whether the replay is parsed. The date opens the game as a match page, where a game without a replay has the button that requests it.
 - Picks are read from the ten players of a game, bans from `picks_bans`. A team's name is the newest one Steam sent that is not empty.
 
-Not built: a season filter, fetching the replays of league games older than 30 days without being asked, leagues chosen in the UI.
+Not built: a season filter, fetching the replays of league games older than 30 days without being asked.
 
 ## The check button (November 2026)
 

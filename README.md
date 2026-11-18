@@ -51,11 +51,11 @@ uv run python -m dotanalyst sync
 
 The Teams tab of the Tournaments page shows, for every team of the tracked tournaments, which heroes are banned against it, whether it picks them when they are open, and who plays what. The replays of games from the last 30 days are fetched by the running server; an older game's when you ask for it on the page; with replays a team page also shows where each player wards and where the team walks in the first seconds of a game.
 
-`uv run python -m dotanalyst sync-leagues` fetches the league's games; the first run takes about half an hour. After that, the running server gets the newest ones every minute, and the button "Check for new league games" on the Tournaments page at once.
+`uv run python -m dotanalyst sync-leagues` fetches the games of the tracked tournaments; the first run for a big league (500 games) takes about ten minutes. After that, the running server gets the newest ones every minute, and the button "Check for new league games" on the Tournaments page at once.
 
 ### Adding a tournament
 
-A new database tracks the leagues in `LEAGUES` at the top of [`dotanalyst/steam.py`](dotanalyst/steam.py) (the Reincarnation league, seasons 6 to 8). To add another:
+A new database tracks no tournament. To add one:
 
 1. Find the league id: it is the number in the league's URL on [OpenDota](https://www.opendota.com/leagues) (`opendota.com/leagues/12345`) or [Dotabuff](https://www.dotabuff.com/esports/leagues) (`dotabuff.com/esports/leagues/12345-my-cup`). Only leagues Valve itself lists (the ones with an in-game ticket) can be fetched; those sites list exactly those.
 2. Enter it on the Tournaments page under **Add tournament**. Its name comes from OpenDota.

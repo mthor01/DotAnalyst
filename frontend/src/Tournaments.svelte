@@ -45,7 +45,7 @@
   <form class="filters" onsubmit={add}>
     <label>
       League id
-      <input bind:value={leagueId} required pattern="\d+" inputmode="numeric" placeholder="e.g. 18795" />
+      <input bind:value={leagueId} required pattern="\d+" inputmode="numeric" placeholder="league id" />
     </label>
     <button class="action" disabled={adding}>{adding ? 'Adding…' : 'Add tournament'}</button>
     <span class="muted" role="status">{added}</span>

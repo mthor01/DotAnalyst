@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, func, select, update
 from sqlalchemy.orm import Session
 
 from dotanalyst import steam
-from dotanalyst.db import Ability, Account, Base, Hero, Item, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
+from dotanalyst.db import Ability, Account, Base, Hero, Item, League, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
 
 FIXTURES = Path(__file__).parent / "fixtures"
 ME = 2003
@@ -237,16 +237,25 @@ def test_load_env_reads_dotenv_and_keeps_variables_already_set(tmp_path, monkeyp
     load_env(tmp_path / "missing.env")  # no file: nothing happens
 
 
-LEAGUE_PAGE, LEAGUE_DETAILS = load("league_history.json"), load("league_details.json")  # three games of league 18795
+LEAGUE_PAGE, LEAGUE_DETAILS = load("league_history.json"), load("league_details.json")  # three games of league 9001
 LEAGUE_GAMES = LEAGUE_PAGE["result"]["matches"]
 # Steam says results_remaining 0 on a page that has more behind it: this game is only on the page after
 LATER_GAME = {**LEAGUE_GAMES[0], "match_id": 8568000000, "match_seq_num": 7196000000}
 RECORDED = 8568399403  # the game league_details.json was recorded from
 NO_PROFILE = 1010  # Steam leaves an account without a profile out of its answer
 
+TRACKED = {9001: "Season 6", 9002: "Season 7", 9003: "Season 8"}  # made-up league ids; FakeLeague has games for 9001 only
+
+
+@pytest.fixture
+def tracked(session):
+    """A new database tracks no tournament: the league tests add theirs, as the site does."""
+    session.add_all(League(league_id=i, name=n) for i, n in TRACKED.items())
+    session.commit()
+
 
 class FakeLeague:
-    """Steam's answers about league 18795: two pages of games, the recorded details for each, and player names."""
+    """Steam's answers about league 9001: two pages of games, the recorded details for each, and player names."""
 
     def __init__(self):
         self.requests: list[httpx.Request] = []
@@ -273,7 +282,7 @@ class FakeLeague:
             body = copy.deepcopy(LEAGUE_DETAILS)
             body["result"]["matches"][0].update(match_seq_num=seq, match_id=entry["match_id"])
             return httpx.Response(200, json=body)
-        if params["league_id"] != "18795":
+        if params["league_id"] != "9001":
             return httpx.Response(200, json=EMPTY_PAGE)
         start = params.get("start_at_match_id")
         if start is None:
@@ -283,42 +292,42 @@ class FakeLeague:
         return httpx.Response(200, json=EMPTY_PAGE)
 
 
-def test_league_sync_stores_each_game_with_its_teams_and_draft(session):
+def test_league_sync_stores_each_game_with_its_teams_and_draft(session, tracked):
     assert steam.sync_leagues(session, FakeLeague().client, KEY) == 4
     game = session.get(LeagueMatch, RECORDED)
-    assert (game.league_id, game.start_time, game.radiant_win) == (18795, 1763665760, False)
+    assert (game.league_id, game.start_time, game.radiant_win) == (9001, 1763665760, False)
     assert (game.radiant_team_id, game.radiant_name) == (9906479, "Sayonara")
     assert (game.dire_team_id, game.dire_name) == (9635282, "New Kidz Doto")
     assert len(game.raw_json["picks_bans"]) == 24 and len(game.raw_json["players"]) == 10
 
 
-def test_league_sync_reads_on_past_a_page_that_says_nothing_remains(session):
+def test_league_sync_reads_on_past_a_page_that_says_nothing_remains(session, tracked):
     steam.sync_leagues(session, FakeLeague().client, KEY)
     assert session.get(LeagueMatch, LATER_GAME["match_id"]) is not None
 
 
-def test_league_games_stay_out_of_the_accounts_matches(session):
+def test_league_games_stay_out_of_the_accounts_matches(session, tracked):
     """The poller decides which league games become matches (recent ones, for their replays); the sync adds none."""
     steam.sync_leagues(session, FakeLeague().client, KEY)
     assert session.scalar(select(func.count()).select_from(Match)) == 0
 
 
-def test_second_league_sync_fetches_no_details(session):
+def test_second_league_sync_fetches_no_details(session, tracked):
     steam.sync_leagues(session, FakeLeague().client, KEY)
     fake = FakeLeague()
     assert steam.sync_leagues(session, fake.client, KEY) == 0
     assert fake.count("GetMatchHistoryBySequenceNum") == 0
 
 
-def test_a_newest_only_league_sync_stops_at_a_page_that_is_all_stored(session):
+def test_a_newest_only_league_sync_stops_at_a_page_that_is_all_stored(session, tracked):
     steam.sync_leagues(session, FakeLeague().client, KEY)
     fake = FakeLeague()
     assert steam.sync_leagues(session, fake.client, KEY, newest_only=True) == 0
-    assert fake.count("GetMatchHistory/") == len(steam.LEAGUES)  # one page each; a full sync reads 2 more
+    assert fake.count("GetMatchHistory/") == len(TRACKED)  # one page each; a full sync reads 2 more
     assert fake.count("GetPlayerSummaries") == 0  # no new game, no new player
 
 
-def test_league_sync_stores_the_players_steam_names(session):
+def test_league_sync_stores_the_players_steam_names(session, tracked):
     steam.sync_leagues(session, FakeLeague().client, KEY)
     assert session.get(PlayerName, 1001).name == "player 1001"
     assert session.get(PlayerName, 1001).avatar == "https://example.com/1001.jpg"
@@ -326,7 +335,7 @@ def test_league_sync_stores_the_players_steam_names(session):
     assert session.scalar(select(func.count()).select_from(PlayerName)) == 9
 
 
-def test_names_stored_before_pictures_get_their_picture_once(session):
+def test_names_stored_before_pictures_get_their_picture_once(session, tracked):
     steam.sync_leagues(session, FakeLeague().client, KEY)
     session.execute(update(PlayerName).values(avatar=None))
     session.add(PlayerName(account_id=NO_PROFILE, name="gone since"))  # Steam no longer has this profile

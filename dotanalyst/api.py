@@ -199,7 +199,7 @@ def add_tournament(session: Db, league_id: Annotated[int, Body(embed=True)]) -> 
     """Track a tournament by its league id: the poller then stores its games. Its name comes from OpenDota, once."""
     if league_id <= 0:
         raise HTTPException(422, f"{league_id} is not a league id")
-    known = leagues(session)  # first, so that a new database still starts with LEAGUES
+    known = leagues(session)
     if league_id not in known:
         with httpx.Client() as client:
             known[league_id] = opendota.league_name(client, league_id) or f"League {league_id}"
