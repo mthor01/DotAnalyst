@@ -167,9 +167,10 @@ export type TeamDetail = {
    *  games outside the league, newest first, whatever the filters; `outside_listed` is false until they were asked for.
    *  `usual_waiting`: usual games of the last 30 days whose replay the poller still means to get, null until Refresh
    *  on the team page asked for them. `main`: one of the five most seen in their newest `RECENT_GAMES` games
-   *  (`recent` of them), the others stand in. `tracked`: an account of this site, whose profile it has. */
+   *  (`recent` of them), the others stand in. `tracked`: an account of this site, whose profile it has.
+   *  `position`: the position 1-5 they took most often in these games. */
   players: {
-    account_id: number; name: string | null; avatar: string | null; tracked: boolean; main: boolean; recent: number; last_played: number
+    account_id: number; name: string | null; avatar: string | null; tracked: boolean; main: boolean; recent: number; last_played: number; position: number
     games: number; replays: number; usual_replays: number; heroes: TeamPlayerHero[]; wards: WardSpot[]; parsed: { radiant: boolean; league: boolean; win: boolean }[]
     outside_listed: boolean
     usual_waiting: number | null

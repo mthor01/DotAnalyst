@@ -29,15 +29,15 @@
   const rate = (part: number, whole: number) => (whole ? `${percent(part, whole)}%` : '–')
   // title, the number the column sorts by, and what the cell says. A rate of nothing sorts below every rate
   const COLUMNS: [string, (h: TeamHero) => number, (h: TeamHero) => string][] = [
-    ['Banned by them', (h) => h.banned, (h) => ofGames(h.banned)],
     ['Games played', (h) => h.picked, (h) => (h.picked ? String(h.picked) : '–')],
     ['Win rate', (h) => (h.picked ? h.wins / h.picked : -1), (h) => rate(h.wins, h.picked)],
     ['Banned against them', (h) => h.banned_against, (h) => ofGames(h.banned_against)],
+    ['Banned by them', (h) => h.banned, (h) => ofGames(h.banned)],
     ['Picked by enemy team', (h) => h.picked_against, (h) => ofGames(h.picked_against)],
     ['Open', (h) => h.open, (h) => ofGames(h.open)],
     ['Picked when open', (h) => (h.open ? h.picked / h.open : -1), (h) => rate(h.picked, h.open)],
   ]
-  let sort = $state({ column: 3, descending: true }) // banned against them
+  let sort = $state({ column: 0, descending: true }) // games played
   const TOP = 15 // the rest are mostly heroes seen once; the players and games below matter more
   let all = $state(false)
   const sorted = $derived(sortedBy(team?.heroes ?? [], COLUMNS[sort.column][1], sort.descending))
@@ -58,7 +58,15 @@
   const TABS = ['Overview', 'Games', 'Players', 'Draft', 'General'] as const
   let tab = $state<(typeof TABS)[number]>('Overview')
   const stack = $derived(team?.players.filter((p) => p.main) ?? [])
-  const standIns = $derived(team?.players.filter((p) => !p.main).sort((a, b) => b.last_played - a.last_played) ?? [])
+  const others = $derived(team?.players.filter((p) => !p.main).sort((a, b) => b.last_played - a.last_played) ?? [])
+  const STAND_IN_MONTHS = 3 // a player who stood in longer ago than this is a historical player
+  const standInSince = (() => {
+    const day = new Date()
+    day.setMonth(day.getMonth() - STAND_IN_MONTHS)
+    return day.getTime() / 1000
+  })()
+  const standIns = $derived(others.filter((p) => p.last_played >= standInSince))
+  const historical = $derived(others.filter((p) => p.last_played < standInSince))
   /** The site's own profile for a tracked player, else OpenDota's */
   const profile = (account_id: number, tracked: boolean) =>
     tracked ? `#account/${account_id}` : `https://www.opendota.com/players/${account_id}`
@@ -88,6 +96,19 @@
   {:else}
     <span class="face blank" style:width="{size}px" style:height="{size}px" aria-hidden="true">{(p.name ?? '?').slice(0, 1).toUpperCase()}</span>
   {/if}
+{/snippet}
+
+{#snippet bench(list: TeamDetail['players'])}
+  <ul class="bench">
+    {#each list as p (p.account_id)}
+      <li>
+        <a href={profile(p.account_id, p.tracked)} target={p.tracked ? undefined : '_blank'} rel="noopener">
+          {@render face(p, 36)}
+          <span><b>{p.name ?? `Player ${p.account_id}`}</b><br /><span class="muted">Pos {p.position}, {p.games} {p.games === 1 ? 'game' : 'games'}, last {date(p.last_played)}</span></span>
+        </a>
+      </li>
+    {/each}
+  </ul>
 {/snippet}
 
 {#snippet icons(ids: number[])}
@@ -160,7 +181,7 @@
         <span class="presence" role="img" aria-label="In {p.recent} of the last {RECENT_GAMES} games">
           {#each { length: RECENT_GAMES } as _, i}<i class:on={i < p.recent}></i>{/each}
         </span>
-        <span class="muted">{p.games} games{p.tracked ? ', tracked' : ''}</span>
+        <span class="muted">Pos {p.position}, {p.games} games{p.tracked ? ', tracked' : ''}</span>
         {@render icons(p.heroes.slice(0, 3).map((h) => h.hero_id))}
       </li>
     {/each}
@@ -168,18 +189,14 @@
 
   <h2>Stand-ins</h2>
   {#if standIns.length}
-    <ul class="bench">
-      {#each standIns as p (p.account_id)}
-        <li>
-          <a href={profile(p.account_id, p.tracked)} target={p.tracked ? undefined : '_blank'} rel="noopener">
-            {@render face(p, 36)}
-            <span><b>{p.name ?? `Player ${p.account_id}`}</b><br /><span class="muted">{p.games} {p.games === 1 ? 'game' : 'games'}, last {date(p.last_played)}</span></span>
-          </a>
-        </li>
-      {/each}
-    </ul>
+    {@render bench(standIns)}
   {:else}
-    <p class="muted">Nobody else played for them in these games.</p>
+    <p class="muted">Nobody else played for them in the last {STAND_IN_MONTHS} months of these games.</p>
+  {/if}
+  {#if historical.length}
+    <h2>Historical players</h2>
+    <p class="muted">Played for them, but not in the last {STAND_IN_MONTHS} months.</p>
+    {@render bench(historical)}
   {/if}
 
   {:else if tab === 'General'}

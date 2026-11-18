@@ -43,8 +43,10 @@ def conditions(
     game_mode: int | None = None,
     lobby_type: int | None = None,
     league_id: int | None = None,
+    last: int | None = None,
 ) -> list:
-    """SQL conditions for the filters every view shares. Dates are local days, both inclusive."""
+    """SQL conditions for the filters every view shares. Dates are local days, both inclusive. `last` keeps only
+    the newest that many matches the other filters find."""
     found = [MatchPlayer.account_id == account_id, *between(Match.start_time, date_from, date_to)]
     if league_id is not None:
         found.append(Match.match_id.in_(select(LeagueMatch.match_id).where(LeagueMatch.league_id == league_id)))
@@ -52,6 +54,10 @@ def conditions(
         found.append(Match.game_mode == game_mode)
     if lobby_type is not None:
         found.append(Match.lobby_type == lobby_type)
+    if last is not None:
+        # correlate(None): the subquery has its own Match and MatchPlayer, not the outer query's
+        newest = _mine(Match.match_id).where(*found).order_by(Match.start_time.desc()).limit(last).correlate(None)
+        found.append(Match.match_id.in_(newest))
     return found
 
 
@@ -351,7 +357,9 @@ def team(
     parsed (`replays` says how many of the player's games those are), and from their parsed games outside any
     league (`usual_replays`, wards with `league` False). `usual_waiting` counts the usual games whose replay the
     poller still means to get, None for a player whose team was never checked. `main` marks the five players with the
-    most of the team's newest RECENT games (the newer last game breaks a tie), the others stand in. The dates and the league narrow the games counted; a team
+    most of the team's newest RECENT games (the newer last game breaks a tie), the others stand in. `position` is
+    the position 1-5 a player took most often in these games (the newest breaks a tie): from the replay where it is
+    parsed, else from the farm and OpenDota's lane_role, as `positions` works it out. The dates and the league narrow the games counted; a team
     with no game in them has an empty answer, not None.
     """
     names = {t["team_id"]: t["name"] for t in teams(session)}
@@ -375,6 +383,7 @@ def team(
     placed_by: dict[tuple[int, int], dict] = {}  # (match, player slot) -> the player
     side_of = {g.match_id: g.radiant_team_id == team_id for g in rows if g.match_id in parsed}  # True: Radiant
     tormentor, blood = _first_tormentors(session, side_of), _first_bloods(session, side_of)
+    replay_positions = _positions_in(session, list(side_of))
     recent = {g.match_id for g in rows[:RECENT]}
     for g in rows:
         radiant = g.radiant_team_id == team_id
@@ -394,6 +403,10 @@ def team(
             hero(hero_id)["banned"] += 1
         for hero_id in against:
             hero(hero_id)["banned_against"] += 1
+        farmed = positions(
+            [{"player_slot": p["player_slot"], "last_hits": p.get("last_hits"), "net_worth": p.get("net_worth"),
+              "lane": LANE_ROLES.get(p.get("lane_role"))} for p in side]
+        )  # fmt: skip
         for p in side:
             hero(p["hero_id"])["picked"] += 1
             hero(p["hero_id"])["wins"] += win
@@ -401,10 +414,11 @@ def team(
                 continue
             blank = {
                 "account_id": p["account_id"], "games": 0, "recent": 0, "last_played": g.start_time, "replays": 0,
-                "usual_replays": 0, "heroes": {}, "wards": [], "parsed": [],
+                "usual_replays": 0, "heroes": {}, "wards": [], "parsed": [], "positions": Counter(),
             }  # fmt: skip
             player = players.setdefault(p["account_id"], blank)  # rows are newest first: last_played is their newest
             player["games"] += 1
+            player["positions"][replay_positions.get((g.match_id, p["player_slot"]), farmed[p["player_slot"]])] += 1
             player["recent"] += g.match_id in recent
             player["replays"] += g.match_id in parsed
             if g.match_id in parsed:  # the ward map's games, wards or none
@@ -489,6 +503,7 @@ def team(
         player["avatar"] = name and name.avatar or tracked.get(player["account_id"]) or None
         player["tracked"] = player["account_id"] in tracked
         player["main"] = player["account_id"] in stack
+        player["position"] = player.pop("positions").most_common(1)[0][0]  # ties: the first counted, the newest
         player["outside_listed"] = player["account_id"] in listed
         player["usual_waiting"] = waiting.get(player["account_id"], 0) if player["account_id"] in wanted else None
         player["outside"] = outside[player["account_id"]]

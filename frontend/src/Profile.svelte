@@ -12,11 +12,13 @@
   let { query, account, tab }: { query: string; account: Account | undefined; tab: string } = $props()
   const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding', teammates: 'Teammates' }
   const shown = $derived<keyof typeof TABS>(tab in TABS ? (tab as keyof typeof TABS) : 'overview')
-  const filtered = $derived(!['matches', 'heroes', 'teammates'].includes(shown)) // the tabs the role and the count apply to
+  const filtered = $derived(!['matches', 'heroes', 'teammates'].includes(shown)) // the tabs the role and the queue apply to
+  const counted = $derived(shown !== 'matches') // the tabs the count applies to
   let rows = $state<MatchRow[]>([])
   let wards = $state.raw<WardSpot[]>([]) // of every match of these filters
   let error = $state('')
   let size = $state(100)
+  const lastQuery = $derived(`${query}&last=${size}`) // heroes and teammates: the server counts the newest `size`
   let role = $state(0) // index into ROLES
   let queue = $state(0) // index into QUEUES
 
@@ -186,6 +188,9 @@
       {#if account?.avatar}<img class="avatar" src={account.avatar} alt="" width="40" height="40" />{/if}
       {account?.label ?? account?.account_id}
     </h2>
+    {#if counted && !filtered}
+      <p class="muted">The last {Math.min(size, rows.length)} of {rows.length} matches for these filters</p>
+    {/if}
     {#if filtered}
       <p class="muted">The last {recent.length} of {played.length} matches{as} for these filters</p>
       <label class="role">
@@ -200,6 +205,8 @@
           {#each QUEUES as name, i}<option value={i}>{name}</option>{/each}
         </select>
       </label>
+    {/if}
+    {#if counted}
       <div class="choice" role="group" aria-label="How many matches">
         {#each SIZES as n}
           <button aria-pressed={size === n} onclick={() => (size = n)}>{n} matches</button>
@@ -217,9 +224,9 @@
   {#if shown === 'matches'}
     <Matches {query} />
   {:else if shown === 'heroes'}
-    <Heroes {query} matches={rows} />
+    <Heroes query={lastQuery} matches={rows.slice(0, size)} />
   {:else if shown === 'teammates'}
-    <Teammates {query} />
+    <Teammates query={lastQuery} />
   {:else if recent.length === 0}
     <p class="muted">No matches{as} for these filters. Pick another role or queue above.</p>
   {:else if shown === 'overview'}

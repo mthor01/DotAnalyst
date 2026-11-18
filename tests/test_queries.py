@@ -493,3 +493,26 @@ def test_positions_leave_the_rest_to_farm():
 def test_positions_without_a_replay_rank_the_farm():
     team = [player(s, None, lh) for s, lh in zip(range(5), (30, 250, 10, 120, 180))]
     assert queries.positions(team) == {1: 1, 4: 2, 3: 3, 0: 4, 2: 5}
+
+
+def test_last_keeps_the_newest_matches_of_the_other_filters(session):
+    assert ids(queries.matches(session, queries.conditions(ME, last=2))) == [3, 2]
+    assert ids(queries.matches(session, queries.conditions(ME, game_mode=22, last=1))) == [2]
+    # match 3 is the newest: hero 1, lost, the friend on my team
+    assert [(r["hero_id"], r["games"], r["wins"]) for r in queries.heroes(session, queries.conditions(ME, last=1))] == [(1, 1, 0)]
+    assert queries.teammates(session, queries.conditions(ME, last=1)) == [{"account_id": FRIEND, "label": "friend", "games": 1, "wins": 0}]
+    assert {r["hero_id"] for r in queries.matchups(session, queries.conditions(ME, last=1))} == set(range(2, 11))
+
+
+def test_team_players_position_is_the_one_they_took_most(league):
+    # no replay and no lane_role: the farm decides. As Radiant (games 1 and 3) 1001 is the third most farmed, as
+    # Dire (game 2) the least farmed: 3, 5, 3
+    players = {p["account_id"]: p["position"] for p in queries.team(league, US)["players"]}
+    assert players == {1000: 1, 1001: 3, 1002: 2, 1003: 4, 1004: 5}
+    # with game 2's replay parsed its lanes count: 1001 alone in Dire's safe lane (top) is position 1 there
+    store_match(league, LEAGUE_GAMES[1])
+    league.get(Match, 2).replay_state = "parsed"
+    league.add(Lane(match_id=2, player_slot=129, lane="top"))
+    league.commit()
+    only_game_2 = queries.team(league, US, date_from=date(2026, 11, 2), date_to=date(2026, 11, 2))
+    assert {p["account_id"]: p["position"] for p in only_game_2["players"]}[1001] == 1
