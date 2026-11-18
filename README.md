@@ -9,28 +9,36 @@ How it works:
 
 ## Setup
 
-You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.14 itself), [Node.js](https://nodejs.org) and [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+The setup is written for Windows; every command runs in PowerShell, in the repo folder. You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.14 itself), [Node.js](https://nodejs.org) and [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
-1. `uv sync` installs the Python packages.
-2. Start the replay parser once; Docker restarts it from then on:
-   `docker run -d -p 127.0.0.1:5600:5600 --restart unless-stopped --name parser odota/parser:latest`
-   The port stays on localhost because the parser fetches any URL it is given.
-3. Get a Steam Web API key at <https://steamcommunity.com/dev/apikey>. This line asks for it and saves it in a file `.env` in the repo folder, replacing one that is there (PowerShell):
+1. Install the Python packages:
+   ```powershell
+   uv sync
+   ```
+2. Start the replay parser once; Docker restarts it from then on. The port stays on localhost because the parser fetches any URL it is given.
+   ```powershell
+   docker run -d -p 127.0.0.1:5600:5600 --restart unless-stopped --name parser odota/parser:latest
+   ```
+3. Get a Steam Web API key at <https://steamcommunity.com/dev/apikey>. This line asks for it and saves it in a file `.env` in the repo folder, replacing one that is there:
    ```powershell
    Set-Content .env "STEAM_API_KEY=$(Read-Host 'Steam API key')"
    ```
-   On macOS or Linux: `read -p "Steam API key: " key && echo "STEAM_API_KEY=$key" > .env`. `.env` is gitignored; never commit it. The commands and the server read it when it is there. Without it the site still runs and step 4 still works, but no new matches are fetched.
-4. `uv run python -m dotanalyst sync-constants` fetches hero and item names.
-5. Build the site:
+   `.env` is in `.gitignore`, so git never commits it. The commands and the server read it when it is there. Without it the site still runs and step 4 still works, but no new matches are fetched.
+4. Fetch hero and item names:
+   ```powershell
+   uv run python -m dotanalyst sync-constants
    ```
+5. Build the site. `npm.cmd` rather than `npm`, because PowerShell's default execution policy blocks the `npm.ps1` script:
+   ```powershell
    cd frontend
-   npm install
-   npm run build
+   npm.cmd install
+   npm.cmd run build
    cd ..
    ```
-6. `uv run uvicorn dotanalyst.api:app` starts it at <http://127.0.0.1:8000>. While it runs it checks every minute for new matches and downloads and parses their replays.
-
-Every command below runs from the repo folder.
+6. Start it at <http://127.0.0.1:8000>. While it runs it checks every minute for new matches and downloads and parses their replays.
+   ```powershell
+   uv run uvicorn dotanalyst.api:app
+   ```
 
 ## Adding players
 
@@ -42,22 +50,39 @@ A player is tracked by their Dota account id, the short number (8 to 10 digits),
 
 Then add it with **Add profile** at the top of the site; it takes the Steam id too. Or from the command line, with an optional name for the Account menu:
 
-```
+```powershell
 uv run python -m dotanalyst add-account 12345678 "Player 1"
 uv run python -m dotanalyst sync
 ```
 
-`sync` fetches the account's last 500 matches at once; the running server picks a new account up within a minute either way. On a profile, **Add frequent teammates** adds every player with 10 or more games on that player's team in their last 500 matches. The player must have **Expose Public Match Data** on (Dota 2 → Settings → Options → Social), or Steam returns no matches; `status` then says so. Other commands: `remove-account <id>` stops tracking, `status` lists the tracked accounts and replay counts.
+`sync` fetches the account's last 500 matches at once; the running server picks a new account up within a minute either way. On a profile, **Add frequent teammates** adds every player with 10 or more games on that player's team in their last 500 matches. The player must have **Expose Public Match Data** on (Dota 2 → Settings → Options → Social), or Steam returns no matches; `status` then says so.
+
+Stop tracking an account, or list the tracked accounts and their replay counts:
+
+```powershell
+uv run python -m dotanalyst remove-account 12345678
+uv run python -m dotanalyst status
+```
 
 ## Keeping player ids out of the repo
 
-`git config core.hooksPath .githooks` once per clone turns on a pre-commit check that refuses files holding the account id or Steam id of any player in the local database. Test fixtures use made-up ids and names.
+Run this once per clone to turn on a pre-commit check that refuses files holding the account id or Steam id of any player in the local database. Test fixtures use made-up ids and names.
+
+```powershell
+git config core.hooksPath .githooks
+```
 
 ## Scouting league teams
 
 The Teams tab of the Tournaments page shows, for every team of the tracked tournaments, which heroes are banned against it, whether it picks them when they are open, and who plays what. The replays of games from the last 30 days are fetched by the running server; an older game's when you ask for it on the page; with replays a team page also shows where each player wards and where the team walks in the first seconds of a game.
 
-`uv run python -m dotanalyst sync-leagues` fetches the games of the tracked tournaments; the first run for a big league (500 games) takes about ten minutes. After that, the running server gets the newest ones every minute, and the button "Check for new league games" on the Tournaments page at once.
+This fetches the games of the tracked tournaments; the first run for a big league (500 games) takes about ten minutes:
+
+```powershell
+uv run python -m dotanalyst sync-leagues
+```
+
+After that, the running server gets the newest ones every minute, and the button "Check for new league games" on the Tournaments page at once.
 
 ### Adding a tournament
 
@@ -71,9 +96,21 @@ Steam lists only the newest 500 games of a league, so a bigger league misses its
 
 ## Replay salts from a second Steam account
 
-Optional; without it OpenDota is asked, which can take hours to know a new match.
+Optional; without it OpenDota is asked, which can take hours to know a new match. Use an account you do not play on: the script shows it as playing Dota 2.
 
-1. `npm install` in `steam/`.
-2. Put the account in `.env` as `STEAM_ALT_USER` and `STEAM_ALT_PASSWORD`. Use an account you do not play on: the script shows it as playing Dota 2.
-3. Run `node --env-file=.env steam/salts.mjs` once and type the Steam Guard code it asks for. It prints `{}` when the login worked.
+1. Install the script's packages:
+   ```powershell
+   cd steam
+   npm.cmd install
+   cd ..
+   ```
+2. Add the account to `.env` (this keeps the lines already there):
+   ```powershell
+   Add-Content .env "STEAM_ALT_USER=$(Read-Host 'Steam user')"
+   Add-Content .env "STEAM_ALT_PASSWORD=$(Read-Host 'Steam password')"
+   ```
+3. Log in once and type the Steam Guard code it asks for. It prints `{}` when the login worked.
+   ```powershell
+   node --env-file=.env steam/salts.mjs
+   ```
 4. Restart the server.
