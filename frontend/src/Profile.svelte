@@ -13,7 +13,7 @@
   let rows = $state<MatchRow[]>([])
   let wards = $state.raw<WardSpot[]>([]) // of every match of these filters
   let error = $state('')
-  let size = $state(25)
+  let size = $state(100)
   let role = $state(0) // index into ROLES
 
   $effect(() => {
