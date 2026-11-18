@@ -82,8 +82,12 @@
   ] as const)
 
   // ---- laning: averages of the first 10 minutes. 'signed' stats are differences to the enemy lane, 'tenths' are counts
-  const at10 = (key: keyof MatchRow) => mean(recent.map((r) => r[key] as number | null))
-  const laneMatches = $derived(recent.filter((r) => r.xp_at_10 !== null).length)
+  let laneHero = $state(0) // the hero picked above the laning numbers, 0 for every hero
+  // a hero no longer among the matches shown (another role, fewer matches) falls back to every hero
+  const onHero = $derived(heroes.some((h) => h.hero_id === laneHero))
+  const laneGames = $derived(onHero ? recent.filter((r) => r.hero_id === laneHero) : recent)
+  const at10 = (key: keyof MatchRow) => mean(laneGames.map((r) => r[key] as number | null))
+  const laneMatches = $derived(laneGames.filter((r) => r.xp_at_10 !== null).length)
   const laning = $derived([
     ['Damage to heroes before 10:00', [
       ['You dealt', at10('damage_at_10'), 'to enemy heroes', ''],
@@ -286,6 +290,13 @@
   </section>
 
   {:else if shown === 'laning'}
+  <label class="pick">
+    Hero
+    <select value={onHero ? laneHero : 0} onchange={(e) => (laneHero = +e.currentTarget.value)}>
+      <option value={0}>All heroes ({recent.length})</option>
+      {#each heroes as h (h.hero_id)}<option value={h.hero_id}>{heroName(h.hero_id)} ({h.games})</option>{/each}
+    </select>
+  </label>
   {#each laning as [title, stats]}
     <h3 class="group">{title}</h3>
     <dl class="card numbers">
@@ -301,7 +312,7 @@
     </dl>
   {/each}
   <p class="muted laning">
-    Averages over the {laneMatches} of these {recent.length} matches that have a parsed replay and lasted 10 minutes. Your
+    Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your
     lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is
     usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log
     records it.
@@ -561,6 +572,9 @@
 
   .group {
     margin: 20px 0 8px;
+  }
+  .pick select {
+    margin-left: 6px;
   }
   .laning {
     max-width: 72ch;

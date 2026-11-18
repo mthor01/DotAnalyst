@@ -310,7 +310,7 @@ Above the ward heatmap: observers bought, sentries bought and enemy wards destro
 
 ### Laning (Profile)
 
-The Laning tab: the means of the 10:00 metrics (see Metrics) over the profile's matches, with the role and count picker above it. Damage before 10:00: your hero damage, your lane's (`lane_damage_at_10`), the enemy lane's (`enemy_lane_damage_at_10`) and what you took from all enemy heroes. Farm at 10:00: last hits, denies, net worth and experience. Your lane against theirs: `lane_nw_diff` and `lane_cs_diff` (green above 0, red below), kills and deaths before 10:00. Each mean covers only the matches that have that metric, so a lane stat leaves out jungle games while the farm stats keep them; the count under the tab is of the matches with a 10:00 row.
+The Laning tab: the means of the 10:00 metrics (see Metrics) over the profile's matches, with the role and count picker above it. A Hero dropdown lists the heroes of those matches, most played first with their game count, and narrows every mean to that hero's matches; a hero no longer among them (another role or count) falls back to all heroes. Damage before 10:00: your hero damage, your lane's (`lane_damage_at_10`), the enemy lane's (`enemy_lane_damage_at_10`) and what you took from all enemy heroes. Farm at 10:00: last hits, denies, net worth and experience. Your lane against theirs: `lane_nw_diff` and `lane_cs_diff` (green above 0, red below), kills and deaths before 10:00. Each mean covers only the matches that have that metric, so a lane stat leaves out jungle games while the farm stats keep them; the count under the tab is of the matches with a 10:00 row.
 
 ### Lead charts
 
