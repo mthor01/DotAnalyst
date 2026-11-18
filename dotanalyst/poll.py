@@ -1,6 +1,6 @@
 import asyncio
-import json
 import logging
+import math
 import os
 import threading
 import time
@@ -11,7 +11,9 @@ import httpx
 from sqlalchemy import Engine, and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from .db import DATA, LeagueMatch, Match, PlayerGame, PlayerGameList, PlayerMinute
+from .db import (
+    DATA, Account, League, LeagueMatch, Match, MatchPlayer, PlayerGame, PlayerGameList, PlayerMinute, PlayerName,
+)  # fmt: skip
 from .derive import derive_match
 from .opendota import fetch_player_games, unlisted_players, usual_match
 from .replay import (
@@ -29,12 +31,20 @@ USUAL_PER_POLL = 10  # usual games of a checked team's players turned into match
 NO_MATCH: set[int] = set()
 BUSY = threading.Lock()  # the timed poll and a refresh from the site never fetch at the same time
 # for the queue page; kept in memory only, so a restart starts them empty
-NOW = {"doing": "starting", "since": time.time(), "last_poll": None, "next_poll": None}
+NOW = {"doing": "starting", "step": None, "since": time.time(), "last_poll": None, "next_poll": None}
 EVENTS: deque[dict] = deque(maxlen=200)
+STEPS: dict[str, dict] = {}  # per step of poll_once: when it last ended and what it did
+# what takes room in the data folder, in the order the storage chart colours it; everything else is "Other"
+STORAGE = {"raw": "Parser output", "dotanalyst.db": "Database", "opendota": "OpenDota answers",
+           "steam": "Steam answers", "tmp": "Replays being fetched"}  # fmt: skip
 
 
-def doing(what: str) -> None:
-    NOW.update(doing=what, since=time.time())
+def doing(what: str, step: str | None = None) -> None:
+    NOW.update(doing=what, step=step, since=time.time())
+
+
+def did(step: str, what: str) -> None:
+    STEPS[step] = {"at": time.time(), "what": what}
 
 
 def event(match_id: int | None, message: str, warn: bool = True) -> None:
@@ -49,6 +59,17 @@ def wanted(now: float):
         Match.replay_state == "pending",
         and_(Match.replay_state == "none", Match.start_time > now - MAX_AGE_DAYS * 86400),
     )
+
+
+def usual_waiting(now: float):
+    """Usual games of a checked team's players young enough to become matches and not yet stored, newest first."""
+    return (
+        select(PlayerGame.match_id).distinct()
+        .join(PlayerGameList, and_(PlayerGameList.account_id == PlayerGame.account_id, PlayerGameList.replays_wanted))
+        .where(PlayerGame.start_time > now - MAX_AGE_DAYS * 86400, PlayerGame.match_id.not_in(select(Match.match_id)))
+        .where(PlayerGame.match_id.not_in(NO_MATCH))
+        .order_by(PlayerGame.match_id.desc())
+    )  # fmt: skip
 
 
 def folder_replays(session: Session, replay_dir: Path) -> list[Path]:
@@ -71,12 +92,14 @@ def poll_once(
     A replay that was not there is tried again after retry_seconds. newest_only reads Steam's lists only until a page
     that is all stored. Returns (new matches, replays parsed).
     """
-    new = 0
+    new = league_new = 0
     if key:
-        doing("asking Steam for new matches of the accounts")
+        doing("asking Steam for new matches of the accounts", "accounts")
         new = sum(count or 0 for count in sync(session, client, key, newest_only).values())
-        doing("asking Steam for new league games")
-        new += sync_leagues(session, client, key, newest_only)
+        did("accounts", f"{new} new matches")
+        doing("asking Steam for new league games", "leagues")
+        league_new = sync_leagues(session, client, key, newest_only)
+        new += league_new
     else:
         log.warning("STEAM_API_KEY is not set, skipping sync")
 
@@ -85,26 +108,24 @@ def poll_once(
     recent = select(LeagueMatch.raw_json).where(
         LeagueMatch.start_time > time.time() - MAX_AGE_DAYS * 86400, LeagueMatch.match_id.not_in(select(Match.match_id))
     )
-    for raw in session.scalars(recent).all():
+    young = session.scalars(recent).all()
+    for raw in young:
         store_match(session, raw)
     session.commit()
+    if key:
+        did("leagues", f"{league_new} new league games, {len(young)} young enough joined the replay queue")
 
     # the usual games of a checked team's players become matches too, from OpenDota's answer, which also holds the
     # salt the download below needs; they join nobody's stats either, only the players' ward maps
-    usual = (
-        select(PlayerGame.match_id).distinct()
-        .join(PlayerGameList, and_(PlayerGameList.account_id == PlayerGame.account_id, PlayerGameList.replays_wanted))
-        .where(PlayerGame.start_time > time.time() - MAX_AGE_DAYS * 86400, PlayerGame.match_id.not_in(select(Match.match_id)))
-        .where(PlayerGame.match_id.not_in(NO_MATCH))
-        .order_by(PlayerGame.match_id.desc())
-        .limit(USUAL_PER_POLL)
-    )  # fmt: skip
-    for match_id in session.scalars(usual).all():
-        doing(f"asking OpenDota for usual match {match_id} of a checked team's player")
+    usual = session.scalars(usual_waiting(time.time()).limit(USUAL_PER_POLL)).all()
+    stored, stopped = 0, ""
+    for match_id in usual:
+        doing(f"asking OpenDota for usual match {match_id} of a checked team's player", "usual")
         try:
             found = usual_match(opendota_match(match_id, client, data / "opendota"), match_id)
         except httpx.HTTPError as error:
             event(match_id, f"usual match from OpenDota, the rest waits for the next poll: {error!r}")
+            stopped = f"; then OpenDota failed: {error!r}"
             break
         if found is None:
             NO_MATCH.add(match_id)
@@ -112,19 +133,23 @@ def poll_once(
             continue
         store_match(session, found)
         session.commit()
+        stored += 1
+    did("usual", f"{stored} of {len(usual)} became matches{stopped}")
 
     parsed = 0
-    for dem in folder_replays(session, replay_dir):
+    in_folder = folder_replays(session, replay_dir)
+    for dem in in_folder:
         # a file the Dota client is still writing would parse as truncated and be marked failed for good
         if not replay_complete(dem):
             continue
-        doing(f"parsing {dem.name} from the Dota client folder")
+        doing(f"parsing {dem.name} from the Dota client folder", "folder")
         try:
             parse_replay(session, dem, client, data / "raw")
             parsed += 1
             event(int(dem.stem), "parsed from the Dota client folder", warn=False)
         except (ReplayError, OSError, httpx.HTTPError) as error:
             event(int(dem.stem), f"{dem.name} from the Dota client folder: {error!r}")
+    did("folder", f"{parsed} of {len(in_folder)} parsed")
 
     # never tried first, so a new match is not stuck behind retries; each group newest first
     now = time.time()
@@ -138,16 +163,20 @@ def poll_once(
     matches = session.scalars(due).all()
     salts = {}
     if alt and matches:  # the second Steam account asks Valve; OpenDota is asked for what that leaves open
-        doing(f"asking Valve for {len(matches)} replay salts with the second Steam account")
+        doing(f"asking Valve for {len(matches)} replay salts with the second Steam account", "salts")
         try:
             salts = steam_salts([match.match_id for match in matches], data)
+            did("salts", f"{len(salts)} of {len(matches)} salts from Valve")
         except ReplayError as error:
             event(None, f"replay salts from Steam: {error}; asking OpenDota instead")
+            did("salts", f"Steam failed, OpenDota asked instead: {error}")
+    downloaded, stopped = 0, ""
     for i, match in enumerate(matches, 1):
-        doing(f"downloading and parsing match {match.match_id} ({i} of {len(matches)})")
+        doing(f"downloading and parsing match {match.match_id} ({i} of {len(matches)})", "downloads")
         try:
             if fetch_replay(session, match, client, data, salts.get(match.match_id)):
                 parsed += 1
+                downloaded += 1
                 event(match.match_id, "downloaded and parsed", warn=False)
             else:
                 salted = match.match_id in salts or (data / "opendota" / f"{match.match_id}.json.gz").exists()
@@ -158,31 +187,84 @@ def poll_once(
         except (OSError, httpx.HTTPError) as error:
             # a server or the disk is in trouble: leave the rest for the next poll
             event(match.match_id, f"download stopped, the rest waits for the next poll: {error!r}")
+            stopped = f"; then stopped: {error!r}"
             break
+    did("downloads", f"{downloaded} of {len(matches)} downloaded and parsed{stopped}")
 
     # the league players' own games, for their role wheel on the team page: the list only, never a replay
     players = unlisted_players(session, PLAYERS_PER_POLL)
+    listed, stopped = 0, ""
     for i, account_id in enumerate(players, 1):
-        doing(f"asking OpenDota for the last games of player {account_id} ({i} of {len(players)})")
+        doing(f"asking OpenDota for the last games of player {account_id} ({i} of {len(players)})", "players")
         try:
             fetch_player_games(session, client, account_id)
+            listed += 1
         except httpx.HTTPError as error:
             session.rollback()
             event(None, f"games of player {account_id}, the rest waits for the next poll: {error!r}")
+            stopped = f"; then OpenDota failed: {error!r}"
             break
+    did("players", f"{listed} of {len(players)} players' game lists fetched{stopped}")
 
-    without_stats = select(Match.match_id).where(
-        Match.replay_state == "parsed", Match.match_id.not_in(select(PlayerMinute.match_id))
-    )
-    for match_id in session.scalars(without_stats).all():
-        doing(f"computing the stats of match {match_id}")
+    to_derive = session.scalars(without_stats()).all()
+    failed = 0
+    for match_id in to_derive:
+        doing(f"computing the stats of match {match_id}", "stats")
         try:
             derive_match(session, match_id, data / "raw")
         except Exception as error:  # a log one derivation cannot handle must not stop polling
             session.rollback()
             log.exception("replay stats of match %s failed", match_id)
             event(match_id, f"stats failed: {error!r}", warn=False)
+            failed += 1
+    did("stats", f"{len(to_derive) - failed} of {len(to_derive)} computed")
     return new, parsed
+
+
+def without_stats():
+    """Parsed matches whose stats are not computed yet."""
+    return select(Match.match_id).where(
+        Match.replay_state == "parsed", Match.match_id.not_in(select(PlayerMinute.match_id))
+    )
+
+
+def storage(data: Path) -> list[dict]:
+    """Bytes in the data folder by what holds them, in STORAGE's order and then Other; parts that hold none too."""
+    sizes = dict.fromkeys([*STORAGE.values(), "Other"], 0)
+    for path in data.rglob("*") if data.is_dir() else []:
+        try:
+            size = path.stat().st_size if path.is_file() else 0
+        except OSError:  # a replay deleted while we walk
+            continue
+        top = path.relative_to(data).parts[0]
+        part = STORAGE.get(top) or STORAGE.get(top.split("-")[0]) or "Other"  # dotanalyst.db-wal is the database too
+        sizes[part] += size
+    return [{"name": name, "bytes": size} for name, size in sizes.items()]
+
+
+def whose(session: Session, ids: list[int]) -> dict[int, dict]:
+    """Per match: the tracked accounts that played it, the checked players it is a usual game of, its league."""
+    found = {i: {"accounts": [], "usual": [], "league": None} for i in ids}
+    accounts = (
+        select(MatchPlayer.match_id, Account.account_id, Account.label, Account.avatar)
+        .join(Account, Account.account_id == MatchPlayer.account_id).where(MatchPlayer.match_id.in_(ids))
+    )  # fmt: skip
+    for match_id, account_id, name, avatar in session.execute(accounts):
+        found[match_id]["accounts"].append({"account_id": account_id, "name": name, "avatar": avatar or None})
+    usual = (
+        select(PlayerGame.match_id, PlayerGame.account_id, PlayerName.name, PlayerName.avatar)
+        .join(PlayerGameList, and_(PlayerGameList.account_id == PlayerGame.account_id, PlayerGameList.replays_wanted))
+        .outerjoin(PlayerName, PlayerName.account_id == PlayerGame.account_id).where(PlayerGame.match_id.in_(ids))
+    )  # fmt: skip
+    for match_id, account_id, name, avatar in session.execute(usual):
+        found[match_id]["usual"].append({"account_id": account_id, "name": name, "avatar": avatar or None})
+    leagues = (
+        select(LeagueMatch.match_id, LeagueMatch.league_id, League.name)
+        .outerjoin(League, League.league_id == LeagueMatch.league_id).where(LeagueMatch.match_id.in_(ids))
+    )  # fmt: skip
+    for match_id, league_id, name in session.execute(leagues):
+        found[match_id]["league"] = name or f"League {league_id}"
+    return found
 
 
 def queue(session: Session, replay_dir: Path, data: Path = DATA, now: float | None = None) -> dict:
@@ -190,7 +272,6 @@ def queue(session: Session, replay_dir: Path, data: Path = DATA, now: float | No
     take them, and what it is doing and did lately."""
     now = now or time.time()
     waiting = session.scalars(select(Match).where(wanted(now))).all()
-    league = set(session.scalars(select(LeagueMatch.match_id).where(LeagueMatch.match_id.in_(m.match_id for m in waiting))))
     last = {e["match_id"]: e for e in EVENTS}
 
     def next_try(m: Match) -> float:
@@ -199,26 +280,20 @@ def queue(session: Session, replay_dir: Path, data: Path = DATA, now: float | No
     # due first, in the poller's order (never tried, then newest); the rest by when they are due
     waiting = sorted(waiting, key=lambda m: (next_try(m), m.replay_tried_at is not None, -m.start_time))
     states = dict(session.execute(select(Match.replay_state, func.count()).group_by(Match.replay_state)).all())
-    without_stats = select(func.count()).select_from(Match).where(
-        Match.replay_state == "parsed", Match.match_id.not_in(select(PlayerMinute.match_id))
-    )
-    in_folder = folder_replays(session, replay_dir)
-    ready = sum(map(replay_complete, in_folder))
-    salts = data / "salts.json"
     try:
         httpx.get(PARSER_URL, timeout=1)  # any answer will do: it shows the container is up
         parser = True
     except httpx.HTTPError:
         parser = False
+    names = whose(session, [m.match_id for m in waiting])
     return {
-        **NOW, "busy": BUSY.locked(), "now": now, "parser": parser, "alt": bool(os.environ.get("STEAM_ALT_USER")),
-        "salts_from_steam": len(json.loads(salts.read_text())) if salts.exists() else 0,
+        **NOW, "busy": BUSY.locked(), "now": now, "parser": parser,
         "per_poll": DOWNLOADS_PER_POLL, "retry_seconds": RETRY_SECONDS, "max_age_days": MAX_AGE_DAYS,
-        "states": states, "without_stats": session.scalar(without_stats),
-        "folder": {"ready": ready, "downloading": len(in_folder) - ready},
+        "states": states, "steps": steps(session, replay_dir, waiting, next_try, parser, now),
+        "storage": storage(data),
         "queue": [
             {
-                "match_id": m.match_id, "start_time": m.start_time, "league": m.match_id in league,
+                "match_id": m.match_id, "start_time": m.start_time, **names[m.match_id],
                 "state": m.replay_state, "tried_at": m.replay_tried_at, "next_try": next_try(m),
                 "last": last.get(m.match_id),
             }
@@ -226,6 +301,73 @@ def queue(session: Session, replay_dir: Path, data: Path = DATA, now: float | No
         ],
         "events": list(reversed(EVENTS))[:100],
     }  # fmt: skip
+
+
+def steps(session: Session, replay_dir: Path, waiting: list[Match], next_try, parser: bool, now: float) -> list[dict]:
+    """Each step of a poll in its order: what it did last, what the next poll will do in it, and why some of what
+    waits is not done then."""
+    key, alt = os.environ.get("STEAM_API_KEY"), os.environ.get("STEAM_ALT_USER")
+    no_key = None if key else "STEAM_API_KEY is not set in .env, so Steam is not asked"
+    no_parser = None if parser else "the parser does not answer on port 5600: is its Docker container running?"
+    accounts = session.scalar(select(func.count()).select_from(Account).where(Account.active))
+    leagues = session.scalar(select(func.count()).select_from(League))
+    usual = session.scalar(select(func.count()).select_from(usual_waiting(now).subquery()))
+    in_folder = folder_replays(session, replay_dir)
+    ready = sum(map(replay_complete, in_folder))
+    due = [m for m in waiting if next_try(m) <= now]
+    later = [next_try(m) for m in waiting if next_try(m) > now]
+    old = session.scalar(
+        select(func.count()).select_from(Match)
+        .where(Match.replay_state == "none", Match.start_time <= now - MAX_AGE_DAYS * 86400)
+    )  # fmt: skip
+    # shortcut: walks every league game (about 0.2 s on 2000 games) on each refresh of the page; cache it if that grows
+    players = len(unlisted_players(session, 10**9))
+    derive = session.scalar(select(func.count()).select_from(without_stats().subquery()))
+
+    def why(*reasons):
+        return [r for r in reasons if r]
+
+    return [{**step, "last": STEPS.get(step["key"])} for step in [
+        {"key": "accounts", "name": "New matches of the accounts",
+         "planned": f"Steam's newest matches of the {accounts} tracked accounts", "why": why(no_key)},
+        {"key": "leagues", "name": "New league games",
+         "planned": f"Steam's newest games of the {leagues} tracked tournaments; those of the last {MAX_AGE_DAYS} "
+                    "days join the replay queue", "why": why(no_key)},
+        {"key": "usual", "name": "Usual games of checked players",
+         "planned": f"{min(usual, USUAL_PER_POLL)} of {usual} waiting games asked of OpenDota, to become matches",
+         "why": why(
+             usual > USUAL_PER_POLL and f"{usual - USUAL_PER_POLL} wait for later polls: {USUAL_PER_POLL} a poll, "
+                                       "one OpenDota call each",
+             NO_MATCH and f"{len(NO_MATCH)} OpenDota does not know are skipped until the server restarts",
+         )},
+        {"key": "folder", "name": "Replays in the Dota client folder",
+         "planned": f"{ready} replays the Dota client downloaded to parse",
+         "why": why(
+             len(in_folder) > ready and f"{len(in_folder) - ready} are still being written by the Dota client",
+             ready and no_parser,
+         )},
+        {"key": "salts", "name": "Replay ids from Valve",
+         "planned": f"the replay ids (salts) of the {min(len(due), DOWNLOADS_PER_POLL)} next downloads" if alt
+                    else "none: OpenDota gives the replay ids (salts)",
+         "why": why(not alt and "STEAM_ALT_USER is not set in .env, so the second Steam account does not ask Valve")},
+        {"key": "downloads", "name": "Replay downloads and parsing",
+         "planned": f"{min(len(due), DOWNLOADS_PER_POLL)} of {len(due)} due replays downloaded and parsed",
+         "why": why(
+             len(due) > DOWNLOADS_PER_POLL and f"{len(due) - DOWNLOADS_PER_POLL} due wait for later polls: "
+                                               f"{DOWNLOADS_PER_POLL} a poll, about 40 MB each",
+             later and f"{len(later)} tried within the last {RETRY_SECONDS // 60} minutes wait for their retry, the "
+                       f"next in {math.ceil((min(later) - now) / 60)} min",
+             due and no_parser,
+             old and f"{old} without a replay older than {MAX_AGE_DAYS} days are left alone; Request replay on the "
+                     "match page fetches one",
+         )},
+        {"key": "players", "name": "Game lists of league players",
+         "planned": f"{min(players, PLAYERS_PER_POLL)} of {players} league players' own games asked of OpenDota",
+         "why": why(players > PLAYERS_PER_POLL and f"{players - PLAYERS_PER_POLL} wait for later polls: "
+                                                   f"{PLAYERS_PER_POLL} a poll, one OpenDota call each")},
+        {"key": "stats", "name": "Stats of parsed matches",
+         "planned": f"the stats of {derive} parsed matches computed", "why": []},
+    ]]  # fmt: skip
 
 
 def request_replay(

@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from dotanalyst.db import Base, Derived, Match, MatchPlayer, PlayerGame, PlayerGameList, PlayerMinute
+from dotanalyst.db import (Account, Base, Derived, League, LeagueMatch, Match, MatchPlayer, PlayerGame, PlayerGameList, PlayerMinute, PlayerName,)  # fmt: skip
 from dotanalyst import poll
 from dotanalyst.poll import poll_once, request_replay
 from dotanalyst.replay import replay_complete
@@ -388,3 +388,75 @@ def test_a_usual_game_opendota_does_not_know_is_asked_for_once(session, tmp_path
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
     assert to("opendota", calls) == ["https://api.opendota.com/api/matches/66"]
     assert session.get(Match, 66) is None
+
+
+def test_storage_counts_each_part_of_the_data_folder(tmp_path):
+    for name, size in [("raw/1.jsonl.gz", 100), ("dotanalyst.db", 10), ("dotanalyst.db-wal", 5),
+                       ("opendota/matches/1.json", 3), ("tmp/1.dem", 7), ("notes.txt", 2)]:  # fmt: skip
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_bytes(bytes(size))
+    assert poll.storage(tmp_path) == [
+        {"name": "Parser output", "bytes": 100}, {"name": "Database", "bytes": 15},
+        {"name": "OpenDota answers", "bytes": 3}, {"name": "Steam answers", "bytes": 0},
+        {"name": "Replays being fetched", "bytes": 7}, {"name": "Other", "bytes": 2},
+    ]  # fmt: skip
+    assert {p["bytes"] for p in poll.storage(tmp_path / "nowhere")} == {0}
+
+
+def test_the_queue_names_whose_match_it_is(session):
+    add_match(session, 1)
+    session.add_all([
+        Account(account_id=1001, label="Player 1", avatar=""),
+        MatchPlayer(match_id=1, player_slot=0, account_id=1001, hero_id=1, items=[]),
+        MatchPlayer(match_id=1, player_slot=1, account_id=1002, hero_id=2, items=[]),  # not tracked
+        PlayerName(account_id=2001, name="Player 2", avatar="https://example.com/2.jpg"),
+    ])  # fmt: skip
+    player_game(session, 2001, 1, 0, wanted=True)
+    player_game(session, 2002, 1, 0, wanted=False)  # their team is not checked
+    player_game(session, 2003, 1, 0, wanted=True)  # no name stored
+    league_game(session, 3, 0)
+    league_id = session.get(LeagueMatch, 3).league_id
+
+    found = poll.whose(session, [1, 3])
+    assert found[1] == {
+        "accounts": [{"account_id": 1001, "name": "Player 1", "avatar": None}],
+        "usual": [{"account_id": 2001, "name": "Player 2", "avatar": "https://example.com/2.jpg"},
+                  {"account_id": 2003, "name": None, "avatar": None}],
+        "league": None,
+    }  # fmt: skip
+    assert found[3]["league"] == f"League {league_id}"  # a tournament not tracked
+    session.add(League(league_id=league_id, name="Season 1"))
+    assert poll.whose(session, [3])[3]["league"] == "Season 1"
+
+
+def test_the_steps_say_what_is_planned_and_why_some_of_it_waits(session, tmp_path, monkeypatch):
+    def parser_down(*args, **kwargs):
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(poll.httpx, "get", parser_down)
+    monkeypatch.delenv("STEAM_API_KEY", raising=False)
+    monkeypatch.delenv("STEAM_ALT_USER", raising=False)
+    poll.STEPS.clear()
+    now = time.time()
+    for match_id in range(1, 13):
+        add_match(session, match_id)
+    add_match(session, 20)
+    session.get(Match, 20).replay_state, session.get(Match, 20).replay_tried_at = "pending", now - 600
+    add_match(session, 30, age_days=40)
+    session.commit()
+
+    steps = {s["key"]: s for s in poll.queue(session, tmp_path / "nowhere", tmp_path, now)["steps"]}
+    assert list(steps) == ["accounts", "leagues", "usual", "folder", "salts", "downloads", "players", "stats"]
+    assert steps["accounts"]["why"] == ["STEAM_API_KEY is not set in .env, so Steam is not asked"]
+    assert steps["salts"]["planned"].startswith("none") and "STEAM_ALT_USER" in steps["salts"]["why"][0]
+    assert steps["downloads"]["planned"] == "10 of 12 due replays downloaded and parsed"
+    two_due, retry, parser, old = steps["downloads"]["why"]
+    assert two_due.startswith("2 due wait for later polls")
+    assert retry == "1 tried within the last 60 minutes wait for their retry, the next in 50 min"
+    assert "port 5600" in parser
+    assert old.startswith("1 without a replay older than 30 days")
+    assert steps["downloads"]["last"] is None  # no poll since the server started
+
+    poll_once(session, network([]), "", tmp_path / "nowhere", tmp_path)  # OpenDota knows none of them
+    assert poll.STEPS["downloads"]["what"].startswith("0 of 10 downloaded and parsed")
+    assert poll.queue(session, tmp_path / "nowhere", tmp_path)["steps"][5]["last"] == poll.STEPS["downloads"]

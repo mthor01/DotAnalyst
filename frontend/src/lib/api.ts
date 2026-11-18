@@ -135,23 +135,34 @@ export type QueueEvent = { at: number; match_id: number | null; message: string 
 /** What the poller has to do: every match whose replay it still wants, in the order it takes them. */
 export type QueueStatus = {
   doing: string
+  step: string | null // the key of the poll step running now, null between polls
   since: number
   busy: boolean
   now: number
   last_poll: { at: number; seconds: number; new?: number; parsed?: number; error?: string } | null
   next_poll: number | null
   parser: boolean
-  alt: boolean
-  salts_from_steam: number
   per_poll: number
   retry_seconds: number
   max_age_days: number
   states: Record<string, number>
-  without_stats: number
-  folder: { ready: number; downloading: number }
-  queue: { match_id: number; start_time: number; league: boolean; state: string; tried_at: number | null; next_try: number; last: QueueEvent | null }[]
+  /** the steps of a poll in their order; `last` is null until the step ran since the server started */
+  steps: { key: string; name: string; planned: string; why: string[]; last: { at: number; what: string } | null }[]
+  storage: { name: string; bytes: number }[] // always in the same order, so a part keeps its colour
+  queue: {
+    match_id: number
+    start_time: number
+    accounts: QueuePlayer[] // tracked accounts that played it
+    usual: QueuePlayer[] // checked league players it is a usual game of
+    league: string | null // the tournament it was played in
+    state: string
+    tried_at: number | null
+    next_try: number
+    last: QueueEvent | null
+  }[]
   events: QueueEvent[]
 }
+export type QueuePlayer = { account_id: number; name: string | null; avatar: string | null }
 /** A ward as a heatmap needs it: its kind, its place in map cells, and the side its owner played. */
 /** time: game second placed; league: on team pages, whether the game is one of the team's tournament games */
 export type WardSpot = { match_id: number; type: 'obs' | 'sen'; x: number; y: number; radiant: boolean; time: number; win: boolean; league?: boolean }

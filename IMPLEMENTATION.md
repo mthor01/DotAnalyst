@@ -298,6 +298,22 @@ The queue is every match the poller still wants a replay for: `pending`, or `non
 
 A replay that is not there yet is put down to one of two causes. "Valve has no file for it" means a salt is known, from the second Steam account or from a cached OpenDota answer. "No salt" means neither source knew the match.
 
+The Whose column names the tracked accounts that played the match (their label and Steam picture), the checked league players it is a usual game of (their stored name, or their id when none is stored), and the tournament it was played in (its tracked name, or "League {id}") (`whose` in `poll.py`).
+
+### Steps of a poll (Queue page)
+
+`steps` in `poll.py` lists the steps of a poll in the order `poll_once` runs them: new matches of the accounts, new league games, usual games of checked players, replays in the Dota client folder, replay ids (salts) from Valve, replay downloads and parsing, game lists of league players, stats of parsed matches. Each gives:
+
+- **Last done**: what the step reported the last time it ran (`STEPS`, kept in memory, so empty after a restart). The step running now is marked; `poll_once` names it in `NOW["step"]`.
+- **Planned**: what the next poll will do in it, counted now with the poller's own conditions and limits: 10 downloads (`DOWNLOADS_PER_POLL`), 10 usual games (`USUAL_PER_POLL`), 5 league players (`PLAYERS_PER_POLL`) a poll.
+- **Why some of it waits**: every reason that keeps planned work out of the next poll: no `STEAM_API_KEY` (no Steam calls) or `STEAM_ALT_USER` (salts from OpenDota only), more waiting than the per-poll limit, replays the Dota client is still writing, the parser not answering, matches tried within the last hour (with when the next retry is), usual games OpenDota did not know (skipped until a restart), and matches without a replay older than 30 days, which only Request replay on the match page fetches.
+
+Known limit: the league players' count walks every league game on each refresh of the page (about 0.2 s on 2000 games).
+
+### Storage (Queue page)
+
+`storage` in `poll.py` adds up the size of every file in the data folder by its top-level part: `raw` is the parser output, `dotanalyst.db` with its `-wal` and `-shm` files the database, `opendota` and `steam` the cached API answers, `tmp` the replays being fetched; anything else is Other. Sizes are shown in binary units (1 GB = 2³⁰ bytes), as the file manager counts them. The parts always come in that order with their fixed colour, an empty part included in the table but left out of the donut.
+
 ## On the site
 
 Rules that live in the frontend (`frontend/src`), applied to what the API sends.

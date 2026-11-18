@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { BarChart, LineChart } from 'echarts/charts'
+  import { BarChart, LineChart, PieChart } from 'echarts/charts'
   import {
     GridComponent,
     MarkLineComponent,
@@ -13,6 +13,7 @@
   echarts.use([
     BarChart,
     LineChart,
+    PieChart,
     GridComponent,
     MarkLineComponent,
     TitleComponent,
@@ -25,7 +26,7 @@
   /** Colours a chart may use, read from the page's CSS variables so they are defined in one place. */
   const INK_KEYS = [
     'surface', 'raised', 'text', 'text-2', 'muted', 'grid', 'axis',
-    'series-1', 'series-2', 'series-3', 'series-4', 'series-5', 'radiant', 'dire',
+    'series-1', 'series-2', 'series-3', 'series-4', 'series-5', 'series-6', 'radiant', 'dire',
   ] as const // prettier-ignore
   export type Ink = Record<(typeof INK_KEYS)[number], string>
 </script>

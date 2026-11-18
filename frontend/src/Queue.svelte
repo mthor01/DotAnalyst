@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { get, type QueueStatus } from './lib/api'
+  import { get, type QueuePlayer, type QueueStatus } from './lib/api'
+  import Chart, { type Ink } from './lib/Chart.svelte'
 
   let status = $state<QueueStatus | null>(null)
   let error = $state('')
@@ -23,7 +24,35 @@
   const next = (row: QueueStatus['queue'][number], i: number) =>
     row.next_try > status!.now ? `in ${span(row.next_try - status!.now)}` : i < status!.per_poll ? 'next poll' : 'a later poll'
   const STATES = ['pending', 'none', 'parsed', 'unavailable', 'failed']
+
+  // in binary units, as the file manager counts them
+  const size = (b: number) =>
+    b >= 2 ** 30 ? `${(b / 2 ** 30).toFixed(1)} GB` : b >= 2 ** 20 ? `${Math.round(b / 2 ** 20)} MB` : `${Math.round(b / 2 ** 10)} kB`
+  // the server lists the parts in a fixed order, so each part keeps its colour whether or not the others are empty
+  const SLICE = ['series-1', 'series-2', 'series-3', 'series-4', 'series-5', 'series-6'] as const
+  const parts = $derived(status ? status.storage.map((p, i) => ({ ...p, ink: SLICE[i] })) : [])
+  const total = $derived(parts.reduce((sum, p) => sum + p.bytes, 0))
+  const share = (b: number) => (b === 0 ? '0%' : b / total < 0.01 ? '<1%' : `${Math.round((b / total) * 100)}%`)
+  const storageChart = (ink: Ink) => ({
+    animation: false, // the page reloads every 5 s; a donut that grows anew each time would never sit still
+    tooltip: { trigger: 'item', formatter: (p: { name: string; value: number }) => `${p.name}<br>${size(p.value)}, ${share(p.value)}` },
+    series: [
+      {
+        type: 'pie',
+        radius: ['52%', '86%'],
+        label: { show: false },
+        itemStyle: { borderColor: ink.surface, borderWidth: 2, borderRadius: 4 },
+        data: parts.filter((p) => p.bytes > 0).map((p) => ({ name: p.name, value: p.bytes, itemStyle: { color: ink[p.ink] } })),
+      },
+    ],
+  })
 </script>
+
+{#snippet person(p: QueuePlayer)}
+  <span class="person">
+    {#if p.avatar}<img src={p.avatar} alt="" width="20" height="20" />{/if}{p.name ?? p.account_id}
+  </span>
+{/snippet}
 
 {#if error}
   <p class="error" role="alert">{error}</p>
@@ -50,17 +79,50 @@
           <th>Parser</th>
           <td class={status.parser ? '' : 'error'}>{status.parser ? 'answers on port 5600' : 'does not answer on port 5600: is Docker running?'}</td>
         </tr>
-        <tr>
-          <th>Replay salts</th>
-          <td>
-            {status.alt ? 'from the second Steam account, else from OpenDota' : 'from OpenDota only (no STEAM_ALT_USER)'}
-            <span class="muted">({status.salts_from_steam} stored from Steam)</span>
-          </td>
-        </tr>
-        <tr>
-          <th>Dota client folder</th>
-          <td>{status.folder.ready} replays to parse, {status.folder.downloading} still downloading</td>
-        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Steps of a poll</h2>
+  <p class="muted">A poll runs these in order. Between polls everything planned waits for the next one.</p>
+  <div class="card">
+    <table class="steps">
+      <thead><tr><th>Step</th><th>Last done</th><th>Planned</th><th>Why some of it waits</th></tr></thead>
+      <tbody>
+        {#each status.steps as s (s.key)}
+          {@const running = status.busy && status.step === s.key}
+          <tr class:running aria-current={running ? 'step' : undefined}>
+            <td class="name">{s.name}</td>
+            <td>
+              {#if running}<strong>running now</strong>, for {span(status.now - status.since)}
+              {:else if s.last}<span class="muted">{ago(s.last.at)}:</span> {s.last.what}
+              {:else}<span class="muted">not since the server started</span>{/if}
+            </td>
+            <td>{s.planned}</td>
+            <td>
+              {#each s.why as reason}<div>{reason}</div>{:else}<span class="muted">nothing</span>{/each}
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Storage <span class="muted">{size(total)}</span></h2>
+  <div class="card chart storage">
+    <div class="donut">
+      <Chart option={storageChart} label="Storage taken by each part of the data folder" height={200} />
+    </div>
+    <table>
+      <thead><tr><th>Part</th><th class="num">Size</th><th class="num">Share</th></tr></thead>
+      <tbody>
+        {#each parts as p (p.name)}
+          <tr>
+            <td><span class="swatch" style:background="var(--{p.ink})"></span>{p.name}</td>
+            <td class="num">{size(p.bytes)}</td>
+            <td class="num muted">{share(p.bytes)}</td>
+          </tr>
+        {/each}
       </tbody>
     </table>
   </div>
@@ -69,16 +131,10 @@
   <div class="card">
     <table>
       <thead>
-        <tr>
-          {#each STATES as s}<th class="num">{s}</th>{/each}
-          <th class="num">parsed, stats missing</th>
-        </tr>
+        <tr>{#each STATES as s}<th class="num">{s}</th>{/each}</tr>
       </thead>
       <tbody>
-        <tr>
-          {#each STATES as s}<td class="num">{status.states[s] ?? 0}</td>{/each}
-          <td class="num">{status.without_stats}</td>
-        </tr>
+        <tr>{#each STATES as s}<td class="num">{status.states[s] ?? 0}</td>{/each}</tr>
       </tbody>
     </table>
   </div>
@@ -105,7 +161,14 @@
             <tr>
               <td><a href="#match/{row.match_id}">{row.match_id}</a></td>
               <td class="muted">{date(row.start_time)}</td>
-              <td>{row.league ? 'league' : 'account'}</td>
+              <td class="whose">
+                {#each row.accounts as p (p.account_id)}{@render person(p)}{/each}
+                {#if row.usual.length}
+                  <span class="muted">usual game of</span>
+                  {#each row.usual as p (p.account_id)}{@render person(p)}{/each}
+                {/if}
+                {#if row.league}<span class="muted">{row.league}</span>{/if}
+              </td>
               <td>{row.state}</td>
               <td class="muted">{row.tried_at ? ago(row.tried_at) : 'never'}</td>
               <td>{next(row, i)}</td>
@@ -144,7 +207,51 @@
   tbody th {
     width: 160px;
   }
-  .message {
+  .message,
+  .steps td {
     white-space: normal;
+    vertical-align: top;
+  }
+  .steps .name {
+    font-weight: 600;
+    width: 200px;
+  }
+  .steps td:nth-child(3) {
+    width: 28%;
+  }
+  /* the step the poller is in now; the edge is the page's text colour, as the two team colours mean sides */
+  .steps tr.running td {
+    background: var(--raised);
+  }
+  .steps tr.running td:first-child {
+    box-shadow: inset 3px 0 0 var(--text);
+  }
+  .storage {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 32px;
+  }
+  .donut {
+    flex: 0 0 200px;
+  }
+  .storage table {
+    flex: 1 1 280px;
+    width: auto;
+  }
+  .whose {
+    white-space: normal;
+    min-width: 180px;
+  }
+  .person {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-right: 10px;
+    white-space: nowrap;
+    vertical-align: top; /* its baseline would be the picture's bottom edge, which lifts the row */
+  }
+  .person img {
+    border-radius: 3px;
   }
 </style>
