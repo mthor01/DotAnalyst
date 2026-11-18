@@ -7,6 +7,8 @@ How it works:
 - The salt each match's replay URL needs comes from Valve's game coordinator, asked by a second Steam account (`steam/salts.mjs`), or else from the [OpenDota API](https://docs.opendota.com).
 - Replays are parsed by [odota/parser](https://github.com/odota/parser), OpenDota's replay parser, running locally in Docker.
 
+![A player's profile page: win rate, lanes won, the heroes played in each lane, and the most played heroes](docs/profile.png)
+
 ## Setup
 
 The setup is written for Windows; every command runs in PowerShell, in the repo folder. You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.14 itself), [Node.js](https://nodejs.org) and [Docker Desktop](https://www.docker.com/products/docker-desktop/).
