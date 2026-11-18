@@ -55,7 +55,7 @@ class FakeSteam:
             return httpx.Response(200, json=HEROES)
         if "GetPlayerSummaries" in request.url.path:  # ME has a profile, every other account none
             ids = params["steamids"].split(",")
-            players = [{"steamid": i, "avatarmedium": f"https://avatars.example/{i}.jpg"} for i in ids if i == str(ME + steam.STEAM_ID_BASE)]
+            players = [{"steamid": i, "avatarmedium": f"https://avatars.example/{i}.jpg", "personaname": "Player 1"} for i in ids if i == str(ME + steam.STEAM_ID_BASE)]
             return httpx.Response(200, json={"response": {"players": players}})
         if "GetMatchHistoryBySequenceNum" in request.url.path:
             assert params["matches_requested"] == "1"
@@ -138,6 +138,7 @@ def test_sync_stores_each_accounts_avatar_once(session):
     steam.sync(session, FakeSteam().client, KEY)
     assert session.get(Account, ME).avatar == f"https://avatars.example/{ME + steam.STEAM_ID_BASE}.jpg"
     assert session.get(Account, 1001).avatar == ""  # no profile: stored as none, so not asked again
+    assert session.get(Account, ME).label == "Player 1"  # an account added on the site gets its Steam name
     fake = FakeSteam()
     steam.sync(session, fake.client, KEY)
     assert fake.count("GetPlayerSummaries") == 0

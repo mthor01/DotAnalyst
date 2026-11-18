@@ -10,6 +10,7 @@ from .db import LeagueMatch, PlayerGame, PlayerGameList
 from .steam import ANONYMOUS, STATS
 
 PLAYER_MATCHES = "https://api.opendota.com/api/players/{}/matches"
+LEAGUE = "https://api.opendota.com/api/leagues/{}"
 GAMES = 100  # kept per player
 ASKED = 150  # asked for, so that dropping the league and lobby games still leaves GAMES
 LEAGUE_LOBBIES = (1, 2)  # practice and tournament: league games, of this league or another
@@ -29,6 +30,19 @@ def unlisted_players(session: Session, n: int) -> list[int]:
                 if len(found) == n:
                     return found
     return found
+
+
+def league_name(client: httpx.Client, league_id: int) -> str | None:
+    """A tournament's name, from OpenDota. None when it does not know the league or does not answer."""
+    try:
+        response = client.get(LEAGUE.format(league_id), timeout=30)
+        body = response.json() if response.status_code == 200 else None
+    except (httpx.HTTPError, ValueError):
+        return None
+    name = body.get("name") if isinstance(body, dict) else None
+    if not isinstance(name, str):
+        return None
+    return name.strip() or None
 
 
 def fetch_player_games(session: Session, client: httpx.Client, account_id: int) -> int:

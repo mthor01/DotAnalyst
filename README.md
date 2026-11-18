@@ -34,14 +34,14 @@ A player is tracked by their Dota account id, the short number (8 to 10 digits),
 - or take the number at the end of their [OpenDota](https://www.opendota.com), [Dotabuff](https://www.dotabuff.com) or [STRATZ](https://stratz.com) profile URL, e.g. `opendota.com/players/12345678`;
 - or, from a Steam profile URL `steamcommunity.com/profiles/7656119...`, subtract 76561197960265728 from that number.
 
-Then add it, with an optional name for the Account menu:
+Then add it with **Add profile** at the top of the site; it takes the Steam id too. Or from the command line, with an optional name for the Account menu:
 
 ```
 uv run --env-file .env python -m dotanalyst add-account 12345678 "Player 1"
 uv run --env-file .env python -m dotanalyst sync
 ```
 
-`sync` fetches the account's last 500 matches at once; the running server would also pick it up within a minute. The player must have **Expose Public Match Data** on (Dota 2 → Settings → Options → Social), or Steam returns no matches; `status` then says so. Other commands: `remove-account <id>` stops tracking, `status` lists the tracked accounts and replay counts.
+`sync` fetches the account's last 500 matches at once; the running server picks a new account up within a minute either way. On a profile, **Add frequent teammates** adds every player with 10 or more games on that player's team in their last 500 matches. The player must have **Expose Public Match Data** on (Dota 2 → Settings → Options → Social), or Steam returns no matches; `status` then says so. Other commands: `remove-account <id>` stops tracking, `status` lists the tracked accounts and replay counts.
 
 ## Keeping player ids out of the repo
 
@@ -49,21 +49,17 @@ uv run --env-file .env python -m dotanalyst sync
 
 ## Scouting league teams
 
-The Teams page shows, for every team of the Reincarnation league (seasons 6 to 8), which heroes are banned against it, whether it picks them when they are open, and who plays what. The replays of games from the last 30 days are fetched by the running server; an older game's when you ask for it on the page; with replays a team page also shows where each player wards and where the team walks in the first seconds of a game.
+The Teams tab of the Tournaments page shows, for every team of the tracked tournaments, which heroes are banned against it, whether it picks them when they are open, and who plays what. The replays of games from the last 30 days are fetched by the running server; an older game's when you ask for it on the page; with replays a team page also shows where each player wards and where the team walks in the first seconds of a game.
 
-`uv run --env-file .env python -m dotanalyst sync-leagues` fetches the league's games; the first run takes about half an hour. After that, the running server gets the newest ones every minute, and the button "Check for new league games" on the Teams page at once.
+`uv run --env-file .env python -m dotanalyst sync-leagues` fetches the league's games; the first run takes about half an hour. After that, the running server gets the newest ones every minute, and the button "Check for new league games" on the Tournaments page at once.
 
 ### Adding a tournament
 
-The Teams page shows the teams of the leagues listed in `LEAGUES` at the top of [`dotanalyst/steam.py`](dotanalyst/steam.py), league id to name:
-
-```python
-LEAGUES = {18795: "Season 6", 19418: "Season 7", 20408: "Season 8", 12345: "My cup"}
-```
+A new database tracks the leagues in `LEAGUES` at the top of [`dotanalyst/steam.py`](dotanalyst/steam.py) (the Reincarnation league, seasons 6 to 8). To add another:
 
 1. Find the league id: it is the number in the league's URL on [OpenDota](https://www.opendota.com/leagues) (`opendota.com/leagues/12345`) or [Dotabuff](https://www.dotabuff.com/esports/leagues) (`dotabuff.com/esports/leagues/12345-my-cup`). Only leagues Valve itself lists (the ones with an in-game ticket) can be fetched; those sites list exactly those.
-2. Add it to `LEAGUES` with the name the site's league filter should show.
-3. Run `uv run --env-file .env python -m dotanalyst sync-leagues`, then restart the server.
+2. Enter it on the Tournaments page under **Add tournament**. Its name comes from OpenDota.
+3. The running server reads its games on its next check for league games; `sync-leagues` does it at once.
 
 Steam lists only the newest 500 games of a league, so a bigger league misses its oldest games.
 

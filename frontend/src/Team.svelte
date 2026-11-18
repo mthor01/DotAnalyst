@@ -133,9 +133,9 @@
     {team.name || `Team ${team.team_id}`}
   </h2>
   {#if !games}
-    <p class="muted">No league games of theirs in this season and time frame. <a href="#teams">All teams</a></p>
+    <p class="muted">No league games of theirs in this season and time frame. <a href="#tournaments/teams">All teams</a></p>
   {:else}
-  <p class="muted">{games} league games, {wins} won ({percent(wins, games)}%). {seasons}. <a href="#teams">All teams</a></p>
+  <p class="muted">{games} league games, {wins} won ({percent(wins, games)}%). {seasons}. <a href="#tournaments/teams">All teams</a></p>
 
   <div class="choice tabs" role="group" aria-label="Part of the team page">
     {#each TABS as name}

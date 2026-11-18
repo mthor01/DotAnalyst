@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from dotanalyst import queries
 from dotanalyst.db import (
-    Account, Base, Death, Derived, Lane, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerMinute,
+    Account, Base, Death, Derived, Lane, League, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerMinute,
     PlayerName, Tormentor, Ward, WisdomRune,
 )  # fmt: skip
 from dotanalyst.steam import ANONYMOUS, store_league_match, store_match
@@ -516,3 +516,24 @@ def test_team_players_position_is_the_one_they_took_most(league):
     league.commit()
     only_game_2 = queries.team(league, US, date_from=date(2026, 11, 2), date_to=date(2026, 11, 2))
     assert {p["account_id"]: p["position"] for p in only_game_2["players"]}[1001] == 1
+
+
+def test_frequent_teammates_are_on_my_team_in_enough_of_my_newest_matches(session, monkeypatch):
+    monkeypatch.setattr(queries, "TEAMMATE_GAMES", 1)
+    assert queries.frequent_teammates(session, ME) == [FRIEND, STRANGER]  # tracked or not; FRIEND twice, so first
+    monkeypatch.setattr(queries, "TEAMMATE_GAMES", 2)
+    assert queries.frequent_teammates(session, ME) == [FRIEND]  # match 2 was against me
+    monkeypatch.setattr(queries, "TEAMMATE_MATCHES", 1)
+    assert queries.frequent_teammates(session, ME) == []  # only match 3 is counted
+
+
+def test_tournaments_start_with_the_seasons_and_count_their_games_and_teams(league):
+    t = {m["match_id"]: m["start_time"] for m in LEAGUE_GAMES}
+    assert queries.tournaments(league) == [
+        {"league_id": 20408, "name": "Season 8", "games": 4, "teams": 3, "first_game": t[2], "last_game": t[5]},
+        {"league_id": 19418, "name": "Season 7", "games": 1, "teams": 2, "first_game": t[1], "last_game": t[1]},
+        {"league_id": 18795, "name": "Season 6", "games": 0, "teams": 0, "first_game": None, "last_game": None},
+    ]
+    league.add(League(league_id=99999, name="Cup"))
+    league.commit()
+    assert [x["league_id"] for x in queries.tournaments(league)] == [99999, 20408, 19418, 18795]  # the seasons stay

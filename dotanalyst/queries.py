@@ -10,7 +10,7 @@ from .db import (
     PlayerName, Tormentor, Ward, WisdomRune,
 )  # fmt: skip
 from .replay import MAX_AGE_DAYS
-from .steam import ANONYMOUS, LEAGUES, match_rows
+from .steam import ANONYMOUS, leagues, match_rows
 
 OTHER = aliased(MatchPlayer)
 IS_RADIANT = MatchPlayer.player_slot < 128
@@ -22,6 +22,7 @@ SCOREBOARD = (
 )  # fmt: skip
 AVERAGED = ("kills", "deaths", "assists", "last_hits", "gold_per_min", "xp_per_min")  # of a league player on a hero
 RECENT = 10  # a team's newest games, whose most frequent five players are its main stack
+TEAMMATE_MATCHES, TEAMMATE_GAMES = 500, 10  # "add teammates": this many games together in the newest this many
 PARTY_TOGETHER = 5  # matches on the same team after which a teammate counts as someone the player queues with
 LANE_ROLES = {1: "safe", 2: "mid", 3: "off", 4: "jungle"}  # OpenDota's lane_role, as the role wheel names them
 
@@ -227,6 +228,22 @@ def teammates(session: Session, where: list) -> list[dict]:
     )
 
 
+def frequent_teammates(session: Session, account_id: int) -> list[int]:
+    """Every player, tracked or not, on the account's team in at least TEAMMATE_GAMES of its newest
+    TEAMMATE_MATCHES matches, most games first. Anonymous players are nobody."""
+    games = func.count()
+    return list(
+        session.scalars(
+            _mine(OTHER.account_id)
+            .join(OTHER, and_(OTHER.match_id == MatchPlayer.match_id, OTHER.account_id != MatchPlayer.account_id, SAME_TEAM))
+            .where(*conditions(account_id, last=TEAMMATE_MATCHES), OTHER.account_id != ANONYMOUS)
+            .group_by(OTHER.account_id)
+            .having(games >= TEAMMATE_GAMES)
+            .order_by(games.desc(), OTHER.account_id)
+        )
+    )
+
+
 def matchups(session: Session, where: list) -> list[dict]:
     """Per hero: games and wins with it on my team, and against it. Wins are always mine."""
     ally = SAME_TEAM.label("ally")
@@ -315,6 +332,20 @@ def metric_averages(session: Session, where: list) -> list[dict]:
     )
 
 
+def tournaments(session: Session) -> list[dict]:
+    """Every tracked tournament, the newest id first, with its stored games, its teams and its first and last game."""
+    m = LeagueMatch
+    found = {
+        i: {"league_id": i, "name": n, "games": 0, "teams": set(), "first_game": None, "last_game": None}
+        for i, n in leagues(session).items()
+    }
+    for g in session.execute(select(m.league_id, m.radiant_team_id, m.dire_team_id, m.start_time).order_by(m.start_time)):
+        if (t := found.get(g.league_id)) is not None:
+            t["teams"].update(team for team in (g.radiant_team_id, g.dire_team_id) if team)  # 0 is no team
+            t.update(games=t["games"] + 1, first_game=t["first_game"] or g.start_time, last_game=g.start_time)
+    return [{**t, "teams": len(t["teams"])} for t in reversed(found.values())]
+
+
 def teams(session: Session) -> list[dict]:
     """Every team with a stored league game, by name. A side that played without a team is not one."""
     m = LeagueMatch
@@ -363,6 +394,7 @@ def team(
     with no game in them has an empty answer, not None.
     """
     names = {t["team_id"]: t["name"] for t in teams(session)}
+    tournament = leagues(session)
     if team_id not in names:
         return None
     m = LeagueMatch
@@ -431,7 +463,7 @@ def team(
                 on[stat] += p.get(stat) or 0
         games.append(
             {
-                "match_id": g.match_id, "start_time": g.start_time, "league": LEAGUES.get(g.league_id, str(g.league_id)),
+                "match_id": g.match_id, "start_time": g.start_time, "league": tournament.get(g.league_id, str(g.league_id)),
                 "radiant": radiant, "win": win, "opponent_id": opponent, "opponent": names.get(opponent),
                 "picks": [p["hero_id"] for p in side], "picks_against": [p["hero_id"] for p in ten if p not in side],
                 "bans": own, "bans_against": against,

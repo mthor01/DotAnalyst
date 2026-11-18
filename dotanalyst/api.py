@@ -7,16 +7,16 @@ from pathlib import Path
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import derive, poll, queries
-from .db import DATA, Ability, Account, Hero, Item, open_engine
+from . import derive, opendota, poll, queries
+from .db import DATA, Ability, Account, Hero, Item, League, open_engine
 from .poll import poll_forever
 from .replay import ReplayError
-from .steam import LEAGUES, SteamError, team_logo
+from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, team_logo
 
 engine = open_engine()
 FRONTEND = Path("frontend/dist")
@@ -47,13 +47,43 @@ def accounts(session: Db) -> list[dict]:
     return [{"account_id": a.account_id, "label": a.label, "history_exposed": a.history_exposed, "avatar": a.avatar} for a in rows]
 
 
+def track(session: Session, account_ids: list[int]) -> None:
+    """Track these accounts from the next poll on; one tracked before is tracked again, with its stored matches."""
+    for account_id in account_ids:
+        account = session.get(Account, account_id) or Account(account_id=account_id)
+        account.active = True
+        session.add(account)
+    session.commit()
+
+
+@app.post("/api/accounts")
+def add_account(session: Db, account_id: Annotated[int, Body(embed=True)]) -> dict:
+    """Track a profile by its friend id (32 bits) or its Steam id (64 bits)."""
+    if account_id >= STEAM_ID_BASE:
+        account_id -= STEAM_ID_BASE
+    if not 0 < account_id < ANONYMOUS:
+        raise HTTPException(422, f"{account_id} is not a friend id or a Steam id")
+    track(session, [account_id])
+    return {"account_id": account_id}
+
+
+@app.post("/api/accounts/{account_id}/teammates")
+def add_teammates(session: Db, account_id: int) -> dict:
+    """Track every player with queries.TEAMMATE_GAMES games on this account's team in its newest
+    queries.TEAMMATE_MATCHES. Returns those that were not tracked yet."""
+    tracked = set(session.scalars(select(Account.account_id).where(Account.active)))
+    added = [a for a in queries.frequent_teammates(session, account_id) if a not in tracked]
+    track(session, added)
+    return {"added": added}
+
+
 @app.get("/api/constants")
 def constants(session: Db) -> dict:
     return {
         "heroes": {h.id: {"name": h.name, "localized_name": h.localized_name} for h in session.scalars(select(Hero))},
         "items": {i.id: i.name for i in session.scalars(select(Item))},
         "abilities": {a.name: a.dname for a in session.scalars(select(Ability))},
-        "leagues": LEAGUES,
+        "leagues": leagues(session),
     }
 
 
@@ -149,6 +179,25 @@ def refresh_team_players(session: Db, team_id: int) -> dict:
         return {"players": poll.refresh_players(engine, [p["account_id"] for p in found["players"]])}
     except httpx.HTTPError as error:
         raise HTTPException(502, f"OpenDota: {error}") from None
+
+
+@app.get("/api/leagues")
+def tournaments(session: Db) -> list[dict]:
+    return queries.tournaments(session)
+
+
+@app.post("/api/leagues")
+def add_tournament(session: Db, league_id: Annotated[int, Body(embed=True)]) -> dict:
+    """Track a tournament by its league id: the poller then stores its games. Its name comes from OpenDota, once."""
+    if league_id <= 0:
+        raise HTTPException(422, f"{league_id} is not a league id")
+    known = leagues(session)  # first, so that a new database still starts with LEAGUES
+    if league_id not in known:
+        with httpx.Client() as client:
+            known[league_id] = opendota.league_name(client, league_id) or f"League {league_id}"
+        session.add(League(league_id=league_id, name=known[league_id]))
+        session.commit()
+    return {"league_id": league_id, "name": known[league_id]}
 
 
 @app.get("/api/teams")

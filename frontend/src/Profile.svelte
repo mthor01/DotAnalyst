@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { clock, get, percent, type Account, type MatchRow, type WardSpot } from './lib/api'
+  import { TEAMMATE_GAMES, TEAMMATE_MATCHES, clock, get, percent, post, type Account, type MatchRow, type WardSpot } from './lib/api'
   import { heroIcon, heroName, heroPortrait } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
   import Matches from './Matches.svelte'
@@ -9,7 +9,26 @@
   import WinRate from './lib/WinRate.svelte'
   import Count from './lib/Count.svelte'
 
-  let { query, account, tab }: { query: string; account: Account | undefined; tab: string } = $props()
+  let {
+    query,
+    account,
+    tab,
+    ontracked,
+  }: { query: string; account: Account | undefined; tab: string; ontracked: () => void } = $props()
+
+  let tracking = $state(false)
+  let tracked = $state('') // what the last "Add teammates" did
+  async function addTeammates() {
+    tracking = true
+    try {
+      const { added } = await post<{ added: number[] }>(`accounts/${account?.account_id}/teammates`)
+      tracked = `${added.length} added. Their matches load with the next check.`
+      if (added.length) ontracked()
+    } catch (e) {
+      tracked = `Could not add them: ${(e as Error).message}`
+    }
+    tracking = false
+  }
   const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding', teammates: 'Teammates' }
   const shown = $derived<keyof typeof TABS>(tab in TABS ? (tab as keyof typeof TABS) : 'overview')
   const filtered = $derived(!['matches', 'heroes', 'teammates'].includes(shown)) // the tabs the role and the queue apply to
@@ -213,6 +232,17 @@
         {/each}
       </div>
     {/if}
+    <p class="track">
+      <span class="muted" role="status">{tracked}</span>
+      <button
+        class="action"
+        onclick={addTeammates}
+        disabled={tracking}
+        title="Adds every player with {TEAMMATE_GAMES} or more games on their team in their last {TEAMMATE_MATCHES} matches"
+      >
+        {tracking ? 'Adding…' : 'Add frequent teammates'}
+      </button>
+    </p>
   </header>
 
   <div class="tabs" role="tablist" aria-label="Profile">
@@ -437,8 +467,12 @@
   .title p {
     margin: 0;
   }
-  .role {
+  .role,
+  .track {
     margin-left: auto;
+  }
+  .role ~ .track {
+    margin-left: 0;
   }
 
   .overview {

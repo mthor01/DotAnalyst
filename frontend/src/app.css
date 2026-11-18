@@ -114,6 +114,11 @@ nav a[aria-current='page'] {
   align-items: center;
   gap: 6px 14px;
 }
+/* the header's Add profile form */
+.add {
+  display: flex;
+  gap: 6px;
+}
 .action:disabled {
   color: var(--muted);
   cursor: default;

@@ -18,11 +18,11 @@
 {#if error}
   <p class="error" role="alert">{error}</p>
 {:else if loaded && rows.length === 0}
-  <p class="muted">No league games stored yet. Fetch them with <code>dotanalyst sync-leagues</code>.</p>
+  <p class="muted">No league games stored yet. They load with the next check for new league games.</p>
 {:else}
   <p class="filters">
     <label>Team <input type="search" bind:value={search} placeholder="Name" /></label>
-    <span class="muted">{shown.length} of {rows.length} teams of the Reincarnation league, seasons 6 to 8</span>
+    <span class="muted">{shown.length} of {rows.length} teams of the tracked tournaments</span>
   </p>
   <div class="card">
     <table>

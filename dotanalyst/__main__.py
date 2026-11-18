@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from .db import Account, Match, open_session
 from .derive import TABLES, recompute
 from .replay import ReplayError, parse_replay
-from .steam import LEAGUES, SteamError, sync, sync_constants, sync_leagues
+from .steam import SteamError, leagues, sync, sync_constants, sync_leagues
 
 
 def main() -> int:
@@ -70,7 +70,7 @@ def main() -> int:
                         print(f"{heroes} heroes and {items} items stored")
                         return 0
                     if args.command == "sync-leagues":
-                        print(f"{sync_leagues(session, client, key)} new league games ({len(LEAGUES)} leagues)")
+                        print(f"{sync_leagues(session, client, key)} new league games ({len(leagues(session))} leagues)")
                         return 0
                     counts = sync(session, client, key)
             except SteamError as error:

@@ -6,18 +6,19 @@
   import Profile from './Profile.svelte'
   import Queue from './Queue.svelte'
   import Team from './Team.svelte'
-  import Teams from './Teams.svelte'
+  import Tournaments from './Tournaments.svelte'
 
-  const PAGES = { profile: 'Profile', compare: 'Player comparison', teams: 'Teams', queue: 'Queue' }
+  const PAGES = { profile: 'Profile', compare: 'Player comparison', tournaments: 'Tournaments', queue: 'Queue' }
   const ALL_ACCOUNTS: Page[] = ['compare'] // these pages show every tracked account at once
   type Page = keyof typeof PAGES
   let hash = $state(location.hash.slice(1))
   const page = $derived<Page>(hash.split('/')[0] in PAGES ? (hash.split('/')[0] as Page) : 'profile')
   const profileTab = $derived(/^profile\/(\w+)$/.exec(hash)?.[1] ?? '') // #profile/matches is a tab of the profile
   const matchId = $derived(/^match\/(\d+)$/.exec(hash)?.[1]) // #match/123 is one match, outside the pages above
-  const teamId = $derived(/^team\/(\d+)$/.exec(hash)?.[1]) // #team/123 is one league team, under Teams
+  const teamId = $derived(/^team\/(\d+)$/.exec(hash)?.[1]) // #team/123 is one league team, under Tournaments
+  const tournamentsTab = $derived(/^tournaments\/(\w+)$/.exec(hash)?.[1] ?? '') // #tournaments/teams is its Teams tab
   // the league pages are about other people's games: no account and none of the filters apply
-  const league = $derived(!!teamId || (!matchId && page === 'teams'))
+  const league = $derived(!!teamId || (!matchId && page === 'tournaments'))
   let accounts = $state<Account[]>([])
   let error = $state('')
   let filters = $state({ account_id: '', lobby_type: '', game_mode: '' })
@@ -43,9 +44,9 @@
     return new URLSearchParams(Object.entries(sent).filter(([, v]) => v !== '')).toString()
   })
 
-  Promise.all([get<Account[]>('accounts'), loadConstants()]).then(
+  const loadAccounts = async () => (accounts = await get<Account[]>('accounts'))
+  Promise.all([loadAccounts(), loadConstants()]).then(
     ([found]) => {
-      accounts = found
       const remembered = localStorage.getItem('account_id')
       const known = found.some((a) => String(a.account_id) === remembered)
       filters.account_id = known ? remembered! : String(found[0]?.account_id ?? '')
@@ -59,6 +60,7 @@
 
   // #account/123 picks that tracked account and opens its profile: how other pages link to one
   function route() {
+    if (location.hash === '#teams') history.replaceState(null, '', '#tournaments/teams') // where Teams was before
     const picked = /^account\/(\d+)$/.exec(location.hash.slice(1))?.[1]
     if (picked) {
       filters.account_id = picked
@@ -68,6 +70,23 @@
     hash = location.hash.slice(1)
   }
   route()
+
+  let adding = $state(false) // the Add profile form is open
+  let newId = $state('')
+  async function addProfile(event: SubmitEvent) {
+    event.preventDefault()
+    try {
+      // sent as text: a Steam id is too long for a JavaScript number, the server reads it as one
+      const { account_id } = await post<{ account_id: number }>('accounts', { account_id: newId.trim() })
+      await loadAccounts()
+      filters.account_id = String(account_id)
+      ;[adding, newId, checked] = [false, '', 'Profile added. Its matches load with the next check.']
+      location.hash = 'profile'
+    } catch (e) {
+      checked = `Could not add the profile: ${(e as Error).message}`
+    }
+  }
+  const focus = (input: HTMLInputElement) => input.focus()
 
   let checking = $state(false)
   let checked = $state('') // what the last check found, or why it failed
@@ -105,7 +124,7 @@
     <h1><a class="brand" href="#{Object.keys(PAGES)[0]}"><img src="/logo.png" alt="DotAnalyst" width="209" height="32" /></a></h1>
     <nav aria-label="Pages">
       {#each Object.entries(PAGES) as [id, title]}
-        <a href="#{id}" aria-current={(teamId ? id === 'teams' : !matchId && page === id) ? 'page' : undefined}>{title}</a>
+        <a href="#{id}" aria-current={(teamId ? id === 'tournaments' : !matchId && page === id) ? 'page' : undefined}>{title}</a>
       {/each}
     </nav>
     <div class="side">
@@ -117,6 +136,15 @@
           {/each}
         </select>
       </label>
+      {#if adding}
+        <form class="add" onsubmit={addProfile}>
+          <input bind:value={newId} use:focus required pattern="\s*\d+\s*" inputmode="numeric" aria-label="Friend id or Steam id" placeholder="Friend id or Steam id" />
+          <button class="action">Add</button>
+          <button class="action" type="button" onclick={() => (adding = false)}>Cancel</button>
+        </form>
+      {:else}
+        <button class="action" onclick={() => (adding = true)}>Add profile</button>
+      {/if}
       <span class="muted" role="status">{checked}</span>
       <button class="action" onclick={check} disabled={checking}>
         {checking ? 'Checking…' : teamId ? 'Refresh' : league ? 'Check for new league games' : 'Check for new games'}
@@ -143,7 +171,7 @@
       </select>
     </label>
     <label>
-      Season
+      Tournament
       <select bind:value={time.league_id}>
         <option value="">All games</option>
         {#each Object.entries(constants.leagues).reverse() as [id, name]}<option value={id}>{name}</option>{/each}
@@ -168,14 +196,14 @@
     <Match id={matchId} />
   {:else if teamId}
     <Team id={teamId} {query} />
-  {:else if page === 'teams'}
-    <Teams />
+  {:else if page === 'tournaments'}
+    <Tournaments tab={tournamentsTab} />
   {:else if page === 'queue'}
     <Queue />
   {:else if !filters.account_id}
-    <p class="muted">No tracked accounts yet. Add one with <code>dotanalyst add-account</code>.</p>
+    <p class="muted">No tracked accounts yet. Add one with Add profile above, by its friend id or Steam id.</p>
   {:else if page === 'profile'}
-    <Profile {query} tab={profileTab} account={accounts.find((a) => String(a.account_id) === filters.account_id)} />
+    <Profile {query} tab={profileTab} ontracked={loadAccounts} account={accounts.find((a) => String(a.account_id) === filters.account_id)} />
   {:else}
     <Compare {query} {accounts} />
   {/if}

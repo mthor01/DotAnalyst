@@ -197,18 +197,28 @@ Known limit: the lane differences describe the lane, not the player, and a lane 
 
 In `dotanalyst/queries.py`. Nothing here is stored; it is counted on each request.
 
-### Filters: time and season
+### Filters: time and tournament
 
-Every account page and every team page take a time span and a season; account pages also take lobby and mode.
+Every account page and every team page take a time span and a tournament (the Tournament dropdown, `season` in the code); account pages also take lobby and mode.
 
 - **Time** is last month, last 3, 6 or 12 months, all time, or two dates. A span of months starts on today's date that many calendar months back (`monthsAgo` in `App.svelte`) and has no end. The dates are local days and both count: from 1 Nov to 3 Nov is all of the 1st to the end of the 3rd (`between` in `queries.py`).
-- **Season** is one of the tracked leagues (`LEAGUES` in `steam.py`). A match belongs to it when `league_matches` has it under that league id, so on an account page a season shows only league games the account itself played.
+- **Tournament** is one of the tracked tournaments (see Tracked tournaments). A match belongs to it when `league_matches` has it under that league id, so on an account page a tournament shows only league games the account itself played.
 - A known team without a game in the filters gets an empty page, not "unknown team".
 - The team pages keep their own time and season (`times` in `App.svelte`), apart from the account pages: a season picked on a team page does not narrow the profile, and the other way round. Both are kept until the page reloads.
 
 ### Played with a tracked account
 
 Steam's data does not say who queued together. A match counts as "with tracked players" when another active tracked account was on the same team.
+
+### Adding a profile (Add profile in the header)
+
+`POST /api/accounts` takes the Dota account id (the friend id) or the 64-bit Steam id; a number of at least `STEAM_ID_BASE` (76561197960265728) is a Steam id and has that subtracted. What is left must lie between 0 and the anonymous id (`ANONYMOUS`, 4294967295), both excluded, or the answer is 422. The browser sends the id as text, as a Steam id is too long for a JavaScript number. An account tracked before and removed is tracked again with its stored matches. Nothing is fetched at once: the poller reads the account's matches on its next round. An account without a name gets its Steam name (`personaname`) when the poller asks Steam for its picture.
+
+### Frequent teammates (Profile, Add frequent teammates)
+
+`frequent_teammates` in `queries.py`: every player on the account's team in at least 10 (`TEAMMATE_GAMES`) of its newest 500 (`TEAMMATE_MATCHES`) stored matches, whatever the page's filters. Anonymous players are left out. The button tracks those not tracked yet, as Add profile does, and says how many it added.
+
+Known limits: only stored matches count, so an account added a minute ago has none until the poller has read them; a player with a hidden account in some games counts only the games where it was public.
 
 ### Solo or party
 
@@ -231,6 +241,12 @@ Every row of an account's match list carries the player's position, 1 (carry) to
 Checked: the 7 tracked accounts' matches give each account one or two clear main positions; for the parsed ones, supports come out 4 and 5 and cores 1 to 3 (November 2026).
 
 Known limits: without a parsed replay (most matches) the position is only the team's farm order, so a mid who out-farms the carry is 1 and the carry 2, and a support with a big late game can rank above a core. With a replay, a support who lanes alone and a core who jungles take the open places by farm, which can swap 4 and 5 with 1 or 3.
+
+### Tracked tournaments (Tournaments page)
+
+The tracked tournaments are the `leagues` table, league id to name. An empty table is first given `LEAGUES` in `steam.py`, so those are tracked on a new database. The add form on the Tournaments page takes a league id; the name is OpenDota's (`/leagues/{id}`), or "League {id}" when OpenDota has none or does not answer. The league sync reads every tracked tournament, so a new one is read in full on the poller's next round for league games, up to Steam's newest 500 games of a league.
+
+The list gives per tournament its stored games, the teams that played in them (a side without a team is none), and the start of its first and last stored game. The Teams tab of the page is the League teams list.
 
 ### League teams
 

@@ -100,3 +100,13 @@ def test_unlisted_players_come_from_the_newest_league_games(session):
     session.commit()
     assert unlisted_players(session, 3) == [3001, 1004, 1005]  # anonymous and listed players are left out
     assert unlisted_players(session, 50) == [3001, *range(1004, 1011), 1001, 1002]  # each player once
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "name"),
+    [(200, b'{"leagueid": 1, "name": " Some Cup "}', "Some Cup"), (200, b'{"name": ""}', None), (404, b"{}", None), (200, b"<html>", None)],
+)
+def test_league_name_or_none(status, body, name):
+    calls = []
+    assert opendota.league_name(opendota_sends(calls, status, body), 1) == name
+    assert calls[0].url.path == "/api/leagues/1"

@@ -120,6 +120,15 @@ export type MatchDetail = {
   lanes: { player_slot: number; lane: string | null }[]
 }
 
+export type TournamentRow = {
+  league_id: number
+  name: string
+  games: number
+  teams: number
+  first_game: number | null // null while none of its games is stored
+  last_game: number | null
+}
+
 export type TeamRow = { team_id: number; name: string | null; games: number; wins: number; last_played: number }
 /** Something the poller did to one match's replay, or to none (`match_id` null). Times are unix seconds. */
 export type QueueEvent = { at: number; match_id: number | null; message: string }
@@ -188,6 +197,7 @@ export type TeamDetail = {
   draft: number[][]
 }
 export const RECENT_GAMES = 10 // queries.RECENT
+export const [TEAMMATE_MATCHES, TEAMMATE_GAMES] = [500, 10] // queries.TEAMMATE_MATCHES, queries.TEAMMATE_GAMES
 export type TeamTormentors = { count: number; time: number | null; enemies_dead: number | null; lead: number | null }
 export type TeamWisdom = { spawns: number; contested: number; heroes: number | null; taken: number; lead: number | null; kills: number | null; deaths: number | null }
 
@@ -232,8 +242,9 @@ export async function get<T>(path: string, query = ''): Promise<T> {
 }
 
 /** A request that makes the server do something. The server's own words are the error message. */
-export async function post<T>(path: string): Promise<T> {
-  const response = await fetch(`/api/${path}`, { method: 'POST' })
+export async function post<T>(path: string, body?: object): Promise<T> {
+  const sent = body && { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }
+  const response = await fetch(`/api/${path}`, { method: 'POST', ...sent })
   if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? `${path}: HTTP ${response.status}`)
   return response.json()
 }

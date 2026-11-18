@@ -78,6 +78,15 @@ class LeagueMatch(Base):
     raw_json: Mapped[dict] = mapped_column(JSON)  # has picks_bans, the draft in order, and the ten players
 
 
+class League(Base):
+    """A tracked tournament: steam.LEAGUES to start with, then those added on the site."""
+
+    __tablename__ = "leagues"
+
+    league_id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+
 class PlayerName(Base):
     """Steam name of a league player, as it was when first asked for."""
 

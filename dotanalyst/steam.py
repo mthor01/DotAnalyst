@@ -8,7 +8,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import DATA, Ability, Account, Hero, Item, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
+from .db import DATA, Ability, Account, Hero, Item, League, LeagueMatch, Match, MatchPlayer, PlayerName, Recipe
 
 BASE = "https://api.steampowered.com"
 HISTORY = "IDOTA2Match_570/GetMatchHistory/V001/"
@@ -18,7 +18,7 @@ HEROES = "IEconDOTA2_570/GetHeroes/v1/"
 NAMES = "ISteamUser/GetPlayerSummaries/v2/"
 LOGO = "ISteamRemoteStorage/GetUGCFileDetails/v1/"
 STEAM_ID_BASE = 76561197960265728  # a 64-bit Steam id is this plus the 32-bit account id
-# REINCARNATION - D/A/CH Dota 2 by BEING ESPORTS: the seasons whose games the team pages are built from
+# REINCARNATION - D/A/CH Dota 2 by BEING ESPORTS: the tournaments a new database starts with, see leagues()
 LEAGUES = {18795: "Season 6", 19418: "Season 7", 20408: "Season 8"}
 ITEM_IDS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/item_ids.json"
 ITEMS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/items.json"
@@ -138,9 +138,11 @@ def store_avatars(session: Session, client: httpx.Client, key: str) -> None:
     if not missing:
         return
     steam_ids = ",".join(str(a.account_id + STEAM_ID_BASE) for a in missing)
-    found = {int(p["steamid"]) - STEAM_ID_BASE: p.get("avatarmedium", "") for p in call(client, key, NAMES, steamids=steam_ids)["players"]}
+    found = {int(p["steamid"]) - STEAM_ID_BASE: p for p in call(client, key, NAMES, steamids=steam_ids)["players"]}
     for account in missing:
-        account.avatar = found.get(account.account_id, "")  # "" so an account without a profile is not asked again
+        profile = found.get(account.account_id, {})
+        account.avatar = profile.get("avatarmedium", "")  # "" so an account without a profile is not asked again
+        account.label = account.label or profile.get("personaname")  # one added on the site comes without a name
     session.commit()
 
 
@@ -155,14 +157,22 @@ def store_league_match(session: Session, m: dict) -> None:
     )
 
 
+def leagues(session: Session) -> dict[int, str]:
+    """The tracked tournaments by id, oldest id first. An empty table is given LEAGUES first."""
+    if session.scalar(select(League.league_id).limit(1)) is None:
+        session.add_all(League(league_id=i, name=n) for i, n in LEAGUES.items())
+        session.commit()
+    return dict(session.execute(select(League.league_id, League.name).order_by(League.league_id)).all())
+
+
 def sync_leagues(session: Session, client: httpx.Client, key: str, newest_only: bool = False) -> int:
-    """Store the games of LEAGUES that are not stored yet, and their players' Steam names and pictures. Returns the new games.
+    """Store the games of the tracked tournaments that are not stored yet, and their players' Steam names and pictures. Returns the new games.
 
     Only the newest 500 games of a league can be listed, see the shortcut below. newest_only stops reading a league
     at a page whose games are all stored.
     """
     new = 0
-    for league_id in LEAGUES:
+    for league_id in leagues(session):  # one added since the last poll has nothing stored, so it is read in full
         params = {"league_id": league_id}
         while True:
             # read until a page is empty: results_remaining counts series and reaches 0 with games still to come
