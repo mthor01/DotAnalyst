@@ -298,16 +298,6 @@ def _my_metrics(*columns):
     )
 
 
-def metric(session: Session, where: list, name: str) -> list[dict]:
-    """One metric's value in each parsed match of the account, oldest first."""
-    return _rows(
-        session,
-        _my_metrics(Match.match_id, Match.start_time, Metric.value)
-        .where(Metric.name == name, *where)
-        .order_by(Match.start_time),
-    )
-
-
 def metric_averages(session: Session, where: list) -> list[dict]:
     """Every metric's average for the account, with the number of matches it is taken over."""
     return _rows(

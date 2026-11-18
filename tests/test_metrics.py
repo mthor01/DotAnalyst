@@ -143,9 +143,6 @@ def test_every_metric_is_stored_and_served(session):
     assert count["kill_participation"] == 10
     assert count["obs_lifetime"] == 6  # the four players who placed no observer have no row
 
-    assert queries.metric(session, queries.conditions(ME), "lane_cs_diff") == [
-        {"match_id": MATCH_ID, "start_time": MATCH_ID, "value": -47}
-    ]  # one value per parsed match; the unparsed match 7 has none
     averages = {r["name"]: r for r in queries.metric_averages(session, queries.conditions(ME))}
     assert averages["obs_lifetime"] == {"name": "obs_lifetime", "average": 347.5, "matches": 1}
     assert len(averages) == len(metrics.NAMES)

@@ -3,14 +3,15 @@
   import { heroIcon, heroName, heroPortrait } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
   import Matches from './Matches.svelte'
+  import Teammates from './Teammates.svelte'
   import RoleWheel, { tally, type Role } from './lib/RoleWheel.svelte'
   import WardHeat from './lib/WardHeat.svelte'
   import WinRate from './lib/WinRate.svelte'
 
   let { query, account, tab }: { query: string; account: Account | undefined; tab: string } = $props()
-  const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding' }
+  const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding', teammates: 'Teammates' }
   const shown = $derived<keyof typeof TABS>(tab in TABS ? (tab as keyof typeof TABS) : 'overview')
-  const filtered = $derived(!['matches', 'heroes'].includes(shown)) // the tabs the role and the count apply to
+  const filtered = $derived(!['matches', 'heroes', 'teammates'].includes(shown)) // the tabs the role and the count apply to
   let rows = $state<MatchRow[]>([])
   let wards = $state.raw<WardSpot[]>([]) // of every match of these filters
   let error = $state('')
@@ -218,6 +219,8 @@
     <Matches {query} />
   {:else if shown === 'heroes'}
     <Heroes {query} />
+  {:else if shown === 'teammates'}
+    <Teammates {query} />
   {:else if recent.length === 0}
     <p class="muted">No matches{as} for these filters. Pick another role or queue above.</p>
   {:else if shown === 'overview'}

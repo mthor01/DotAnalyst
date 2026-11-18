@@ -6,12 +6,10 @@
   import Profile from './Profile.svelte'
   import Queue from './Queue.svelte'
   import Team from './Team.svelte'
-  import Teammates from './Teammates.svelte'
   import Teams from './Teams.svelte'
-  import Trends from './Trends.svelte'
 
-  const PAGES = { profile: 'Profile', teammates: 'Teammates & matchups', trends: 'Trends', group: 'Group', teams: 'Teams', queue: 'Queue' }
-  const ALL_ACCOUNTS: Page[] = ['trends', 'group'] // these pages show every tracked account at once
+  const PAGES = { profile: 'Profile', group: 'Group', teams: 'Teams', queue: 'Queue' }
+  const ALL_ACCOUNTS: Page[] = ['group'] // these pages show every tracked account at once
   type Page = keyof typeof PAGES
   let hash = $state(location.hash.slice(1))
   const page = $derived<Page>(hash.split('/')[0] in PAGES ? (hash.split('/')[0] as Page) : 'profile')
@@ -160,12 +158,8 @@
     <p class="muted">No tracked accounts yet. Add one with <code>dotanalyst add-account</code>.</p>
   {:else if page === 'profile'}
     <Profile {query} tab={profileTab} account={accounts.find((a) => String(a.account_id) === filters.account_id)} />
-  {:else if page === 'trends'}
-    <Trends {query} {accounts} />
-  {:else if page === 'group'}
-    <Group {query} {accounts} />
   {:else}
-    <Teammates {query} />
+    <Group {query} {accounts} />
   {/if}
   {/key}
 </main>

@@ -278,7 +278,7 @@ Rules that live in the frontend (`frontend/src`), applied to what the API sends.
 
 The lane seen from the player's side: Radiant's safe lane is bottom and Dire's is top, the other side lane is the off lane; mid and jungle are themselves. A match without a parsed replay has no role.
 
-The Role dropdown above the page keeps only the matches the account played in one position, or in the cores (1–3) or the supports (4–5) together (see Position 1–5 of a player). The Queue dropdown next to it keeps solo or party matches the same way (see Solo or party). Both apply before the 25, 100 or 500 newest are taken, so the Overview tab (heroes, role wheel, strip, numbers; the activity calendar excepted) and the Warding tab count only those matches. The Matches and Heroes tabs take the shared filters only.
+The Role dropdown above the page keeps only the matches the account played in one position, or in the cores (1–3) or the supports (4–5) together (see Position 1–5 of a player). The Queue dropdown next to it keeps solo or party matches the same way (see Solo or party). Both apply before the 25, 100 or 500 newest are taken, so the Overview tab (heroes, role wheel, strip, numbers; the activity calendar excepted) and the Warding tab count only those matches. The Matches, Heroes and Teammates tabs take the shared filters only.
 
 A lane counts as won or lost when `lane_nw_diff` is beyond ±500 net worth, and as even inside that (`EVEN` in `Profile.svelte`).
 
@@ -287,10 +287,6 @@ The role wheel (`RoleWheel.svelte`) gives each lane its share of the middle ring
 ### Activity (Profile)
 
 On the Overview tab: the account's games per day over the last 3 months, one square per day and a column per week from Monday (the first column starts on the Monday of the week 3 months ago). Every match of the shared filters counts, whatever the Role dropdown and the 25/100/500 buttons say. A day with games gets a circle whose area is in proportion to its games (the busiest day 18 px across, at least 5 px) and whose colour is its win rate: yellow (`--series-4`) at 50 %, mixed in OKLab towards red (`--dire`) below it and green (`--radiant`) above it, in proportion to the distance from 50 %: full red at 25 % or less, full green at 75 % or more. Days are the browser's local days.
-
-### Trend line (Trends)
-
-Each point is the mean of that match's value and of up to 19 parsed matches before it.
 
 ### Ward heatmap (Profile, team players)
 

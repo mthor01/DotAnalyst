@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 
 from . import derive, poll, queries
 from .db import DATA, Ability, Account, Hero, Item, open_engine
-from .metrics import NAMES
 from .poll import poll_forever
 from .replay import ReplayError
 from .steam import LEAGUES, SteamError, team_logo
@@ -89,13 +88,6 @@ def positions(match_id: int, start: int, end: int) -> list[dict]:
     if not log.is_file():
         raise HTTPException(404, f"no replay log for match {match_id}")
     return derive.positions(log, start, end)
-
-
-@app.get("/api/metrics")
-def metric_values(session: Db, where: Where, metric: str) -> list[dict]:
-    if metric not in NAMES:
-        raise HTTPException(404, f"no metric {metric!r}; there are: {', '.join(NAMES)}")
-    return queries.metric(session, where, metric)
 
 
 @app.get("/api/metric-averages")

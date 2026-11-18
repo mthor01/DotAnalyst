@@ -187,7 +187,6 @@ export type TeamDetail = {
 export type TeamTormentors = { count: number; time: number | null; enemies_dead: number | null; lead: number | null }
 export type TeamWisdom = { spawns: number; contested: number; heroes: number | null; taken: number; lead: number | null; kills: number | null; deaths: number | null }
 
-export type MetricPoint ={ match_id: number; start_time: number; value: number }
 export type MetricAverage = { name: string; average: number; matches: number }
 
 const signed = (digits: number) => (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(digits)}`
