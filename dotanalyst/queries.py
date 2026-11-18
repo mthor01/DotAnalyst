@@ -1,4 +1,5 @@
 """Aggregations over stored matches. Every query is seen from one tracked account's side, or from one league team's."""
+from collections import Counter
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import and_, case, func, or_, select
@@ -20,6 +21,7 @@ SCOREBOARD = (
     "xp_per_min", "net_worth", "level", "hero_damage", "tower_damage", "hero_healing", "items",
 )  # fmt: skip
 AVERAGED = ("kills", "deaths", "assists", "last_hits", "gold_per_min", "xp_per_min")  # of a league player on a hero
+PARTY_TOGETHER = 5  # matches on the same team after which a teammate counts as someone the player queues with
 LANE_ROLES = {1: "safe", 2: "mid", 3: "off", 4: "jungle"}  # OpenDota's lane_role, as the role wheel names them
 
 
@@ -127,9 +129,31 @@ def _lane_enemies(session: Session, where: list) -> dict[tuple[int, int], list[i
     }
 
 
+def _parties(session: Session, where: list) -> set[int]:
+    """The matches `where` finds in which the player queued with someone: OpenDota's party size above 1 where it is
+    stored, otherwise a teammate who was on the player's team in at least PARTY_TOGETHER stored matches."""
+    known = {r.match_id: r.party_size > 1 for r in session.execute(
+        _mine(MatchPlayer.match_id, MatchPlayer.party_size).where(*where, MatchPlayer.party_size.is_not(None))
+    )}  # fmt: skip
+    beside = and_(
+        OTHER.match_id == MatchPlayer.match_id, OTHER.account_id != MatchPlayer.account_id,
+        OTHER.account_id != ANONYMOUS, SAME_TEAM,
+    )  # fmt: skip
+    seen = session.execute(_mine(MatchPlayer.match_id, MatchPlayer.account_id, OTHER.account_id).join(OTHER, beside).where(*where)).all()
+    together = Counter(
+        session.execute(
+            select(OTHER.account_id).select_from(MatchPlayer).join(OTHER, beside)
+            .where(MatchPlayer.account_id.in_({me for _, me, _ in seen}))
+        ).scalars()
+    )  # shortcut: counts teammates of every account `where` names together, right while it names one
+    guessed = {match_id for match_id, _, mate in seen if together[mate] >= PARTY_TOGETHER}
+    return {m for m, party in known.items() if party} | (guessed - known.keys())
+
+
 def matches(session: Session, where: list) -> list[dict]:
     """The account's matches, newest first. `lane` and the ROW_METRICS are None without a parsed replay; `position`
-    is 1-5, see positions; `lane_enemies` the enemy heroes in the player's lane, see _lane_enemies."""
+    is 1-5, see positions; `lane_enemies` the enemy heroes in the player's lane, see _lane_enemies; `party` whether
+    the player queued with someone, see _parties."""
     p = MatchPlayer
     joined = {name: aliased(Metric) for name in ROW_METRICS}
     with_tracked = (
@@ -155,10 +179,10 @@ def matches(session: Session, where: list) -> list[dict]:
             m, and_(m.match_id == p.match_id, m.player_slot == p.player_slot, m.name == name)
         )
     rows = _rows(session, statement)
-    found, enemies = _positions(session, where), _lane_enemies(session, where)
+    found, enemies, parties = _positions(session, where), _lane_enemies(session, where), _parties(session, where)
     for r in rows:
         key = r["match_id"], r.pop("player_slot")
-        r["position"], r["lane_enemies"] = found[key], enemies.get(key, [])
+        r["position"], r["lane_enemies"], r["party"] = found[key], enemies.get(key, []), r["match_id"] in parties
     return rows
 
 

@@ -6,13 +6,13 @@ from collections import Counter
 from math import hypot
 from pathlib import Path
 
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert, select, update
 from sqlalchemy.orm import Session
 
 from . import queries
 from .db import (
-    DATA, TABLES, AbilityUpgrade, Building, Death, Derived, Lane, Match, Metric, PlayerMinute, Purchase, Recipe,
-    Teamfight, TeamfightPlayer, Tormentor, Ward, WisdomRune,
+    DATA, TABLES, AbilityUpgrade, Building, Death, Derived, Lane, Match, MatchPlayer, Metric, PlayerMinute, Purchase,
+    Recipe, Teamfight, TeamfightPlayer, Tormentor, Ward, WisdomRune,
 )  # fmt: skip
 from .metrics import METRICS
 
@@ -467,8 +467,23 @@ def derive(events: list[dict], recipes: dict[str, list[str]] | None = None) -> d
     }
 
 
+def store_parties(session: Session, match_id: int, opendota_dir: Path) -> None:
+    """Copy OpenDota's party size of each player onto the scoreboard, when its answer for the match is stored (it
+    is kept for the replay salt). The replay itself does not say who queued together."""
+    stored = opendota_dir / f"{match_id}.json.gz"
+    if not stored.exists():
+        return
+    for p in json.loads(gzip.decompress(stored.read_bytes())).get("players", []):
+        session.execute(
+            update(MatchPlayer)
+            .where(MatchPlayer.match_id == match_id, MatchPlayer.player_slot == p["player_slot"])
+            .values(party_size=p.get("party_size"))
+        )
+
+
 def derive_match(session: Session, match_id: int, raw_dir: Path = DATA / "raw") -> None:
     """Replace one match's derived rows."""
+    store_parties(session, match_id, raw_dir.parent / "opendota")
     recipes = {r.item: r.components for r in session.scalars(select(Recipe))}
     rows = derive(read_log(raw_dir / f"{match_id}.jsonl.gz"), recipes)
     for model in TABLES:

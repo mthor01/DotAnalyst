@@ -209,6 +209,15 @@ Every account page and every team page take a time span and a season; account pa
 
 Steam's data does not say who queued together. A match counts as "with tracked players" when another active tracked account was on the same team.
 
+### Solo or party
+
+Whether the player queued alone or with others (`_parties` in `queries.py`, the `party` flag of a match row), which the Queue dropdown on the Profile filters by:
+
+1. **OpenDota's party size** where it is known: above 1 is a party. Its answer is only stored for matches whose replay came through OpenDota (for the replay salt); `store_parties` in `derive.py` copies it onto `match_players.party_size` when the match is derived.
+2. **Otherwise a guess**: a party when a teammate with a public account was on the player's team in at least 5 (`PARTY_TOGETHER`) of all stored matches. Checked against the matches with a known party size, 3 to 5 gave 87–100 % right, and 5 called no solo match a party.
+
+Known limits: a party of players with hidden accounts looks solo to the guess; someone met often by chance in solo queue makes those matches look like a party; the count is over every stored match, so a filter on time does not change who counts as a regular teammate.
+
 ### Position 1–5 of a player
 
 Every row of an account's match list carries the player's position, 1 (carry) to 5 (hard support), worked out per team on each request (`positions` in `queries.py`).
@@ -269,7 +278,7 @@ Rules that live in the frontend (`frontend/src`), applied to what the API sends.
 
 The lane seen from the player's side: Radiant's safe lane is bottom and Dire's is top, the other side lane is the off lane; mid and jungle are themselves. A match without a parsed replay has no role.
 
-The Role dropdown above the page keeps only the matches the account played in one position, or in the cores (1–3) or the supports (4–5) together (see Position 1–5 of a player). It applies before the 25, 100 or 500 newest are taken, so the Overview tab (heroes, role wheel, strip, numbers; the activity calendar excepted) and the Warding tab count only those matches. The Matches and Heroes tabs take the shared filters only.
+The Role dropdown above the page keeps only the matches the account played in one position, or in the cores (1–3) or the supports (4–5) together (see Position 1–5 of a player). The Queue dropdown next to it keeps solo or party matches the same way (see Solo or party). Both apply before the 25, 100 or 500 newest are taken, so the Overview tab (heroes, role wheel, strip, numbers; the activity calendar excepted) and the Warding tab count only those matches. The Matches and Heroes tabs take the shared filters only.
 
 A lane counts as won or lost when `lane_nw_diff` is beyond ±500 net worth, and as even inside that (`EVEN` in `Profile.svelte`).
 

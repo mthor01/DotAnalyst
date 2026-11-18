@@ -16,6 +16,7 @@
   let error = $state('')
   let size = $state(100)
   let role = $state(0) // index into ROLES
+  let queue = $state(0) // index into QUEUES
 
   $effect(() => {
     let current = true
@@ -38,12 +39,13 @@
     ['Cores (pos 1–3)', [1, 2, 3]],
     ['Supports (pos 4–5)', [4, 5]],
   ]
+  const QUEUES = ['Solo and party', 'Solo', 'Party'] // see Solo or party in IMPLEMENTATION.md
   const TOP_HEROES = 10
   const WORST_MATCHUPS = 5
   const EVEN = 500 // a lane within this much net worth at 10:00 counts as even
-  const played = $derived(rows.filter((r) => ROLES[role][1].includes(r.position)))
+  const played = $derived(rows.filter((r) => ROLES[role][1].includes(r.position) && (!queue || r.party === (queue === 2))))
   const recent = $derived(played.slice(0, size)) // the API returns newest first
-  const as = $derived(role ? ` as ${ROLES[role][0].toLowerCase()}` : '')
+  const as = $derived((role ? ` as ${ROLES[role][0].toLowerCase()}` : '') + ['', ' solo', ' in a party'][queue])
   const wins = $derived(recent.filter((r) => r.win).length)
   const share = (part: number) => `${percent(part, recent.length)}%`
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
@@ -192,6 +194,12 @@
           {#each ROLES as [name], i}<option value={i}>{name}</option>{/each}
         </select>
       </label>
+      <label>
+        Queue
+        <select bind:value={queue}>
+          {#each QUEUES as name, i}<option value={i}>{name}</option>{/each}
+        </select>
+      </label>
       <div class="choice" role="group" aria-label="How many matches">
         {#each SIZES as n}
           <button aria-pressed={size === n} onclick={() => (size = n)}>{n} matches</button>
@@ -211,7 +219,7 @@
   {:else if shown === 'heroes'}
     <Heroes {query} />
   {:else if recent.length === 0}
-    <p class="muted">No matches{as} for these filters. Pick another role above.</p>
+    <p class="muted">No matches{as} for these filters. Pick another role or queue above.</p>
   {:else if shown === 'overview'}
   <dl class="card numbers">
     <div>

@@ -59,6 +59,7 @@ class MatchPlayer(Base):
     tower_damage: Mapped[int | None]
     hero_healing: Mapped[int | None]
     leaver_status: Mapped[int | None]
+    party_size: Mapped[int | None]  # OpenDota's, set by derive.store_parties when its answer is stored; 1 is solo
 
 
 class LeagueMatch(Base):
@@ -320,6 +321,8 @@ def open_engine() -> Engine:
             c.exec_driver_sql("ALTER TABLE player_game_lists ADD COLUMN replays_wanted BOOLEAN NOT NULL DEFAULT 0")
         if "twin_gates" not in {col["name"] for col in inspect(c).get_columns("player_minute")}:  # 0 until recompute
             c.exec_driver_sql("ALTER TABLE player_minute ADD COLUMN twin_gates INTEGER NOT NULL DEFAULT 0")
+        if "party_size" not in {col["name"] for col in inspect(c).get_columns("match_players")}:  # None until recompute
+            c.exec_driver_sql("ALTER TABLE match_players ADD COLUMN party_size INTEGER")
     return engine
 
 

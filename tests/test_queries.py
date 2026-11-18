@@ -4,7 +4,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, update
 from sqlalchemy.orm import Session
 
 from dotanalyst import queries
@@ -66,6 +66,18 @@ def test_matches_newest_first_with_result(session):
     mine = MATCHES[0]["players"][0]
     assert (rows[2]["kills"], rows[2]["gold_per_min"]) == (mine["kills"], mine["gold_per_min"])
     assert rows[2]["items"][:6] == [mine[f"item_{i}"] for i in range(6)]
+
+
+def test_matches_tell_solo_from_party(session):
+    party = lambda: {r["match_id"]: r["party"] for r in queries.matches(session, queries.conditions(ME))}
+    assert not any(party().values())  # the friend was on my team twice only
+    for i in range(3):
+        store_match(session, make_match(10 + i, (5, 1 + i), True, {0: ME, 1: FRIEND}))
+    store_match(session, make_match(20, (5, 9), True, {0: ME}))
+    session.execute(update(MatchPlayer).where(MatchPlayer.match_id == 11, MatchPlayer.player_slot == 0).values(party_size=1))
+    session.execute(update(MatchPlayer).where(MatchPlayer.match_id == 20, MatchPlayer.player_slot == 0).values(party_size=2))
+    # five matches with the friend now; OpenDota's word wins where stored: solo in 11, a party of anonymous players in 20
+    assert party() == {1: True, 2: False, 3: True, 10: True, 11: False, 12: True, 20: True}
 
 
 def test_matches_carry_side_lane_and_company(session):

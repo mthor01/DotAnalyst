@@ -1,4 +1,5 @@
 """Expected values were read by hand from the fixture replay's raw events, not produced by the code under test."""
+import gzip
 from collections import Counter
 from pathlib import Path
 
@@ -8,11 +9,12 @@ from sqlalchemy.orm import Session
 
 from dotanalyst import queries
 from dotanalyst.db import (
-    AbilityUpgrade, Base, Building, Death, Derived, Lane, Match, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Tormentor, Ward,
+    AbilityUpgrade, Base, Building, Death, Derived, Lane, Match, MatchPlayer, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Tormentor, Ward,
     WisdomRune,
 )  # fmt: skip
 from dotanalyst.derive import (
-    TABLES, WISDOM_SPOTS, Log, derive, fights, positions, read_log, recompute, tormentors, wisdom_runes, zone,
+    TABLES, WISDOM_SPOTS, Log, derive, fights, positions, read_log, recompute, store_parties, tormentors, wisdom_runes,
+    zone,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -267,3 +269,15 @@ def test_recompute_is_repeatable_and_feeds_the_match_query():
         assert len(found["deaths"]) == 37 and len(found["teamfights"]) == 5 and len(found["lanes"]) == 10
         assert queries.match(session, 2)["player_minute"] == []
         assert queries.match(session, 3) is None
+
+
+def test_store_parties_copies_opendota_party_sizes(tmp_path):
+    opendota_id = 9084835227  # tests/fixtures/opendota_match.json
+    (tmp_path / f"{opendota_id}.json.gz").write_bytes(gzip.compress((FIXTURES / "opendota_match.json").read_bytes()))
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as s:
+        s.add_all(MatchPlayer(match_id=opendota_id, player_slot=slot, hero_id=1, items=[]) for slot in (0, 1, 132))
+        store_parties(s, opendota_id, tmp_path)
+        store_parties(s, 1, tmp_path)  # nothing stored for it: no error
+        assert dict(s.execute(select(MatchPlayer.player_slot, MatchPlayer.party_size)).all()) == {0: 1, 1: 2, 132: 1}
