@@ -93,26 +93,24 @@
   const at10 = (key: keyof MatchRow) => mean(laneGames.map((r) => r[key] as number | null))
   const laneMatches = $derived(laneGames.filter((r) => r.xp_at_10 !== null).length)
   const laning = $derived([
+    ['General', [
+      ['Net worth lead', at10('lane_nw_diff'), 'your lane minus the enemy lane at 10:00', 'signed'],
+      ['Last-hit lead', at10('lane_cs_diff'), 'your lane minus the enemy lane at 10:00', 'signed'],
+      ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals at 10:00', ''],
+      ['Denies', at10('denies_at_10'), 'at 10:00', ''],
+      ['Net worth', at10('net_worth_at_10'), 'at 10:00', ''],
+      ['Experience', at10('xp_at_10'), 'at 10:00', ''],
+      ['Kills', at10('kills_by_10'), 'before 10:00', 'tenths'],
+      ['Deaths', at10('deaths_by_10'), 'before 10:00', 'tenths'],
+      ['Lotuses collected', at10('lotuses'), 'per match', 'tenths'],
+      ['Camps pulled', at10('camps_pulled'), 'per match', 'tenths'],
+      ['Twin gate trips', at10('twin_gates'), 'per match', 'tenths'],
+    ]],
     ['Damage to heroes before 10:00', [
       ['You dealt', at10('damage_at_10'), 'to enemy heroes', ''],
       ['Your lane dealt', at10('lane_damage_at_10'), 'you and your lane partner together', ''],
       ['Enemy lane dealt', at10('enemy_lane_damage_at_10'), 'the heroes you laned against, to your lane', ''],
       ['You took', at10('damage_taken_at_10'), 'from all enemy heroes', ''],
-    ]],
-    ['General', [
-      ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals at 10:00', ''],
-      ['Denies', at10('denies_at_10'), 'at 10:00', ''],
-      ['Net worth', at10('net_worth_at_10'), 'at 10:00', ''],
-      ['Experience', at10('xp_at_10'), 'at 10:00', ''],
-      ['Lotuses collected', at10('lotuses'), 'per match', 'tenths'],
-      ['Camps pulled', at10('camps_pulled'), 'per match', 'tenths'],
-      ['Twin gate trips', at10('twin_gates'), 'per match', 'tenths'],
-    ]],
-    ['Your lane against theirs', [
-      ['Net worth lead', at10('lane_nw_diff'), 'your lane minus the enemy lane at 10:00', 'signed'],
-      ['Last-hit lead', at10('lane_cs_diff'), 'your lane minus the enemy lane at 10:00', 'signed'],
-      ['Kills', at10('kills_by_10'), 'before 10:00', 'tenths'],
-      ['Deaths', at10('deaths_by_10'), 'before 10:00', 'tenths'],
     ]],
   ] as const) // prettier-ignore
   // the enemy heroes met in lane at least twice, the ones you fell furthest behind against first
