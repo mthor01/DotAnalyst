@@ -23,3 +23,6 @@
 # Documentation
 - IMPLEMENTATION.md records the logic of everything the site works out itself (lanes, teamfights, lotuses collected, camps pulled, healing, team stats, ...)
 - With every change, check IMPLEMENTATION.md and update it where a rule, a threshold or a known limit changed; a new computed stat gets its own section there
+
+# Design
+- Show heroes by picture, not by name: `heroPortrait` (wide) where there is room, `heroIcon` (small square) in tight spots; both in frontend/src/lib/constants.svelte.ts. The name goes in the image's `alt` and `title`, so hovering and screen readers still give it
