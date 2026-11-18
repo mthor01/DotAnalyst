@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { clock, get, percent, sortedBy, type TeamDetail, type TeamHero } from './lib/api'
+  import { RECENT_GAMES, clock, get, percent, sortedBy, type TeamDetail, type TeamHero } from './lib/api'
   import { heroIcon, heroName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import Openings from './lib/Openings.svelte'
@@ -55,8 +55,19 @@
   const one = (n: number) => n.toFixed(1)
   /** An average net worth lead from their side: +1234, -560, or – with none to average */
   const lead = (n: number | null) => (n === null ? '–' : `${n > 0 ? '+' : ''}${Math.round(n)}`)
-  const TABS = ['Games', 'Players', 'Draft', 'General'] as const
-  let tab = $state<(typeof TABS)[number]>('Games')
+  const TABS = ['Overview', 'Games', 'Players', 'Draft', 'General'] as const
+  let tab = $state<(typeof TABS)[number]>('Overview')
+  const stack = $derived(team?.players.filter((p) => p.main) ?? [])
+  const standIns = $derived(team?.players.filter((p) => !p.main).sort((a, b) => b.last_played - a.last_played) ?? [])
+  /** The site's own profile for a tracked player, else OpenDota's */
+  const profile = (account_id: number, tracked: boolean) =>
+    tracked ? `#account/${account_id}` : `https://www.opendota.com/players/${account_id}`
+  const sides = $derived(
+    [true, false].map((radiant) => {
+      const on = team?.games.filter((g) => g.radiant === radiant) ?? []
+      return { title: radiant ? 'As Radiant' : 'As Dire', games: on.length, wins: on.filter((g) => g.win).length }
+    }),
+  )
   let unfolded = $state<number[]>([]) // the games whose row is open
   const unfold = (id: number) => (unfolded = unfolded.includes(id) ? unfolded.filter((o) => o !== id) : [...unfolded, id])
   /** The parsed games where first blood is known */
@@ -70,6 +81,14 @@
   const parsed = $derived(team?.games.filter((g) => g.replay).map((g) => ({ radiant: g.radiant, win: g.win })) ?? [])
   const PICKS = ['1st pick (first phase)', '2nd pick (second phase)', '3rd pick (second phase)', '4th pick (second phase)', '5th pick (last phase)']
 </script>
+
+{#snippet face(p: TeamDetail['players'][number], size: number)}
+  {#if p.avatar}
+    <img class="face" src={p.avatar} alt="" width={size} height={size} loading="lazy" />
+  {:else}
+    <span class="face blank" style:width="{size}px" style:height="{size}px" aria-hidden="true">{(p.name ?? '?').slice(0, 1).toUpperCase()}</span>
+  {/if}
+{/snippet}
 
 {#snippet icons(ids: number[])}
   <span class="icons">
@@ -103,7 +122,67 @@
     {/each}
   </div>
 
-  {#if tab === 'General'}
+  {#if tab === 'Overview'}
+  <dl class="facts">
+    <div><dt>Record</dt><dd>{wins}–{games - wins}</dd><dd class="muted">{percent(wins, games)}% won</dd></div>
+    {#each sides as s}
+      <div><dt>{s.title}</dt><dd>{s.wins}–{s.games - s.wins}</dd><dd class="muted">{s.games ? `${percent(s.wins, s.games)}% won` : 'no games'}</dd></div>
+    {/each}
+    <div>
+      <dt>First blood</dt>
+      <dd>{bloods.length ? `${percent(drew, bloods.length)}%` : '–'}</dd>
+      <dd class="muted">{bloods.length ? `of ${bloods.length} parsed games` : 'no parsed game'}</dd>
+    </div>
+    <div>
+      <dt>Last {Math.min(RECENT_GAMES, games)} games</dt>
+      <dd class="form">
+        {#each team.games.slice(0, RECENT_GAMES).reverse() as g (g.match_id)}
+          <a href="#match/{g.match_id}" class="dot {g.win ? 'won' : 'lost'}" title="{date(g.start_time)}: {g.win ? 'won' : 'lost'} against {g.opponent || 'no team'}" aria-label="{date(g.start_time)}, {g.win ? 'won' : 'lost'}"></a>
+        {/each}
+      </dd>
+      <dd class="muted">oldest to newest</dd>
+    </div>
+  </dl>
+
+  <h2>Main stack</h2>
+  <p class="muted">
+    The five players seen most in their last {RECENT_GAMES} games; a tie goes to whoever played more lately. The bar
+    under a player fills one step per game of those. A name opens the player's profile here when the site tracks them,
+    else on OpenDota.
+  </p>
+  <ol class="lineup">
+    {#each stack as p (p.account_id)}
+      <li>
+        <a class="member" href={profile(p.account_id, p.tracked)} target={p.tracked ? undefined : '_blank'} rel="noopener">
+          {@render face(p, 112)}
+          <b>{p.name ?? `Player ${p.account_id}`}</b>
+        </a>
+        <span class="presence" role="img" aria-label="In {p.recent} of the last {RECENT_GAMES} games">
+          {#each { length: RECENT_GAMES } as _, i}<i class:on={i < p.recent}></i>{/each}
+        </span>
+        <span class="muted">{p.games} games{p.tracked ? ', tracked' : ''}</span>
+        {@render icons(p.heroes.slice(0, 3).map((h) => h.hero_id))}
+      </li>
+    {/each}
+  </ol>
+
+  <h2>Stand-ins</h2>
+  {#if standIns.length}
+    <ul class="bench">
+      {#each standIns as p (p.account_id)}
+        <li>
+          <a href={profile(p.account_id, p.tracked)} target={p.tracked ? undefined : '_blank'} rel="noopener">
+            {@render face(p, 36)}
+            <span><b>{p.name ?? `Player ${p.account_id}`}</b><br /><span class="muted">{p.games} {p.games === 1 ? 'game' : 'games'}, last {date(p.last_played)}</span></span>
+          </a>
+        </li>
+      {/each}
+    </ul>
+  {:else}
+    <p class="muted">Nobody else played for them in these games.</p>
+  {/if}
+
+  {:else if tab === 'General'}
   <div class="pair">
     <section>
       <h2>Wards placed</h2>
@@ -556,5 +635,115 @@
   .profile h3 {
     margin: 6px 0 8px;
     font-size: 15px;
+  }
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 40px;
+    margin: 14px 0 8px;
+  }
+  .facts dt {
+    color: var(--text-2);
+    font-size: 13px;
+  }
+  .facts dd {
+    margin: 2px 0 0;
+    font-size: 22px;
+    font-variant-numeric: tabular-nums;
+  }
+  .facts dd.muted {
+    font-size: 13px;
+  }
+  .form {
+    display: flex;
+    gap: 2px;
+    padding-top: 8px;
+  }
+  /* the lineup: five tall portraits on one floor, a team photo more than a table */
+  .lineup {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+    margin: 0;
+    padding: 18px;
+    list-style: none;
+    background: linear-gradient(to top, var(--raised), var(--surface) 70%);
+    border-radius: 6px;
+  }
+  .lineup li {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+  }
+  .member {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .member .face {
+    border-radius: 8px;
+    box-shadow: 0 0 0 2px var(--page), 0 0 0 4px var(--axis);
+  }
+  .member:hover .face,
+  .member:focus-visible .face {
+    box-shadow: 0 0 0 2px var(--page), 0 0 0 4px var(--series-1);
+  }
+  .member:hover b {
+    text-decoration: underline;
+  }
+  .face {
+    display: block;
+    flex: none;
+    object-fit: cover;
+    border-radius: 50%;
+  }
+  .face.blank {
+    display: grid;
+    place-items: center;
+    background: var(--axis);
+    color: var(--text-2);
+    font-weight: 600;
+  }
+  .member .blank {
+    font-size: 44px;
+  }
+  .bench .blank {
+    font-size: 16px;
+  }
+  .presence {
+    display: flex;
+    gap: 2px;
+  }
+  .presence i {
+    width: 9px;
+    height: 5px;
+    border-radius: 1px;
+    background: var(--axis);
+  }
+  .presence i.on {
+    background: var(--series-1);
+  }
+  .bench {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .bench a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .bench a:hover b {
+    text-decoration: underline;
   }
 </style>

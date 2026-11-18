@@ -21,6 +21,7 @@ SCOREBOARD = (
     "xp_per_min", "net_worth", "level", "hero_damage", "tower_damage", "hero_healing", "items",
 )  # fmt: skip
 AVERAGED = ("kills", "deaths", "assists", "last_hits", "gold_per_min", "xp_per_min")  # of a league player on a hero
+RECENT = 10  # a team's newest games, whose most frequent five players are its main stack
 PARTY_TOGETHER = 5  # matches on the same team after which a teammate counts as someone the player queues with
 LANE_ROLES = {1: "safe", 2: "mid", 3: "off", 4: "jungle"}  # OpenDota's lane_role, as the role wheel names them
 
@@ -349,7 +350,8 @@ def team(
     banned + picked_against + open is the number of games. A player's wards come from the games whose replay is
     parsed (`replays` says how many of the player's games those are), and from their parsed games outside any
     league (`usual_replays`, wards with `league` False). `usual_waiting` counts the usual games whose replay the
-    poller still means to get, None for a player whose team was never checked. The dates and the league narrow the games counted; a team
+    poller still means to get, None for a player whose team was never checked. `main` marks the five players with the
+    most of the team's newest RECENT games (the newer last game breaks a tie), the others stand in. The dates and the league narrow the games counted; a team
     with no game in them has an empty answer, not None.
     """
     names = {t["team_id"]: t["name"] for t in teams(session)}
@@ -373,6 +375,7 @@ def team(
     placed_by: dict[tuple[int, int], dict] = {}  # (match, player slot) -> the player
     side_of = {g.match_id: g.radiant_team_id == team_id for g in rows if g.match_id in parsed}  # True: Radiant
     tormentor, blood = _first_tormentors(session, side_of), _first_bloods(session, side_of)
+    recent = {g.match_id for g in rows[:RECENT]}
     for g in rows:
         radiant = g.radiant_team_id == team_id
         win = radiant == g.radiant_win
@@ -396,9 +399,13 @@ def team(
             hero(p["hero_id"])["wins"] += win
             if p.get("account_id") in (None, ANONYMOUS):
                 continue
-            blank = {"account_id": p["account_id"], "games": 0, "replays": 0, "usual_replays": 0, "heroes": {}, "wards": [], "parsed": []}
-            player = players.setdefault(p["account_id"], blank)
+            blank = {
+                "account_id": p["account_id"], "games": 0, "recent": 0, "last_played": g.start_time, "replays": 0,
+                "usual_replays": 0, "heroes": {}, "wards": [], "parsed": [],
+            }  # fmt: skip
+            player = players.setdefault(p["account_id"], blank)  # rows are newest first: last_played is their newest
             player["games"] += 1
+            player["recent"] += g.match_id in recent
             player["replays"] += g.match_id in parsed
             if g.match_id in parsed:  # the ward map's games, wards or none
                 player["parsed"].append({"radiant": radiant, "league": True, "win": win})
@@ -447,7 +454,10 @@ def team(
                 }
             )  # fmt: skip
     n = PlayerName
-    known = dict(session.execute(select(n.account_id, n.name).where(n.account_id.in_(players))).all())
+    known = {r.account_id: r for r in session.execute(select(n.account_id, n.name, n.avatar).where(n.account_id.in_(players)))}
+    tracked = dict(session.execute(select(Account.account_id, Account.avatar).where(Account.active, Account.account_id.in_(players))).all())
+    stack = sorted((p for p in players.values() if p["recent"]), key=lambda p: (-p["recent"], -p["last_played"]))[:5]
+    stack = {p["account_id"] for p in stack}
     # their games outside the league, for the role wheel: the time and season filters do not apply to them
     pgl = PlayerGameList
     listed = dict(session.execute(select(pgl.account_id, pgl.replays_wanted).where(pgl.account_id.in_(players))).all())
@@ -474,7 +484,11 @@ def team(
             }
         )  # fmt: skip
     for player in players.values():
-        player["name"] = known.get(player["account_id"])
+        name = known.get(player["account_id"])
+        player["name"] = name and name.name
+        player["avatar"] = name and name.avatar or tracked.get(player["account_id"]) or None
+        player["tracked"] = player["account_id"] in tracked
+        player["main"] = player["account_id"] in stack
         player["outside_listed"] = player["account_id"] in listed
         player["usual_waiting"] = waiting.get(player["account_id"], 0) if player["account_id"] in wanted else None
         player["outside"] = outside[player["account_id"]]

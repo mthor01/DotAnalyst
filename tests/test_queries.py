@@ -272,6 +272,23 @@ def test_team_players_with_their_heroes(league):
         assert on_50[stat] == first[stat]
 
 
+def test_team_main_stack_is_the_five_most_seen_in_its_newest_games(league):
+    stand_in = league_game(6, 6, US, THEM, True, radiant_bans=[], dire_bans=[])
+    stand_in["players"][4]["account_id"] = 1009  # plays once, in the newest game, for 1004
+    store_league_match(league, stand_in)
+    league.add(Account(account_id=1001, avatar="https://example.com/1001.jpg"))
+    league.add(PlayerName(account_id=1002, name="Mid", avatar="https://example.com/1002.jpg"))
+    league.commit()
+    players = {p["account_id"]: p for p in queries.team(league, US)["players"]}
+    assert {a for a, p in players.items() if p["main"]} == {1000, 1001, 1002, 1003, 1004}
+    assert (players[1009]["main"], players[1009]["recent"], players[1004]["recent"]) == (False, 1, 3)
+    assert players[1004]["last_played"] == LEAGUE_GAMES[2]["start_time"]
+    # the picture of a league player, else of the tracked account; only an active account is tracked
+    assert (players[1001]["avatar"], players[1001]["tracked"]) == ("https://example.com/1001.jpg", True)
+    assert (players[1002]["avatar"], players[1002]["tracked"]) == ("https://example.com/1002.jpg", False)
+    assert players[1000]["avatar"] is None
+
+
 def test_team_players_wards_come_from_the_games_with_a_parsed_replay(league):
     assert all(not g["replay"] for g in queries.team(league, US)["games"])
     assert queries.team(league, US)["players"][0]["replays"] == 0

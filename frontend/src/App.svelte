@@ -51,6 +51,18 @@
     if (filters.account_id) localStorage.setItem('account_id', filters.account_id)
   })
 
+  // #account/123 picks that tracked account and opens its profile: how other pages link to one
+  function route() {
+    const picked = /^account\/(\d+)$/.exec(location.hash.slice(1))?.[1]
+    if (picked) {
+      filters.account_id = picked
+      localStorage.setItem('account_id', picked) // still the one picked once the accounts have loaded
+      history.replaceState(null, '', '#profile')
+    }
+    hash = location.hash.slice(1)
+  }
+  route()
+
   let checking = $state(false)
   let checked = $state('') // what the last check found, or why it failed
   let version = $state(0) // goes up with every check; the page below is built anew, so it asks for its data again
@@ -80,7 +92,7 @@
   }
 </script>
 
-<svelte:window onhashchange={() => (hash = location.hash.slice(1))} />
+<svelte:window onhashchange={route} />
 
 <main>
   <header class="top">

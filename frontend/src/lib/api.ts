@@ -166,9 +166,11 @@ export type TeamDetail = {
   /** `wards` are those of the `replays` games of the player whose replay is parsed. `outside` are the player's last
    *  games outside the league, newest first, whatever the filters; `outside_listed` is false until they were asked for.
    *  `usual_waiting`: usual games of the last 30 days whose replay the poller still means to get, null until Refresh
-   *  on the team page asked for them. */
+   *  on the team page asked for them. `main`: one of the five most seen in their newest `RECENT_GAMES` games
+   *  (`recent` of them), the others stand in. `tracked`: an account of this site, whose profile it has. */
   players: {
-    account_id: number; name: string | null; games: number; replays: number; usual_replays: number; heroes: TeamPlayerHero[]; wards: WardSpot[]; parsed: { radiant: boolean; league: boolean; win: boolean }[]
+    account_id: number; name: string | null; avatar: string | null; tracked: boolean; main: boolean; recent: number; last_played: number
+    games: number; replays: number; usual_replays: number; heroes: TeamPlayerHero[]; wards: WardSpot[]; parsed: { radiant: boolean; league: boolean; win: boolean }[]
     outside_listed: boolean
     usual_waiting: number | null
     outside: { match_id: number; hero_id: number; win: boolean; role: 'safe' | 'mid' | 'off' | 'jungle' | 'none'; kills: number | null; deaths: number | null; assists: number | null }[]
@@ -184,6 +186,7 @@ export type TeamDetail = {
   /** draft[k][p]: how often their (k+1)-th pick played position p+1, in their parsed Captains Mode games */
   draft: number[][]
 }
+export const RECENT_GAMES = 10 // queries.RECENT
 export type TeamTormentors = { count: number; time: number | null; enemies_dead: number | null; lead: number | null }
 export type TeamWisdom = { spawns: number; contested: number; heroes: number | null; taken: number; lead: number | null; kills: number | null; deaths: number | null }
 

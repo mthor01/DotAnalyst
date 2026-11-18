@@ -250,6 +250,15 @@ Built from the drafts and scoreboards of the league games (`league_matches`).
   - **Wisdom runes:** split into the rune in the team's half and the one in the enemy's. The team **contested** a rune when at least one of its heroes came to it (see *Wisdom runes* above). Heroes and lead are averaged over the contested ones; taken counts every rune the team picked up. **Kills** and **deaths per game** are the enemy's and the team's deaths at the rune, summed over every rune of that half, contested or not, and divided by the parsed games.
   - **Roles in their draft:** the team's picks from `picks_bans` in draft order, 1st to 5th. Each hero is matched to the team's player on it, and the count goes to that player's position in the game (*Position 1–5 of a player*). In Captains Mode a team picks once in the first phase, three times in the second and once in the last (checked on the stored drafts, November 2026). A game without a recorded draft adds nothing.
 
+### Main stack and stand-ins (team page, Overview tab)
+
+- **Main stack:** the five players who played in the most of the team's newest 10 league games (`RECENT` in `queries.py`) shown on the page, so the time and season filters apply. A tie goes to the player whose latest game for the team is newer. Only players in at least one of those 10 games can be in it, so a team with fewer than five such players shows a smaller stack.
+- **Stand-ins:** every other player who played for the team in the filtered games, newest last game first.
+- Each member's bar fills one step per game of those 10 they played. Per player the page also shows all their games for the team and their three most played heroes.
+- **Pictures:** the Steam profile picture (`avatarmedium` of `GetPlayerSummaries`), kept in `player_names.avatar`. The league sync asks for it together with a new player's name, and once for players whose name was stored before pictures were (`avatar` still NULL). `""` means Steam sent no picture or has no profile for the id, and the player is not asked again. Without a picture, a tracked account's own picture is used, else the name's first letter.
+- **Links:** a player who is a tracked account opens that account's profile on this site (`#account/<id>` picks the account, then becomes `#profile`). Anyone else opens their OpenDota page in a new tab.
+- The Overview's other numbers: the record overall and per side, the first blood share (as on the General tab, over parsed games), and the results of the newest 10 games, oldest to newest.
+
 ### A league player's games outside the league
 
 Shown on the team page under each player, as the same role wheel as a profile's (`dotanalyst/opendota.py`).

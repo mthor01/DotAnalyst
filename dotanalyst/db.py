@@ -85,6 +85,7 @@ class PlayerName(Base):
 
     account_id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
+    avatar: Mapped[str | None]  # Steam profile picture URL; "" when Steam has none, None until asked
 
 
 class PlayerGameList(Base):
@@ -317,6 +318,8 @@ def open_engine() -> Engine:
     with engine.begin() as c:  # create_all adds no columns to a table that exists
         if "avatar" not in {col["name"] for col in inspect(c).get_columns("accounts")}:
             c.exec_driver_sql("ALTER TABLE accounts ADD COLUMN avatar VARCHAR")
+        if "avatar" not in {col["name"] for col in inspect(c).get_columns("player_names")}:
+            c.exec_driver_sql("ALTER TABLE player_names ADD COLUMN avatar VARCHAR")
         if "replays_wanted" not in {col["name"] for col in inspect(c).get_columns("player_game_lists")}:
             c.exec_driver_sql("ALTER TABLE player_game_lists ADD COLUMN replays_wanted BOOLEAN NOT NULL DEFAULT 0")
         if "twin_gates" not in {col["name"] for col in inspect(c).get_columns("player_minute")}:  # 0 until recompute

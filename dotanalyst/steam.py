@@ -156,7 +156,7 @@ def store_league_match(session: Session, m: dict) -> None:
 
 
 def sync_leagues(session: Session, client: httpx.Client, key: str, newest_only: bool = False) -> int:
-    """Store the games of LEAGUES that are not stored yet, and their players' Steam names. Returns the new games.
+    """Store the games of LEAGUES that are not stored yet, and their players' Steam names and pictures. Returns the new games.
 
     Only the newest 500 games of a league can be listed, see the shortcut below. newest_only stops reading a league
     at a page whose games are all stored.
@@ -182,14 +182,24 @@ def sync_leagues(session: Session, client: httpx.Client, key: str, newest_only: 
             # falls between two pages; both measured against dota2.com's GetLeagueData. An older game can still be
             # listed with account_id of one of its players next to league_id, if the missing ones are ever wanted
             params["start_at_match_id"] = page[-1]["match_id"] - 1
-    if newest_only and not new:
+    # names stored before pictures were: asked once more, for the picture
+    no_picture = {n.account_id: n for n in session.scalars(select(PlayerName).where(PlayerName.avatar.is_(None)))}
+    if newest_only and not new and not no_picture:
         return 0  # no new players to name, and reading every stored game each minute is not free
     players = {p.get("account_id") for raw in session.scalars(select(LeagueMatch.raw_json)) for p in raw["players"]}
-    unnamed = sorted(players - {None, ANONYMOUS} - set(session.scalars(select(PlayerName.account_id))))
-    for i in range(0, len(unnamed), 100):  # Steam takes 100 ids in one request
-        steam_ids = ",".join(str(a + STEAM_ID_BASE) for a in unnamed[i : i + 100])
+    unnamed = players - {None, ANONYMOUS} - set(session.scalars(select(PlayerName.account_id)))
+    asked = sorted(unnamed | no_picture.keys())
+    for i in range(0, len(asked), 100):  # Steam takes 100 ids in one request
+        steam_ids = ",".join(str(a + STEAM_ID_BASE) for a in asked[i : i + 100])
         for p in call(client, key, NAMES, steamids=steam_ids)["players"]:
-            session.add(PlayerName(account_id=int(p["steamid"]) - STEAM_ID_BASE, name=p["personaname"]))
+            account_id, avatar = int(p["steamid"]) - STEAM_ID_BASE, p.get("avatarmedium", "")
+            if account_id in no_picture:
+                no_picture[account_id].avatar = avatar
+            else:
+                session.add(PlayerName(account_id=account_id, name=p["personaname"], avatar=avatar))
+        for account_id in asked[i : i + 100]:
+            if account_id in no_picture and no_picture[account_id].avatar is None:
+                no_picture[account_id].avatar = ""  # Steam has no profile now: not asked again
         session.commit()
     return new
 

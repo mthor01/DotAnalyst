@@ -4,7 +4,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, select, update
 from sqlalchemy.orm import Session
 
 from dotanalyst import steam
@@ -235,7 +235,10 @@ class FakeLeague:
         if "GetPlayerSummaries" in request.url.path:
             accounts = [int(i) - steam.STEAM_ID_BASE for i in params["steamids"].split(",")]
             assert len(accounts) <= 100
-            players = [{"steamid": str(a + steam.STEAM_ID_BASE), "personaname": f"player {a}"} for a in accounts]
+            players = [
+                {"steamid": str(a + steam.STEAM_ID_BASE), "personaname": f"player {a}", "avatarmedium": f"https://example.com/{a}.jpg"}
+                for a in accounts
+            ]
             return httpx.Response(200, json={"response": {"players": [p for p in players if "1010" not in p["personaname"]]}})
         if "GetMatchHistoryBySequenceNum" in request.url.path:
             seq = int(params["start_at_match_seq_num"])
@@ -291,8 +294,24 @@ def test_a_newest_only_league_sync_stops_at_a_page_that_is_all_stored(session):
 def test_league_sync_stores_the_players_steam_names(session):
     steam.sync_leagues(session, FakeLeague().client, KEY)
     assert session.get(PlayerName, 1001).name == "player 1001"
+    assert session.get(PlayerName, 1001).avatar == "https://example.com/1001.jpg"
     assert session.get(PlayerName, NO_PROFILE) is None
     assert session.scalar(select(func.count()).select_from(PlayerName)) == 9
+
+
+def test_names_stored_before_pictures_get_their_picture_once(session):
+    steam.sync_leagues(session, FakeLeague().client, KEY)
+    session.execute(update(PlayerName).values(avatar=None))
+    session.add(PlayerName(account_id=NO_PROFILE, name="gone since"))  # Steam no longer has this profile
+    session.commit()
+    fake = FakeLeague()
+    steam.sync_leagues(session, fake.client, KEY, newest_only=True)
+    assert fake.count("GetPlayerSummaries") == 1
+    assert session.get(PlayerName, 1002).avatar == "https://example.com/1002.jpg"
+    assert (session.get(PlayerName, NO_PROFILE).name, session.get(PlayerName, NO_PROFILE).avatar) == ("gone since", "")
+    again = FakeLeague()
+    steam.sync_leagues(session, again.client, KEY, newest_only=True)
+    assert again.count("GetPlayerSummaries") == 0
 
 
 def test_team_logo_is_asked_for_once_and_kept(tmp_path):
