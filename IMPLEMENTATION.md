@@ -278,7 +278,7 @@ Rules that live in the frontend (`frontend/src`), applied to what the API sends.
 
 The lane seen from the player's side: Radiant's safe lane is bottom and Dire's is top, the other side lane is the off lane; mid and jungle are themselves. A match without a parsed replay has no role.
 
-The Role dropdown above the page keeps only the matches the account played in one position, or in the cores (1–3) or the supports (4–5) together (see Position 1–5 of a player). The Queue dropdown next to it keeps solo or party matches the same way (see Solo or party). Both apply before the 25, 100 or 500 newest are taken, so the Overview tab (heroes, role wheel, strip, numbers; the activity calendar excepted) and the Warding tab count only those matches. The Matches, Heroes and Teammates tabs take the shared filters only.
+The Role dropdown above the page keeps only the matches the account played in one position, or in the cores (1–3) or the supports (4–5) together (see Position 1–5 of a player). The Queue dropdown next to it keeps solo or party matches the same way (see Solo or party). Both apply before the 25, 100 or 500 newest are taken, so the Overview tab (heroes, role wheel, strip, numbers; the activity calendar excepted) and the Warding tab count only those matches. The Matches, Heroes and Teammates tabs take the shared filters only. On the Overview hero table and the Heroes tab the match count draws a bar beside the number, full for the most played hero of the table. A row of the Heroes tab unfolds into the latest 20 matches on that hero, newest first, from the same matches the Matches tab lists.
 
 A lane counts as won or lost when `lane_nw_diff` is beyond ±500 net worth, and as even inside that (`EVEN` in `Profile.svelte`).
 

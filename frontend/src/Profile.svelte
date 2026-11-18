@@ -7,6 +7,7 @@
   import RoleWheel, { tally, type Role } from './lib/RoleWheel.svelte'
   import WardHeat from './lib/WardHeat.svelte'
   import WinRate from './lib/WinRate.svelte'
+  import Count from './lib/Count.svelte'
 
   let { query, account, tab }: { query: string; account: Account | undefined; tab: string } = $props()
   const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding', teammates: 'Teammates' }
@@ -216,7 +217,7 @@
   {#if shown === 'matches'}
     <Matches {query} />
   {:else if shown === 'heroes'}
-    <Heroes {query} />
+    <Heroes {query} matches={rows} />
   {:else if shown === 'teammates'}
     <Teammates {query} />
   {:else if recent.length === 0}
@@ -252,13 +253,13 @@
     <section class="card">
       <table>
         <thead>
-          <tr><th>Hero</th><th class="num">Matches</th><th>Win rate</th><th class="num">K / D / A</th></tr>
+          <tr><th>Hero</th><th>Matches</th><th>Win rate</th><th class="num">K / D / A</th></tr>
         </thead>
         <tbody>
           {#each heroes.slice(0, TOP_HEROES) as h (h.hero_id)}
             <tr>
               <td><img class="icon" src={heroPortrait(h.hero_id)} alt={heroName(h.hero_id)} title={heroName(h.hero_id)} width="44" height="25" loading="lazy" /></td>
-              <td class="num">{h.games}</td>
+              <td><Count games={h.games} max={heroes[0].games} /></td>
               <td><WinRate wins={h.wins} games={h.games} /></td>
               <td class="num">{(h.kills / h.games).toFixed(1)} / {(h.deaths / h.games).toFixed(1)} / {(h.assists / h.games).toFixed(1)}</td>
             </tr>
