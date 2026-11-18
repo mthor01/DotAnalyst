@@ -20,10 +20,15 @@
   const league = $derived(!!teamId || (!matchId && page === 'teams'))
   let accounts = $state<Account[]>([])
   let error = $state('')
-  let filters = $state({ account_id: '', lobby_type: '', game_mode: '', league_id: '', date_from: '', date_to: '' })
+  let filters = $state({ account_id: '', lobby_type: '', game_mode: '' })
   // a number is that many months back from today; only "dates" uses the From and To days
   const SPANS = { '1': 'Last month', '3': 'Last 3 months', '6': 'Last 6 months', '12': 'Last year', all: 'All time', dates: 'Dates…' }
-  let span = $state('all')
+  // season and time: the team pages keep their own, so a team's season does not narrow the profile
+  const times = $state({
+    player: { league_id: '', span: 'all', date_from: '', date_to: '' },
+    team: { league_id: '', span: 'all', date_from: '', date_to: '' },
+  })
+  const time = $derived(league ? times.team : times.player)
   function monthsAgo(n: number) {
     const day = new Date()
     day.setMonth(day.getMonth() - n)
@@ -32,7 +37,8 @@
 
   // every view takes the same filters, so they travel as one query string
   const query = $derived.by(() => {
-    const sent = { ...filters }
+    const { span, ...dates } = time
+    const sent = { ...filters, ...dates }
     if (span !== 'dates') [sent.date_from, sent.date_to] = [span === 'all' ? '' : monthsAgo(Number(span)), '']
     return new URLSearchParams(Object.entries(sent).filter(([, v]) => v !== '')).toString()
   })
@@ -138,20 +144,20 @@
     </label>
     <label>
       Season
-      <select bind:value={filters.league_id}>
+      <select bind:value={time.league_id}>
         <option value="">All games</option>
         {#each Object.entries(constants.leagues).reverse() as [id, name]}<option value={id}>{name}</option>{/each}
       </select>
     </label>
     <label>
       Time
-      <select bind:value={span}>
+      <select bind:value={time.span}>
         {#each Object.entries(SPANS) as [id, name]}<option value={id}>{name}</option>{/each}
       </select>
     </label>
-    {#if span === 'dates'}
-      <label>From <input type="date" bind:value={filters.date_from} /></label>
-      <label>To <input type="date" bind:value={filters.date_to} /></label>
+    {#if time.span === 'dates'}
+      <label>From <input type="date" bind:value={time.date_from} /></label>
+      <label>To <input type="date" bind:value={time.date_to} /></label>
     {/if}
   </div>
 

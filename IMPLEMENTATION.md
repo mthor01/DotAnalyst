@@ -204,6 +204,7 @@ Every account page and every team page take a time span and a season; account pa
 - **Time** is last month, last 3, 6 or 12 months, all time, or two dates. A span of months starts on today's date that many calendar months back (`monthsAgo` in `App.svelte`) and has no end. The dates are local days and both count: from 1 Nov to 3 Nov is all of the 1st to the end of the 3rd (`between` in `queries.py`).
 - **Season** is one of the tracked leagues (`LEAGUES` in `steam.py`). A match belongs to it when `league_matches` has it under that league id, so on an account page a season shows only league games the account itself played.
 - A known team without a game in the filters gets an empty page, not "unknown team".
+- The team pages keep their own time and season (`times` in `App.svelte`), apart from the account pages: a season picked on a team page does not narrow the profile, and the other way round. Both are kept until the page reloads.
 
 ### Played with a tracked account
 
