@@ -212,7 +212,7 @@ Steam's data does not say who queued together. A match counts as "with tracked p
 
 ### Adding a profile (Add profile in the header)
 
-`POST /api/accounts` takes the Dota account id (the friend id) or the 64-bit Steam id; a number of at least `STEAM_ID_BASE` (76561197960265728) is a Steam id and has that subtracted. What is left must lie between 0 and the anonymous id (`ANONYMOUS`, 4294967295), both excluded, or the answer is 422. The browser sends the id as text, as a Steam id is too long for a JavaScript number. An account tracked before and removed is tracked again with its stored matches. Nothing is fetched at once: the poller reads the account's matches on its next round. An account without a name gets its Steam name (`personaname`) when the poller asks Steam for its picture.
+`POST /api/accounts` takes the Dota account id (the friend id) or the 64-bit Steam id; a number of at least `STEAM_ID_BASE` (76561197960265728) is a Steam id and has that subtracted. What is left must lie between 0 and the anonymous id (`ANONYMOUS`, 4294967295), both excluded, or the answer is 422. The browser sends the id as text, as a Steam id is too long for a JavaScript number. An account tracked before and removed is tracked again with its stored matches. The account's Steam picture and, when it has no name, its Steam name (`personaname`) are asked for at once (`store_avatars`, up to 100 accounts per call), so the Account menu shows them right away; if Steam does not answer, the poller asks again on its next round. The matches are not fetched at once: the poller reads them on its next round. Add frequent teammates does the same for every player it adds.
 
 ### Frequent teammates (Profile, Add frequent teammates)
 

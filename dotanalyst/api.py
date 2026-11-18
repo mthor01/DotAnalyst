@@ -16,7 +16,7 @@ from . import derive, opendota, poll, queries
 from .db import DATA, Ability, Account, Hero, Item, League, open_engine
 from .poll import poll_forever
 from .replay import ReplayError
-from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, team_logo
+from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, store_avatars, team_logo
 
 engine = open_engine()
 FRONTEND = Path("frontend/dist")
@@ -48,12 +48,19 @@ def accounts(session: Db) -> list[dict]:
 
 
 def track(session: Session, account_ids: list[int]) -> None:
-    """Track these accounts from the next poll on; one tracked before is tracked again, with its stored matches."""
+    """Track these accounts from the next poll on; one tracked before is tracked again, with its stored matches.
+    Their Steam names and pictures are asked for at once, so the Account menu shows them before their matches load."""
     for account_id in account_ids:
         account = session.get(Account, account_id) or Account(account_id=account_id)
         account.active = True
         session.add(account)
     session.commit()
+    if key := os.environ.get("STEAM_API_KEY"):
+        try:
+            with httpx.Client() as client:
+                store_avatars(session, client, key)
+        except SteamError:
+            pass  # the picture stays unasked, so the poller asks again on its next round
 
 
 @app.post("/api/accounts")
