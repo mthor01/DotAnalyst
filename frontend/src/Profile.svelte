@@ -5,6 +5,7 @@
   import Matches from './Matches.svelte'
   import RoleWheel, { tally, type Role } from './lib/RoleWheel.svelte'
   import WardHeat from './lib/WardHeat.svelte'
+  import WinRate from './lib/WinRate.svelte'
 
   let { query, account, tab }: { query: string; account: Account | undefined; tab: string } = $props()
   const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding' }
@@ -221,15 +222,10 @@
         </thead>
         <tbody>
           {#each heroes.slice(0, TOP_HEROES) as h (h.hero_id)}
-            {@const rate = percent(h.wins, h.games)}
             <tr>
               <td><img class="icon" src={heroPortrait(h.hero_id)} alt={heroName(h.hero_id)} title={heroName(h.hero_id)} width="44" height="25" loading="lazy" /></td>
               <td class="num">{h.games}</td>
-              <td>
-                <!-- the bar grows from the middle line: right and green above 50 %, left and red below -->
-                <span class="rate"><i class:losing={rate < 50} style:left="{Math.min(rate, 50)}%" style:width="{Math.abs(rate - 50)}%"></i></span>
-                {rate}%
-              </td>
+              <td><WinRate wins={h.wins} games={h.games} /></td>
               <td class="num">{(h.kills / h.games).toFixed(1)} / {(h.deaths / h.games).toFixed(1)} / {(h.assists / h.games).toFixed(1)}</td>
             </tr>
           {/each}
@@ -390,26 +386,6 @@
     display: block;
     object-fit: cover;
     border-radius: 3px;
-  }
-  .rate {
-    position: relative;
-    display: inline-block;
-    width: 90px;
-    height: 6px;
-    margin-right: 8px;
-    border-radius: 2px;
-    background: linear-gradient(var(--axis), var(--axis)) center / 1px 100% no-repeat, var(--raised);
-    vertical-align: 1px;
-    overflow: hidden;
-  }
-  .rate i {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    background: var(--good);
-  }
-  .rate i.losing {
-    background: var(--critical);
   }
   .more {
     margin: 0;
