@@ -96,7 +96,7 @@
 
 <main>
   <header class="top">
-    <h1><a class="brand" href="#{Object.keys(PAGES)[0]}">DotAnalyst</a></h1>
+    <h1><a class="brand" href="#{Object.keys(PAGES)[0]}"><img src="/logo.png" alt="DotAnalyst" width="209" height="32" /></a></h1>
     <nav aria-label="Pages">
       {#each Object.entries(PAGES) as [id, title]}
         <a href="#{id}" aria-current={(teamId ? id === 'teams' : !matchId && page === id) ? 'page' : undefined}>{title}</a>

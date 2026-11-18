@@ -86,17 +86,6 @@ a:hover {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-weight: 800;
-  font-stretch: 125%;
-  text-decoration: none;
-}
-/* the map in one square: Radiant's corner bottom left, Dire's top right */
-.brand::before {
-  content: '';
-  width: 14px;
-  height: 14px;
-  background: linear-gradient(45deg, var(--radiant) 50%, var(--dire) 50%);
 }
 nav {
   display: flex;
