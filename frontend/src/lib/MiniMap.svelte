@@ -72,11 +72,13 @@
     toggles?: Record<string, string>[]
     /** More controls, in the row of the dropdowns */
     controls?: Snippet
+    /** Whether a button takes the picture back to `view` after the reader moved it */
+    reset?: boolean
     /** Gets the width of the picture in map cells, to size its marks by so that they stay as large on the screen
      *  when the reader zooms, and which layers are shown. */
     children?: Snippet<[number, Record<string, boolean>]>
   }
-  let { label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = [], controls, children }: Props = $props()
+  let { label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = [], controls, reset = true, children }: Props = $props()
 
   const box = (v: View) => `${v.x} ${v.y} ${v.size} ${v.size}`
   let moved = $state<View | null>(null) // where the reader has taken the picture; null is the view given
@@ -151,7 +153,9 @@
         </select>
       {/each}
     </span>
-    <button class="action" disabled={!moved || box(moved) === given} onclick={() => (moved = null)}>Reset view</button>
+    {#if reset}
+      <button class="action" disabled={!moved || box(moved) === given} onclick={() => (moved = null)}>Reset view</button>
+    {/if}
   </p>
   <!-- one unit of the viewBox is one map cell, so marks are placed with mapX/mapY and sized in cells.
        Moving the map is an extra for the mouse: all it shows is in the label and the titles -->

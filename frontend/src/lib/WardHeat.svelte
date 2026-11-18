@@ -18,7 +18,7 @@
   const period = (w: WardSpot) => Math.min(PERIODS.length - 1, Math.floor(Math.max(0, w.time) / 600))
   let periods = $state(PERIODS.map(() => true)) // the stretches of the timeline switched on
   const every = $derived(periods.every(Boolean))
-  let share = $state(0) // percent: only squares warded in more than this share of the chosen games
+  let share = $state(0) // percent: only squares warded in at least this share of the chosen games
   // the heat colours of each kind, from a lone ward to its busiest spot: [where on the scale, red, green, blue, opacity]
   const RAMPS = {
     obs: [
@@ -52,11 +52,11 @@
   /** How many games the buttons and dropdowns choose: the timeline picks wards, not games */
   const chosen = (on: Record<string, boolean>) => games.filter((g) => picked(g, on)).length
   const square = (w: WardSpot) => `${Math.floor(mapX(w.x) / SQUARE) * SQUARE} ${Math.floor(mapY(w.y) / SQUARE) * SQUARE}`
-  /** Only the wards in squares warded in more than the slider's share of the `of` games */
+  /** Only the wards in squares warded in at least the slider's share of the `of` games */
   function common(shown: WardSpot[], of: number) {
     const games = new Map<string, Set<number>>()
     for (const w of shown) games.set(square(w), (games.get(square(w)) ?? new Set()).add(w.match_id))
-    return shown.filter((w) => games.get(square(w))!.size > (share / 100) * of)
+    return shown.filter((w) => games.get(square(w))!.size >= (share / 100) * of)
   }
 
   /** The heat picture of one kind: every ward adds a small Gaussian hill, and the height is coloured along the ramp. */
@@ -110,8 +110,7 @@
   const count = (type: string) => wards.filter((w) => w.type === type).length
 </script>
 
-<div class="beside">
-<MiniMap label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
+<MiniMap reset={false} label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
   {#snippet children(_, on)}
     {@const of = chosen(on)}
     {@const shown = common(shownOf(on), of)}
@@ -132,12 +131,6 @@
     {/each}
   {/snippet}
 </MiniMap>
-  <label class="share" title="Only the spots warded in more than this share of the chosen games">
-    <b>{share ? `Over ${share}%` : 'Every spot'}</b>
-    <input type="range" min="0" max="50" step="1" bind:value={share} aria-label="Only spots warded in more than this percent of the chosen games" />
-    <span>of games</span>
-  </label>
-</div>
 <p class="timeline">
   <span class="choice" role="group" aria-label="When the wards were placed, in minutes">
     {#each PERIODS as name, i}
@@ -147,6 +140,11 @@
   <button class="action" onclick={() => (periods = PERIODS.map(() => !every))}>{every ? 'All off' : 'All on'}</button>
   <span class="unit">minutes</span>
 </p>
+<label class="share" title="Only the spots warded in at least this share of the chosen games">
+  Min % games warded
+  <input type="range" min="0" max="50" step="1" bind:value={share} />
+  <b>{share ? `${share}%` : 'Every spot'}</b>
+</label>
 <p class="legend">
   <span>{count('obs')} observers and {count('sen')} sentries.</span>
   {#each KINDS as kind}
@@ -156,34 +154,23 @@
 </p>
 
 <style>
-  /* the map and, beside it, the slider as tall as the map */
-  .beside {
-    display: flex;
-    gap: 10px;
-    max-width: 590px;
-  }
-  .beside > :global(.map) {
-    flex: 1;
-    min-width: 0;
-  }
   .share {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 6px;
-    width: 56px;
-    font-size: 11px;
-    text-align: center;
+    gap: 10px;
+    max-width: 520px;
+    margin: 8px 0 0;
+    font-size: 13px;
     color: var(--text-2);
-  }
-  .share b {
-    color: var(--text);
   }
   .share input {
     flex: 1;
     margin: 0;
-    writing-mode: vertical-lr;
-    direction: rtl; /* 0% at the bottom */
+  }
+  .share b {
+    min-width: 9ch;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
   }
   .timeline {
     display: flex;

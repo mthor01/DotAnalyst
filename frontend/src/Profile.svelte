@@ -332,7 +332,8 @@
       </p>
       <p>
         Radiant and Dire ward different places, so the map shows one side's games and one kind of ward at a time: the
-        buttons above it switch between them. Scroll over the map to zoom, drag to move it, hover a spot for its count.
+        buttons above it switch between them. Scroll over the map to zoom (scrolling all the way out shows the whole map again), drag to move it, hover a spot for
+        its count.
       </p>
       <p>
         The numbers above are averages over the same matches. Uptime is the mean time from placing an observer to its
