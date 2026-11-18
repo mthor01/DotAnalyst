@@ -2,14 +2,14 @@
   import { GAME_MODES, LOBBY_TYPES, get, post, type Account } from './lib/api'
   import { constants, loadConstants } from './lib/constants.svelte'
   import Match from './Match.svelte'
-  import Group from './Group.svelte'
+  import Compare from './Compare.svelte'
   import Profile from './Profile.svelte'
   import Queue from './Queue.svelte'
   import Team from './Team.svelte'
   import Teams from './Teams.svelte'
 
-  const PAGES = { profile: 'Profile', group: 'Group', teams: 'Teams', queue: 'Queue' }
-  const ALL_ACCOUNTS: Page[] = ['group'] // these pages show every tracked account at once
+  const PAGES = { profile: 'Profile', compare: 'Player comparison', teams: 'Teams', queue: 'Queue' }
+  const ALL_ACCOUNTS: Page[] = ['compare'] // these pages show every tracked account at once
   type Page = keyof typeof PAGES
   let hash = $state(location.hash.slice(1))
   const page = $derived<Page>(hash.split('/')[0] in PAGES ? (hash.split('/')[0] as Page) : 'profile')
@@ -159,7 +159,7 @@
   {:else if page === 'profile'}
     <Profile {query} tab={profileTab} account={accounts.find((a) => String(a.account_id) === filters.account_id)} />
   {:else}
-    <Group {query} {accounts} />
+    <Compare {query} {accounts} />
   {/if}
   {/key}
 </main>
