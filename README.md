@@ -15,13 +15,19 @@ You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.14 itself), [Nod
 2. Start the replay parser once; Docker restarts it from then on:
    `docker run -d -p 127.0.0.1:5600:5600 --restart unless-stopped --name parser odota/parser:latest`
    The port stays on localhost because the parser fetches any URL it is given.
-3. Get a Steam Web API key at <https://steamcommunity.com/dev/apikey> and put it in a file `.env` in the repo folder:
+3. Get a Steam Web API key at <https://steamcommunity.com/dev/apikey>. This line asks for it and saves it in a file `.env` in the repo folder, replacing one that is there (PowerShell):
+   ```powershell
+   Set-Content .env "STEAM_API_KEY=$(Read-Host 'Steam API key')"
    ```
-   STEAM_API_KEY=your-key
-   ```
-   `.env` is gitignored; never commit it. The commands and the server read it when it is there. Without it the site still runs and step 4 still works, but no new matches are fetched.
+   On macOS or Linux: `read -p "Steam API key: " key && echo "STEAM_API_KEY=$key" > .env`. `.env` is gitignored; never commit it. The commands and the server read it when it is there. Without it the site still runs and step 4 still works, but no new matches are fetched.
 4. `uv run python -m dotanalyst sync-constants` fetches hero and item names.
-5. `cd frontend`, `npm install`, `npm run build`, `cd ..` builds the site.
+5. Build the site:
+   ```
+   cd frontend
+   npm install
+   npm run build
+   cd ..
+   ```
 6. `uv run uvicorn dotanalyst.api:app` starts it at <http://127.0.0.1:8000>. While it runs it checks every minute for new matches and downloads and parses their replays.
 
 Every command below runs from the repo folder.

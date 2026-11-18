@@ -220,11 +220,12 @@ def test_sync_constants_without_a_key_takes_heroes_from_dotaconstants(session):
     assert not any(r.url.host == "api.steampowered.com" for r in fake.requests)
 
 
-def test_load_env_reads_dotenv_and_keeps_variables_already_set(tmp_path, monkeypatch):
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-8-sig", "utf-16"])  # plain, with a BOM, PowerShell 5.1's `>`
+def test_load_env_reads_dotenv_and_keeps_variables_already_set(tmp_path, monkeypatch, encoding):
     from dotanalyst import load_env
 
     env = tmp_path / ".env"
-    env.write_text('# a comment\nDA_A=one\n\nexport DA_B="two words"\nDA_C=kept\nno equals sign\n', encoding="utf-8")
+    env.write_text('# a comment\nDA_A=one\n\nexport DA_B="two words"\nDA_C=kept\nno equals sign\n', encoding=encoding)
     monkeypatch.setenv("DA_C", "set before")
     for name in ("DA_A", "DA_B"):
         monkeypatch.delenv(name, raising=False)

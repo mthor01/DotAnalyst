@@ -9,7 +9,8 @@ def load_env(path: Path = Path(".env")) -> None:
     """
     if not path.exists():
         return
-    for line in path.read_text(encoding="utf-8").splitlines():
+    raw = path.read_bytes()  # Windows PowerShell's `>` and Out-File write UTF-16, editors may add a UTF-8 BOM
+    for line in raw.decode("utf-16" if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8-sig").splitlines():
         name, sep, value = line.partition("=")
         name, value = name.strip().removeprefix("export ").strip(), value.strip()
         if not sep or not name or name.startswith("#"):
