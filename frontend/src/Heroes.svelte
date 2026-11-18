@@ -64,7 +64,7 @@
             <td>
               <button class="unfold" aria-expanded={open} aria-label="Latest matches on {heroName(r.hero_id)}" onclick={() => unfold(r.hero_id)}>{open ? '▾' : '▸'}</button>
             </td>
-            <td class="hero"><img src={heroPortrait(r.hero_id)} alt="" width="44" height="25" loading="lazy" />{heroName(r.hero_id)}</td>
+            <td class="hero"><img src={heroPortrait(r.hero_id)} alt={heroName(r.hero_id)} title={heroName(r.hero_id)} width="44" height="25" loading="lazy" /></td>
             {#each COLUMNS as [, , text], i}
               {#if text}<td class="num">{text(r)}</td>
               {:else if i === 0}<td><Count games={r.games} max={most} /></td>

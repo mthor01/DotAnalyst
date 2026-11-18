@@ -1,18 +1,20 @@
 <script lang="ts">
-  import { heroIcon, heroName } from './constants.svelte'
-
+  import { heroName, heroPortrait } from './constants.svelte'
   let { id }: { id: number } = $props()
 </script>
 
-<span class="hero">
-  {#if heroIcon(id)}<img src={heroIcon(id)} alt="" width="20" height="20" loading="lazy" />{/if}
+<!-- the picture, named on hover; the name as text only when there is no picture -->
+{#if heroPortrait(id)}
+  <img class="hero" src={heroPortrait(id)} alt={heroName(id)} title={heroName(id)} width="44" height="25" loading="lazy" />
+{:else}
   {heroName(id)}
-</span>
+{/if}
 
 <style>
   .hero {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    display: inline-block;
+    vertical-align: middle;
+    object-fit: cover;
+    border-radius: 3px;
   }
 </style>

@@ -790,8 +790,7 @@
             <li>
               <button aria-pressed={watching === d} onclick={() => (watching = d)}>
                 <span class="num">{clock(d.time)}</span>
-                <img src={heroIcon(hero.get(d.player_slot) ?? 0)} alt="" width="22" height="22" loading="lazy" />
-                {name(d.player_slot)}
+                <img src={heroIcon(hero.get(d.player_slot) ?? 0)} alt={name(d.player_slot)} title={name(d.player_slot)} width="22" height="22" loading="lazy" />
                 {#if d.killer_slot !== null}
                   <img class="killer" src={heroIcon(hero.get(d.killer_slot) ?? 0)} alt="killed by {name(d.killer_slot)}" title="killed by {name(d.killer_slot)}" width="22" height="22" loading="lazy" />
                 {/if}

@@ -352,7 +352,7 @@
         <tbody>
           {#each matchups as m (m.hero_id)}
             <tr>
-              <td class="hero"><img src={heroPortrait(m.hero_id)} alt="" width="44" height="25" loading="lazy" />{heroName(m.hero_id)}</td>
+              <td class="hero"><img src={heroPortrait(m.hero_id)} alt={heroName(m.hero_id)} title={heroName(m.hero_id)} width="44" height="25" loading="lazy" /></td>
               <td class="num">{m.games}</td>
               <td><WinRate wins={m.wins} games={m.games} /></td>
               <td class="num" class:good={m.nw !== null && m.nw > 0} class:bad={m.nw !== null && m.nw < 0}>{shownStat(m.nw, 'signed')}</td>
