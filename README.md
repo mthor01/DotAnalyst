@@ -19,10 +19,10 @@ You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.14 itself), [Nod
    ```
    STEAM_API_KEY=your-key
    ```
-   `.env` is gitignored; never commit it.
-4. `uv run --env-file .env python -m dotanalyst sync-constants` fetches hero and item names.
+   `.env` is gitignored; never commit it. The commands and the server read it when it is there. Without it the site still runs and step 4 still works, but no new matches are fetched.
+4. `uv run python -m dotanalyst sync-constants` fetches hero and item names.
 5. `cd frontend`, `npm install`, `npm run build`, `cd ..` builds the site.
-6. `uv run --env-file .env uvicorn dotanalyst.api:app` starts it at <http://127.0.0.1:8000>. While it runs it checks every minute for new matches and downloads and parses their replays.
+6. `uv run uvicorn dotanalyst.api:app` starts it at <http://127.0.0.1:8000>. While it runs it checks every minute for new matches and downloads and parses their replays.
 
 Every command below runs from the repo folder.
 
@@ -37,8 +37,8 @@ A player is tracked by their Dota account id, the short number (8 to 10 digits),
 Then add it with **Add profile** at the top of the site; it takes the Steam id too. Or from the command line, with an optional name for the Account menu:
 
 ```
-uv run --env-file .env python -m dotanalyst add-account 12345678 "Player 1"
-uv run --env-file .env python -m dotanalyst sync
+uv run python -m dotanalyst add-account 12345678 "Player 1"
+uv run python -m dotanalyst sync
 ```
 
 `sync` fetches the account's last 500 matches at once; the running server picks a new account up within a minute either way. On a profile, **Add frequent teammates** adds every player with 10 or more games on that player's team in their last 500 matches. The player must have **Expose Public Match Data** on (Dota 2 → Settings → Options → Social), or Steam returns no matches; `status` then says so. Other commands: `remove-account <id>` stops tracking, `status` lists the tracked accounts and replay counts.
@@ -51,7 +51,7 @@ uv run --env-file .env python -m dotanalyst sync
 
 The Teams tab of the Tournaments page shows, for every team of the tracked tournaments, which heroes are banned against it, whether it picks them when they are open, and who plays what. The replays of games from the last 30 days are fetched by the running server; an older game's when you ask for it on the page; with replays a team page also shows where each player wards and where the team walks in the first seconds of a game.
 
-`uv run --env-file .env python -m dotanalyst sync-leagues` fetches the league's games; the first run takes about half an hour. After that, the running server gets the newest ones every minute, and the button "Check for new league games" on the Tournaments page at once.
+`uv run python -m dotanalyst sync-leagues` fetches the league's games; the first run takes about half an hour. After that, the running server gets the newest ones every minute, and the button "Check for new league games" on the Tournaments page at once.
 
 ### Adding a tournament
 

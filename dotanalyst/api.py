@@ -1,4 +1,4 @@
-"""Run with: uv run --env-file .env uvicorn dotanalyst.api:app"""
+"""Run with: uv run uvicorn dotanalyst.api:app (it reads .env when there is one)"""
 import asyncio
 import os
 from contextlib import asynccontextmanager
@@ -12,12 +12,13 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import derive, opendota, poll, queries
+from . import derive, load_env, opendota, poll, queries
 from .db import DATA, Ability, Account, Hero, Item, League, open_engine
 from .poll import poll_forever
 from .replay import ReplayError
 from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, store_avatars, team_logo
 
+load_env()  # before the poller reads the keys, and so the salts script it starts inherits them
 engine = open_engine()
 FRONTEND = Path("frontend/dist")
 

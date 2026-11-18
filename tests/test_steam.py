@@ -25,7 +25,9 @@ PAGE1, PAGE2, DETAILS, HEROES = (
 ITEM_IDS = load("item_ids.json")
 ITEMS = load("items.json")  # eleven items cut from dotaconstants' items.json
 ABILITIES = load("abilities.json")  # six abilities cut from dotaconstants' abilities.json
-CONSTANTS = {"item_ids.json": ITEM_IDS, "items.json": ITEMS, "abilities.json": ABILITIES}
+# dotaconstants keys its heroes by id, with the fields the Web API gives
+HERO_FILE = {str(h["id"]): h for h in HEROES["result"]["heroes"]}
+CONSTANTS = {"item_ids.json": ITEM_IDS, "items.json": ITEMS, "abilities.json": ABILITIES, "heroes.json": HERO_FILE}
 EMPTY_PAGE ={"result": {"status": 1, "num_results": 0, "results_remaining": 0, "matches": []}}
 NOT_EXPOSED = {"result": {"status": 15, "statusDetail": "Cannot get match history for a user that hasn't allowed it"}}
 HISTORY = PAGE1["result"]["matches"] + PAGE2["result"]["matches"]
@@ -209,6 +211,30 @@ def test_sync_constants_stores_heroes_and_items(session):
     assert session.get(Ability, "special_bonus_unique_juggernaut_2").dname == "+? Healing Ward Hits to Kill"
     assert steam.sync_constants(session, FakeSteam().client, KEY) == counts  # rerun replaces, no duplicates
     assert len(session.scalars(select(Recipe)).all()) == 5
+
+
+def test_sync_constants_without_a_key_takes_heroes_from_dotaconstants(session):
+    fake = FakeSteam()
+    assert steam.sync_constants(session, fake.client, "") == (len(HERO_FILE), len(ITEM_IDS))
+    assert session.get(Hero, 1).localized_name == "Anti-Mage"
+    assert not any(r.url.host == "api.steampowered.com" for r in fake.requests)
+
+
+def test_load_env_reads_dotenv_and_keeps_variables_already_set(tmp_path, monkeypatch):
+    from dotanalyst import load_env
+
+    env = tmp_path / ".env"
+    env.write_text('# a comment\nDA_A=one\n\nexport DA_B="two words"\nDA_C=kept\nno equals sign\n', encoding="utf-8")
+    monkeypatch.setenv("DA_C", "set before")
+    for name in ("DA_A", "DA_B"):
+        monkeypatch.delenv(name, raising=False)
+    load_env(env)
+    import os
+
+    assert (os.environ["DA_A"], os.environ["DA_B"], os.environ["DA_C"]) == ("one", "two words", "set before")
+    for name in ("DA_A", "DA_B"):
+        monkeypatch.delenv(name)  # undone after the test, as load_env set them outside monkeypatch
+    load_env(tmp_path / "missing.env")  # no file: nothing happens
 
 
 LEAGUE_PAGE, LEAGUE_DETAILS = load("league_history.json"), load("league_details.json")  # three games of league 18795

@@ -65,7 +65,7 @@ Checked on 2026-11-12 against 69 parsed replays:
 
 1. Install `uv`; it installs Python 3.14 itself. This PC has only Python 3.9.
 2. Start Docker Desktop, then `docker run -d -p 127.0.0.1:5600:5600 --restart unless-stopped --name parser odota/parser:latest`. The port is bound to localhost because the parser will fetch any URL it is given.
-3. Put `STEAM_API_KEY=...` in `.env`. Commands run as `uv run --env-file .env python -m dotanalyst <command>`, written below as `dotanalyst <command>`.
+3. Put `STEAM_API_KEY=...` in `.env`. Commands run as `uv run python -m dotanalyst <command>`, written below as `dotanalyst <command>`.
 4. Approve the dependency list: `fastapi`, `uvicorn`, `sqlalchemy`, `httpx`, `pytest`; frontend `svelte`, `vite`, `typescript`, `echarts`. Nothing else is added without asking.
 
 ## Data model
@@ -105,7 +105,7 @@ No Game Coordinator and no OpenDota.
 
 ## Milestone 2 — Site for basic stats, with polling
 
-- Run with `uv run --env-file .env uvicorn dotanalyst.api:app`, then open `http://localhost:8000/`.
+- Run with `uv run uvicorn dotanalyst.api:app`, then open `http://localhost:8000/`.
 - FastAPI: `GET /api/accounts`, `/api/constants`, `/api/matches`, `/api/heroes`, `/api/teammates`, `/api/matchups`. The last four take `account_id`, `date_from`, `date_to`, `game_mode` and `lobby_type`.
 - `sync-constants` also stores item names, taken from `odota/dotaconstants` because the Web API has no working item list. Hero and item icons load from Valve's CDN.
 - Polling: a background task in the FastAPI process runs `sync` every `POLL_MINUTES` (default 1 since 2026-11-16, 15 before). It also parses any new `.dem` in the Dota client folder whose match is stored, once the file is whole: its header points at the file info record that ends every replay, and a file that does not end exactly there is still being written (checked on 50 replays; before 2026-11-16 a file was left alone for 2 minutes instead).

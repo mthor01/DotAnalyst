@@ -23,6 +23,7 @@ LEAGUES = {18795: "Season 6", 19418: "Season 7", 20408: "Season 8"}
 ITEM_IDS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/item_ids.json"
 ITEMS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/items.json"
 ABILITIES = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/abilities.json"
+HERO_FILE = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/heroes.json"
 PAUSE = 1.0  # seconds before every request
 ANONYMOUS = 4294967295
 HISTORY_NOT_EXPOSED = 15
@@ -215,19 +216,23 @@ def sync_leagues(session: Session, client: httpx.Client, key: str, newest_only: 
 
 
 def sync_constants(session: Session, client: httpx.Client, key: str) -> tuple[int, int]:
-    """Store hero, item and ability names, and what each item is built from. Returns how many heroes and items."""
-    heroes = call(client, key, HEROES, language="en")["heroes"]
+    """Store hero, item and ability names, and what each item is built from. Returns how many heroes and items.
+
+    Heroes come from the Web API when there is a key, else from dotaconstants, which needs none.
+    """
+
+    def fetch(url: str) -> dict:
+        response = client.get(url, timeout=30)
+        if response.status_code != 200:
+            raise SteamError(f"{url.rsplit('/', 1)[-1]}: HTTP {response.status_code}")
+        return response.json()
+
+    heroes = call(client, key, HEROES, language="en")["heroes"] if key else list(fetch(HERO_FILE).values())
     for h in heroes:
         session.merge(Hero(id=h["id"], name=h["name"], localized_name=h["localized_name"]))
     # the Web API has no working item list; these files map item id to internal name, item to its components, and
     # ability to the name the game shows
-    files = []
-    for url in (ITEM_IDS, ITEMS, ABILITIES):
-        response = client.get(url, timeout=30)
-        if response.status_code != 200:
-            raise SteamError(f"{url.rsplit('/', 1)[-1]}: HTTP {response.status_code}")
-        files.append(response.json())
-    items, details, abilities = files
+    items, details, abilities = (fetch(url) for url in (ITEM_IDS, ITEMS, ABILITIES))
     for name, ability in abilities.items():
         if ability.get("dname"):
             # where dotaconstants could not fill in a talent's number it reads "+{s:bonus_duration}s ..."

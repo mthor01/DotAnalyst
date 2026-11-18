@@ -6,6 +6,7 @@ from pathlib import Path
 import httpx
 from sqlalchemy import func, select
 
+from . import load_env
 from .db import Account, Match, open_session
 from .derive import TABLES, recompute
 from .replay import ReplayError, parse_replay
@@ -29,9 +30,10 @@ def main() -> int:
     sub.add_parser("recompute", help="rebuild all replay stats from the stored raw logs")
     args = parser.parse_args()
 
+    load_env()
     key = os.environ.get("STEAM_API_KEY", "")
-    if args.command in ("sync", "sync-constants", "sync-leagues") and not key:
-        print("error: STEAM_API_KEY is not set (run with: uv run --env-file .env ...)", file=sys.stderr)
+    if args.command in ("sync", "sync-leagues") and not key:
+        print("error: STEAM_API_KEY is not set (put STEAM_API_KEY=... in .env)", file=sys.stderr)
         return 1
 
     with open_session() as session:
