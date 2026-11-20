@@ -313,9 +313,9 @@ The poller is eight steps, in `STEP_FUNCS` in `poll.py`: new matches of the acco
 
 The Queue page lists the steps with:
 
-- **Activity**: a step with work right now is marked "running", with what it does, since when, and how far it is (`RUNNING`, which each step fills while it works and empties when its round ends). Otherwise when its last round ended (`CHECKED`, set whether the round had work or not) and when the next one starts, 10 seconds after that.
+- **Activity**: a step with work right now is marked "running", with what it does, since when, and how far it is (`RUNNING`, which each step fills while it works and empties when its round ends). The downloads step names the match under way, and its "x of y" is parsed this round of parsed + under way + still due: one that fails or has no replay yet drops out of y. Otherwise when its last round ended (`CHECKED`, set whether the round had work or not) and when the next one starts, 10 seconds after that.
 - **Planned**: a bare count of what the step's next round would do, counted now with the poller's own conditions ("12 replays, 1 waiting for a retry"; "off: no STEAM_API_KEY" or "off: no STEAM_ALT_USER" for a step that cannot run). Salts count the due matches Valve was not asked for yet and that have no salt from Valve or OpenDota.
-- **Finished**: what the step's rounds finished since the server started (`FINISHED`: `run_step` adds what each round returns; in memory, so 0 after a restart).
+- **Finished**: what the step's rounds finished since the server started (`FINISHED`: `run_step` adds what each round returns; in memory, so 0 after a restart), plus what the round running now has finished so far. Without that, the downloads step, whose one round takes every due match one by one and so can run for hours, would show 0 until its round ends.
 
 The page no longer says why planned work waits (usual games OpenDota did not know, failed stats, old matches left alone, the next retry); the parser being down shows in the Poller card above, and each match's next try in the replay queue.
 

@@ -223,6 +223,7 @@ def downloads_step(session: Session, client: httpx.Client, setup: Setup) -> int:
     jobs: dict[Future, int] = {}
     seen: set[int] = set()  # taken this round, so a replay that was not there waits for the next
     salts: dict[int, int] = {}
+    waiting: list = []
     done, stopped = 0, False
     try:
         while True:
@@ -230,17 +231,20 @@ def downloads_step(session: Session, client: httpx.Client, setup: Setup) -> int:
                 salts = steam_salts([], setup.data)  # read again: the salts step adds to it meanwhile
                 # parsed from the folder instead
                 skip = seen | {int(d.stem) for d in folder_replays(session, setup.replay_dir) if replay_complete(d)}
-                for match_id, cluster in session.execute(due(time.time(), setup.retry_seconds)).all():
+                waiting = [row for row in session.execute(due(time.time(), setup.retry_seconds)).all() if row[0] not in skip]
+                for match_id, cluster in waiting:
                     if len(jobs) >= WORKERS:
                         break
-                    if match_id in skip or not claim(match_id):
+                    if not claim(match_id):
                         continue
                     seen.add(match_id)
                     future = pool.submit(download_and_parse, match_id, cluster, client, setup.data, salts.get(match_id))
                     jobs[future] = match_id
             if not jobs:
                 break
-            doing("downloads", f"{len(jobs)} replays downloading or parsing", done, len(seen))
+            # of: parsed this round + under way + still waiting; one that fails drops out
+            total = done + len(jobs) + sum(m not in seen for m, _ in waiting)
+            doing("downloads", f"downloading and parsing match {', '.join(map(str, jobs.values()))}", done, total)
             finished, _ = wait(jobs, return_when=FIRST_COMPLETED)
             for future in finished:
                 match_id = jobs.pop(future)
@@ -323,11 +327,11 @@ LOCKS = {key: threading.Lock() for key in STEP_FUNCS}  # a step and the same wor
 def run_step(key: str, session: Session, client: httpx.Client, setup: Setup) -> int:
     try:
         found = STEP_FUNCS[key](session, client, setup)
-        FINISHED[key] += found
-        return found
     finally:
-        RUNNING.pop(key, None)
+        RUNNING.pop(key, None)  # before FINISHED grows: the queue page adds a running round's count on its own
         CHECKED[key] = time.time()
+    FINISHED[key] += found
+    return found
 
 
 def poll_once(
@@ -519,7 +523,9 @@ def steps(session: Session, replay_dir: Path, data: Path, waiting: list[Match], 
         "stats": ("Stats of parsed matches", f"{derive} matches", "matches"),
     }  # fmt: skip
     return [
-        {"key": k, "name": name, "planned": plan, "finished": f"{FINISHED[k]} {what}", "checked": CHECKED.get(k)}
+        # with the running round's own count: a downloads round can last hours
+        {"key": k, "name": name, "planned": plan, "finished": f"{FINISHED[k] + (RUNNING.get(k, {}).get('done') or 0)} {what}",
+         "checked": CHECKED.get(k)}
         for k, (name, plan, what) in planned.items()
     ]
 

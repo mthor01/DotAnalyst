@@ -512,11 +512,28 @@ def test_the_steps_count_what_is_planned_and_what_they_finished(session, tmp_pat
     assert downloads["finished"] == "0 replays" and downloads["checked"] >= now
 
 
-def test_finished_adds_up_what_each_round_of_a_step_returns(session, monkeypatch):
+def test_finished_adds_up_what_each_round_of_a_step_returns(session, monkeypatch, tmp_path):
     monkeypatch.setitem(poll.STEP_FUNCS, "stats", lambda *args: 2)
     poll.run_step("stats", session, None, None)
     poll.run_step("stats", session, None, None)
     assert poll.FINISHED["stats"] == 4 and "stats" in poll.CHECKED
+
+    poll.doing("stats", "computing", 3, 10)  # a round that runs for hours counts as it goes, not only at its end
+    assert poll.queue(session, tmp_path / "nowhere", tmp_path)["steps"][7]["finished"] == "7 matches"
+
+
+def test_the_downloads_step_says_which_match_and_how_many_this_round_may_still_parse(session, tmp_path, monkeypatch):
+    add_match(session, GOOD)
+    add_match(session, WRONG_LOG, age_days=1)  # the parser of these tests answers with the log of GOOD: both fail
+    add_match(session, NOT_STORED, age_days=2)
+    said = []
+    monkeypatch.setattr(poll, "doing", lambda step, what, done=None, total=None: said.append((step, what, done, total)))
+    poll_once(session, network([], opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY))), "", tmp_path / "nowhere", tmp_path)
+    assert [s[1:] for s in said if s[0] == "downloads"] == [  # parsed + under way + still waiting; a failed one drops out
+        (f"downloading and parsing match {GOOD}", 0, 3),
+        (f"downloading and parsing match {WRONG_LOG}", 1, 3),
+        (f"downloading and parsing match {NOT_STORED}", 1, 2),
+    ]
 
 
 def test_progress_counts_parsed_and_waiting_replays_per_profile_and_tournament(session):
