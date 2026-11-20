@@ -135,14 +135,13 @@ export type QueueEvent = { at: number; match_id: number | null; message: string 
 /** What the poller has to do: every match whose replay it still wants, in the order it takes them. */
 export type QueueStatus = {
   doing: string
-  step: string | null // the key of the poll step running now, null between polls
+  step: string[] // the keys of the poll steps running now, empty between polls
   since: number
   busy: boolean
   now: number
   last_poll: { at: number; seconds: number; new?: number; parsed?: number; error?: string } | null
   next_poll: number | null
   parser: boolean
-  per_poll: number
   retry_seconds: number
   max_age_days: number
   states: Record<string, number>

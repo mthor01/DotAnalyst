@@ -129,12 +129,12 @@ No Game Coordinator and no OpenDota.
 This comes before the replay stats because replays expire: raw output collected now can be turned into stats later, but a missed replay is gone.
 
 - Each poll, for stored matches with replay state `none` or `pending`: get the `replay_salt` (see below), build the URL from the stored `cluster` and that salt, download from Valve, decompress with the standard library (Zstandard or bz2, told apart by the first bytes), parse, store, delete the `.dem`.
-- At most 10 matches per poll, never-tried matches first, newest first. With the default 1-minute poll a backlog drains at up to 600 an hour, held back by the downloads themselves (about 40 MB and 10 seconds of parsing each).
+- Every due match each poll, never-tried matches first, newest first, 4 downloading and parsing at a time (changed 2026-11-20 from 10 a poll, one after another). A backlog is held back only by the downloads and parses themselves and by OpenDota's 60 calls a minute for salts.
 - League games younger than 30 days are copied into `matches` each poll (since 2026-11-16) and so are downloaded like any match.
 - Matches older than 30 days are not downloaded (chosen on 2026-11-11; `MAX_AGE_DAYS` in `poll.py`). They keep state `none`.
 - A match is tried at most once per hour. A try that finds no salt or no file leaves it `pending`; once the match is 14 days old such a try makes it `unavailable`, and it is never tried again.
 - An OpenDota response with a salt is stored, so a salt is never requested twice.
-- Added 2026-11-14: when `STEAM_ALT_USER` and `STEAM_ALT_PASSWORD` are set, the salts come from Valve first. Once per poll `steam/salts.mjs` (Node, the `steam-user` library) logs in with that second account, connects to the Dota 2 game coordinator and asks for the match details of every due match. Its salts are stored in `data/salts.json` and never asked for again. OpenDota is asked for the matches it got no salt for, and for all of them when the script fails. The first login is done by hand (`node --env-file=.env steam/salts.mjs`) to type the Steam Guard code; the login token it leaves in `data/steam/` serves the later ones.
+- Added 2026-11-14: when `STEAM_ALT_USER` and `STEAM_ALT_PASSWORD` are set, the salts come from Valve first. Once per poll `steam/salts.mjs` (Node, the `steam-user` library) logs in with that second account, connects to the Dota 2 game coordinator and asks for the match details of the next 10 due matches (`SALTS_PER_POLL`; Valve allows about 100 a day). Its salts are stored in `data/salts.json` and never asked for again. OpenDota is asked for the matches it got no salt for, and for all of them when the script fails. The first login is done by hand (`node --env-file=.env steam/salts.mjs`) to type the Steam Guard code; the login token it leaves in `data/steam/` serves the later ones.
 
 **Done when**
 

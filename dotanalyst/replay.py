@@ -10,6 +10,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from .db import DATA, Match
+from .opendota import pace
 
 PARSER_URL = "http://localhost:5600/"
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
@@ -71,23 +72,44 @@ def parse_replay(
     if match is None:
         raise ReplayError(f"match {match_id} is not stored; run sync first")
     out = raw_dir / f"{match_id}.jsonl.gz"
-    if match.replay_state == "parsed" and out.exists():
-        return out
+    if match.replay_state != "parsed" or not out.exists():
+        settle(session, match, "parsed" if parse_dem(dem, match_id, client, raw_dir) else "failed")
+    return out
 
+
+def parse_dem(dem: Path, match_id: int, client: httpx.Client, raw_dir: Path) -> bool:
+    """Send a .dem to the parser and store its event log; False when the log is incomplete or for another match.
+    Touches no database, so it runs on any thread."""
     # shortcut: whole replay held in memory (up to ~250 MB), stream it if that ever hurts
     response = client.post(PARSER_URL, content=dem.read_bytes(), timeout=600)
     # the parser answers 200 even when it crashed, so only the epilogue proves completeness
     # Valve leaves the id at 0 in some replays, so 0 passes; another real id means the wrong file
     if epilogue_match_id(response.content) not in (0, match_id):
-        match.replay_state = "failed"
-        session.commit()
-        raise ReplayError(f"match {match_id}: parser output is incomplete or for another match")
-
+        return False
     raw_dir.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(gzip.compress(response.content))
-    match.replay_state = "parsed"
+    (raw_dir / f"{match_id}.jsonl.gz").write_bytes(gzip.compress(response.content))
+    return True
+
+
+def mark_tried(session: Session, match: Match) -> None:
+    match.replay_state = "pending"
+    match.replay_tried_at = int(time.time())
     session.commit()
-    return out
+
+
+def settle(session: Session, match: Match, state: str | None) -> bool:
+    """Record what download_and_parse found. False when there was no replay to get (yet); a bad parse is marked
+    failed and raises ReplayError."""
+    if state is None:
+        if time.time() - match.start_time > RETRY_DAYS * 86400:
+            match.replay_state = "unavailable"
+            session.commit()
+        return False
+    match.replay_state = state
+    session.commit()
+    if state == "failed":
+        raise ReplayError(f"match {match.match_id}: parser output is incomplete or for another match")
+    return True
 
 
 def replay_url(match_id: int, cluster: int, salt: int) -> str:
@@ -128,6 +150,7 @@ def opendota_match(match_id: int, client: httpx.Client, opendota_dir: Path) -> d
     stored = opendota_dir / f"{match_id}.json.gz"
     if stored.exists():
         return json.loads(gzip.decompress(stored.read_bytes()))
+    pace()
     response = client.get(OPENDOTA_MATCH.format(match_id), timeout=30)
     if response.status_code == 404:
         return None
@@ -182,18 +205,20 @@ def fetch_replay(
     Without a salt from the caller (see steam_salts), OpenDota is asked for it.
     """
     # recorded before any request, so a match that keeps erroring waits an hour like any other
-    match.replay_state = "pending"
-    match.replay_tried_at = int(time.time())
-    session.commit()
-    dem = data / "tmp" / f"{match.match_id}.dem"
+    mark_tried(session, match)
+    return settle(session, match, download_and_parse(match.match_id, match.cluster, client, data, salt))
+
+
+def download_and_parse(
+    match_id: int, cluster: int, client: httpx.Client, data: Path = DATA, salt: int | None = None
+) -> str | None:
+    """Download and parse one replay: "parsed", "failed" for a bad parse, None when there is no replay to get (yet).
+    Touches no database, so it runs on any thread; settle records the outcome."""
+    dem = data / "tmp" / f"{match_id}.dem"
     try:
-        salt = salt or replay_salt(match.match_id, client, data / "opendota")
-        if salt is None or not download_replay(replay_url(match.match_id, match.cluster, salt), dem, client):
-            if time.time() - match.start_time > RETRY_DAYS * 86400:
-                match.replay_state = "unavailable"
-                session.commit()
-            return False
-        parse_replay(session, dem, client, data / "raw")
-        return True
+        salt = salt or replay_salt(match_id, client, data / "opendota")
+        if salt is None or not download_replay(replay_url(match_id, cluster, salt), dem, client):
+            return None
+        return "parsed" if parse_dem(dem, match_id, client, data / "raw") else "failed"
     finally:
         dem.unlink(missing_ok=True)

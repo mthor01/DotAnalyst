@@ -1,5 +1,6 @@
 """A league player's last games outside the league, from OpenDota: the basic numbers, and for the players of a
 checked team the match itself, so that the poller can fetch its replay."""
+import threading
 import time
 
 import httpx
@@ -16,6 +17,16 @@ ASKED = 150  # asked for, so that dropping the league and lobby games still leav
 LEAGUE_LOBBIES = (1, 2)  # practice and tournament: league games, of this league or another
 FIELDS = ("hero_id", "player_slot", "radiant_win", "start_time", "lobby_type", "game_mode", "kills", "deaths",
           "assists", "lane_role")  # fmt: skip
+PAUSE = 1.0  # seconds between OpenDota calls, from whatever thread: it allows 60 a minute
+_paced = {"last": 0.0}
+_pace_lock = threading.Lock()
+
+
+def pace() -> None:
+    """Wait until PAUSE has passed since the last OpenDota call. Call it right before each one."""
+    with _pace_lock:
+        time.sleep(max(0.0, _paced["last"] + PAUSE - time.monotonic()))
+        _paced["last"] = time.monotonic()
 
 
 def unlisted_players(session: Session, n: int) -> list[int]:
@@ -35,6 +46,7 @@ def unlisted_players(session: Session, n: int) -> list[int]:
 def league_name(client: httpx.Client, league_id: int) -> str | None:
     """A tournament's name, from OpenDota. None when it does not know the league or does not answer."""
     try:
+        pace()
         response = client.get(LEAGUE.format(league_id), timeout=30)
         body = response.json() if response.status_code == 200 else None
     except (httpx.HTTPError, ValueError):
@@ -51,12 +63,23 @@ def fetch_player_games(session: Session, client: httpx.Client, account_id: int) 
     An HTTP error or a status other than 200 raises httpx.HTTPError, and the player stays unlisted."""
     if session.get(PlayerGameList, account_id) is not None:
         return 0
+    return store_player_games(session, account_id, player_games(client, account_id))
+
+
+def player_games(client: httpx.Client, account_id: int) -> list:
+    """OpenDota's list of a player's last games. Touches no database, so it runs on any thread."""
     params = {"limit": ASKED, "significant": 0, "project": FIELDS}
+    pace()
     response = client.get(PLAYER_MATCHES.format(account_id), params=params, timeout=30)
     response.raise_for_status()
     rows = response.json()
     if not isinstance(rows, list):
         raise httpx.HTTPError(f"OpenDota sent {type(rows).__name__} for the games of {account_id}, not a list")
+    return rows
+
+
+def store_player_games(session: Session, account_id: int, rows: list) -> int:
+    """Keep up to GAMES of player_games' rows outside the league and list the player. Returns how many were kept."""
     ids = [r.get("match_id") for r in rows if isinstance(r, dict)]
     league = set(session.scalars(select(LeagueMatch.match_id).where(LeagueMatch.match_id.in_(ids))))
     kept = 0

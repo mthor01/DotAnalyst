@@ -20,9 +20,9 @@
     s < 90 ? `${Math.round(s)} s` : s < 5400 ? `${Math.round(s / 60)} min` : s < 172800 ? `${Math.round(s / 3600)} h` : `${Math.round(s / 86400)} days`
   const ago = (t: number) => `${span(status!.now - t)} ago`
   const date = (t: number) => new Date(t * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-  // the poller takes the due matches in this order, per_poll of them a poll
-  const next = (row: QueueStatus['queue'][number], i: number) =>
-    row.next_try > status!.now ? `in ${span(row.next_try - status!.now)}` : i < status!.per_poll ? 'next poll' : 'a later poll'
+  // a poll takes every due match, in this order
+  const next = (row: QueueStatus['queue'][number]) =>
+    row.next_try > status!.now ? `in ${span(row.next_try - status!.now)}` : 'next poll'
   const STATES = ['pending', 'none', 'parsed', 'unavailable', 'failed']
 
   // in binary units, as the file manager counts them
@@ -84,13 +84,15 @@
   </div>
 
   <h2>Steps of a poll</h2>
-  <p class="muted">A poll runs these in order. Between polls everything planned waits for the next one.</p>
+  <p class="muted">
+    A poll runs the first two in order, then the rest side by side. Between polls everything planned waits for the next one.
+  </p>
   <div class="card">
     <table class="steps">
       <thead><tr><th>Step</th><th>Last done</th><th>Planned</th><th>Why some of it waits</th></tr></thead>
       <tbody>
         {#each status.steps as s (s.key)}
-          {@const running = status.busy && status.step === s.key}
+          {@const running = status.busy && status.step.includes(s.key)}
           <tr class:running aria-current={running ? 'step' : undefined}>
             <td class="name">{s.name}</td>
             <td>
@@ -145,7 +147,7 @@
 
   <h2>Queue <span class="muted">{status.queue.length}</span></h2>
   <p class="muted">
-    Up to {status.per_poll} a poll: never tried first, then newest first. A match without a replay yet waits
+    All due ones each poll: never tried first, then newest first. A match without a replay yet waits
     {span(status.retry_seconds)}; "Check for new games" does not wait.
   </p>
   {#if status.queue.length === 0}
@@ -157,7 +159,7 @@
           <tr><th>Match</th><th>Played</th><th>Whose</th><th>State</th><th>Last tried</th><th>Next try</th><th>Last message</th></tr>
         </thead>
         <tbody>
-          {#each status.queue as row, i (row.match_id)}
+          {#each status.queue as row (row.match_id)}
             <tr>
               <td><a href="#match/{row.match_id}">{row.match_id}</a></td>
               <td class="muted">{date(row.start_time)}</td>
@@ -171,7 +173,7 @@
               </td>
               <td>{row.state}</td>
               <td class="muted">{row.tried_at ? ago(row.tried_at) : 'never'}</td>
-              <td>{next(row, i)}</td>
+              <td>{next(row)}</td>
               <td class="message">{row.last?.message ?? ''}</td>
             </tr>
           {/each}

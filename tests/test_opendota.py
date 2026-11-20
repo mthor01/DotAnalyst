@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 from pathlib import Path
 
 import httpx
@@ -14,6 +16,18 @@ from dotanalyst.steam import ANONYMOUS, store_league_match
 FIXTURES = Path(__file__).parent / "fixtures"
 GAMES = (FIXTURES / "opendota_player_matches.json").read_bytes()  # made up, as OpenDota sends them for player 1001
 PLAYER = 1001
+
+
+def test_calls_from_several_threads_keep_the_pause_between_them(monkeypatch):
+    monkeypatch.setattr(opendota, "PAUSE", 0.05)
+    monkeypatch.setitem(opendota._paced, "last", 0.0)
+    start = time.monotonic()
+    threads = [threading.Thread(target=opendota.pace) for _ in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert time.monotonic() - start >= 0.1  # the first goes at once, the two others wait their turn
 
 
 @pytest.fixture

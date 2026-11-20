@@ -74,6 +74,18 @@ def for_replays(calls: list[str]) -> list[str]:
     return [url for url in calls if "/players/" not in url]
 
 
+def test_a_server_error_stops_the_downloads_left_until_the_next_poll(session, tmp_path):
+    for match_id in range(1, 21):
+        add_match(session, match_id)
+    poll.STEPS.clear()
+
+    poll_once(session, network([], opendota=(200, OPENDOTA), valve=(500, b"")), "", tmp_path / "nowhere", tmp_path)
+    assert "; then stopped: HTTPStatusError" in poll.STEPS["downloads"]["what"]
+    assert any("download stopped, the rest waits for the next poll" in e["message"] for e in poll.EVENTS)
+    # none is lost: whether it ran or was cancelled, each stays wanted
+    assert {session.get(Match, i).replay_state for i in range(1, 21)} <= {"none", "pending"}
+
+
 def test_poll_parses_downloaded_replays_of_stored_matches(session, tmp_path):
     for match_id in (GOOD, WRONG_LOG, STILL_DOWNLOADING):
         add_match(session, match_id)
@@ -122,10 +134,10 @@ def test_poll_downloads_and_parses_replays(session, tmp_path):
     client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
 
     assert poll_once(session, client, "", tmp_path / "nowhere", tmp_path) == (0, 1)
-    assert to("valve.net", calls) == [
+    assert set(to("valve.net", calls)) == {  # side by side, so in either order
         f"http://replay{CLUSTER}.valve.net/570/{GOOD}_519105714.dem.bz2",
         f"http://replay{CLUSTER}.valve.net/570/{WRONG_LOG}_519105714.dem.bz2",
-    ]
+    } and len(to("valve.net", calls)) == 2
     assert session.get(Match, GOOD).replay_state == "parsed"
     assert session.get(Match, WRONG_LOG).replay_state == "failed"
     assert [p.name for p in (tmp_path / "raw").iterdir()] == [f"{GOOD}.jsonl.gz"]  # nothing for the failed parse
@@ -245,7 +257,7 @@ def test_the_queue_shows_the_order_the_poller_takes_matches_in(session, tmp_path
     assert shown["parser"] is False
 
     poll_once(session, network([]), "", tmp_path / "nowhere", tmp_path)  # OpenDota knows none of them
-    assert [e["match_id"] for e in poll.EVENTS] == [2, 1, 3]  # 4 was tried 10 minutes ago
+    assert sorted(e["match_id"] for e in poll.EVENTS) == [1, 2, 3]  # 4 was tried 10 minutes ago
     shown = poll.queue(session, tmp_path / "nowhere", tmp_path)
     assert shown["queue"][-1]["last"]["message"] == "no replay yet (no salt: OpenDota does not know it), now pending"
 
@@ -291,10 +303,10 @@ def test_salts_come_from_the_second_steam_account_and_from_opendota_for_the_rest
 
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path, alt=True)
     assert asked == [[str(GOOD), str(WRONG_LOG)]]  # one login for all the matches of a poll
-    assert to("valve.net", calls) == [
+    assert set(to("valve.net", calls)) == {
         f"http://replay{CLUSTER}.valve.net/570/{GOOD}_111.dem.bz2",
         f"http://replay{CLUSTER}.valve.net/570/{WRONG_LOG}_519105714.dem.bz2",
-    ]
+    } and len(to("valve.net", calls)) == 2
     assert to("opendota", calls) == [f"https://api.opendota.com/api/matches/{WRONG_LOG}"]
 
     for match_id in (GOOD, WRONG_LOG):
@@ -302,7 +314,7 @@ def test_salts_come_from_the_second_steam_account_and_from_opendota_for_the_rest
     session.commit()
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path, alt=True)
     assert asked[1:] == [[str(WRONG_LOG)]]  # the salt of GOOD was kept
-    assert to("valve.net", calls)[2] == f"http://replay{CLUSTER}.valve.net/570/{GOOD}_111.dem.bz2"
+    assert f"http://replay{CLUSTER}.valve.net/570/{GOOD}_111.dem.bz2" in to("valve.net", calls)[2:]
 
 
 @pytest.mark.parametrize(
@@ -449,14 +461,13 @@ def test_the_steps_say_what_is_planned_and_why_some_of_it_waits(session, tmp_pat
     assert list(steps) == ["accounts", "leagues", "usual", "folder", "salts", "downloads", "players", "stats"]
     assert steps["accounts"]["why"] == ["STEAM_API_KEY is not set in .env, so Steam is not asked"]
     assert steps["salts"]["planned"].startswith("none") and "STEAM_ALT_USER" in steps["salts"]["why"][0]
-    assert steps["downloads"]["planned"] == "10 of 12 due replays downloaded and parsed"
-    two_due, retry, parser, old = steps["downloads"]["why"]
-    assert two_due.startswith("2 due wait for later polls")
+    assert steps["downloads"]["planned"] == "12 due replays downloaded and parsed, 4 at a time"
+    retry, parser, old = steps["downloads"]["why"]
     assert retry == "1 tried within the last 60 minutes wait for their retry, the next in 50 min"
     assert "port 5600" in parser
     assert old.startswith("1 without a replay older than 30 days")
     assert steps["downloads"]["last"] is None  # no poll since the server started
 
     poll_once(session, network([]), "", tmp_path / "nowhere", tmp_path)  # OpenDota knows none of them
-    assert poll.STEPS["downloads"]["what"].startswith("0 of 10 downloaded and parsed")
+    assert poll.STEPS["downloads"]["what"].startswith("0 of 12 downloaded and parsed")  # every due one, no cap a poll
     assert poll.queue(session, tmp_path / "nowhere", tmp_path)["steps"][5]["last"] == poll.STEPS["downloads"]
