@@ -18,7 +18,7 @@ from .db import (
 from .derive import derive_match
 from .opendota import fetch_player_games, player_games, store_player_games, unlisted_players, usual_match
 from .replay import (
-    MAX_AGE_DAYS, PARSER_URL, ReplayError, download_and_parse, fetch_replay, mark_tried, opendota_match, parse_dem,
+    DOWNLOADED, DOWNLOADING, MAX_AGE_DAYS, PARSER_URL, ReplayError, download_and_parse, fetch_replay, mark_tried, opendota_match, parse_dem,
     replay_complete, settle, steam_salts,
 )  # fmt: skip
 from .steam import store_match, sync, sync_leagues
@@ -27,7 +27,9 @@ log = logging.getLogger("uvicorn.error")  # the logger uvicorn already prints
 REPLAY_DIR = Path(r"C:\Program Files (x86)\Steam\steamapps\common\dota 2 beta\game\dota\replays")
 LOOP_SECONDS = 10  # each step looks for work this long after its last round ended
 RETRY_SECONDS = 10  # an unsalted retry costs one OpenDota call
-WORKERS = 4  # replays downloaded and parsed at once; each holds a whole replay (up to ~250 MB) in memory
+# replays downloaded and parsed at once: one, as parallel downloads split the line and Valve's replay CDN cuts off a
+# download from its storage that runs past ~45-80 s (measured November 2026)
+WORKERS = 1
 SALTS_PER_POLL = 10  # asked of Valve in one login, which allows the second account about 100 a day
 # shortcut: these three are forgotten on restart, so each is tried once more per run; store them if that adds up
 NO_MATCH: set[int] = set()  # usual games OpenDota does not know
@@ -462,6 +464,7 @@ def queue(session: Session, replay_dir: Path, data: Path = DATA, now: float | No
         "retry_seconds": RETRY_SECONDS, "loop_seconds": LOOP_SECONDS, "max_age_days": MAX_AGE_DAYS,
         "states": states, "steps": steps(session, replay_dir, waiting, next_try, parser, now),
         "storage": storage(data),
+        "downloading": list(DOWNLOADING.values()), "downloaded": list(reversed(DOWNLOADED)),
         "queue": [
             {
                 "match_id": m.match_id, "start_time": m.start_time, **names[m.match_id],

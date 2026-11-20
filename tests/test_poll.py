@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from dotanalyst.db import (Account, Base, Derived, League, LeagueMatch, Match, MatchPlayer, PlayerGame, PlayerGameList, PlayerMinute, PlayerName,)  # fmt: skip
 from dotanalyst import poll
 from dotanalyst.poll import RETRY_SECONDS, poll_once, request_replay
-from dotanalyst.replay import ReplayError, replay_complete
+from dotanalyst.replay import DOWNLOADED, DOWNLOADING, ReplayError, replay_complete
 from dotanalyst.steam import store_league_match
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -106,12 +106,25 @@ def test_a_cut_off_download_is_retried_later_without_stopping_the_others(session
             return httpx.Response(200, content=LOG)
         if f"/{GOOD}_" in request.url.path:
             return httpx.Response(200, content=zstd.compress(REPLAY))
-        raise httpx.RemoteProtocolError("peer closed connection without sending complete message body", request=request)
+        return httpx.Response(200, stream=CutOff())
 
     poll_once(session, httpx.Client(transport=httpx.MockTransport(handler)), "", tmp_path / "nowhere", tmp_path)
     assert session.get(Match, GOOD).replay_state == "parsed"
     assert {session.get(Match, i).replay_state for i in range(1, poll.WORKERS + 1)} == {"pending"}
     assert "stopped" not in poll.STEPS["downloads"]["what"]
+    # the queue page's download list: the cut ones too, with what came before the cut
+    ended = {d["match_id"]: d for d in DOWNLOADED}
+    assert ended[GOOD]["whole"] and ended[GOOD]["bytes"] == len(zstd.compress(REPLAY))
+    assert not ended[1]["whole"] and ended[1]["bytes"] == 10
+    assert not DOWNLOADING
+
+
+class CutOff(httpx.SyncByteStream):
+    """A body that stops after 10 bytes, as Valve's replay servers often do."""
+
+    def __iter__(self):
+        yield zstd.compress(REPLAY)[:10]
+        raise httpx.RemoteProtocolError("peer closed connection without sending complete message body")
 
 
 def test_poll_parses_downloaded_replays_of_stored_matches(session, tmp_path):
@@ -489,7 +502,7 @@ def test_the_steps_say_what_is_planned_and_why_some_of_it_waits(session, tmp_pat
     assert list(steps) == ["accounts", "leagues", "usual", "folder", "salts", "downloads", "players", "stats"]
     assert steps["accounts"]["why"] == ["STEAM_API_KEY is not set in .env, so Steam is not asked"]
     assert steps["salts"]["planned"].startswith("none") and "STEAM_ALT_USER" in steps["salts"]["why"][0]
-    assert steps["downloads"]["planned"] == "12 due replays downloaded and parsed, 4 at a time"
+    assert steps["downloads"]["planned"] == f"12 due replays downloaded and parsed, {poll.WORKERS} at a time"
     retry, parser, old = steps["downloads"]["why"]
     assert retry == "1 tried within the last 10 s wait for their retry, the next in 7 s"
     assert "port 5600" in parser

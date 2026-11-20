@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import time
+from collections import deque
 from compression import zstd
 from pathlib import Path
 
@@ -19,6 +20,9 @@ OPENDOTA_MATCH = "https://api.opendota.com/api/matches/{}"
 SALT_SCRIPT = Path(__file__).parent.parent / "steam" / "salts.mjs"
 MAX_AGE_DAYS = 90  # how far back replays are downloaded; Valve keeps them about 100 days (30 before 2026-11-20)
 RETRY_DAYS = 14  # a match this old with no replay to get is given up on
+# for the queue page's download speed; in memory only, so a restart starts them empty
+DOWNLOADING: dict[int, dict] = {}  # per match: since when, bytes so far, bytes in all
+DOWNLOADED: deque[dict] = deque(maxlen=10)  # the last downloads that ended, cut off or whole
 
 
 class ReplayError(Exception):
@@ -184,17 +188,26 @@ def download_replay(url: str, dem: Path, client: httpx.Client) -> bool:
             return False
         response.raise_for_status()
         dem.parent.mkdir(parents=True, exist_ok=True)
-        with dem.open("wb") as out:
-            for chunk in response.iter_bytes():
-                # the name says bz2, but in 2026 Valve sends Zstandard; the first bytes tell which
-                decompressor = decompressor or (
-                    zstd.ZstdDecompressor() if chunk.startswith(ZSTD_MAGIC) else bz2.BZ2Decompressor()
-                )
-                try:
-                    content = decompressor.decompress(chunk)
-                except (OSError, EOFError, zstd.ZstdError) as error:
-                    raise ReplayError(f"{dem.name}: download is not a valid archive") from error
-                out.write(content)
+        match_id = int(dem.stem)
+        size = int(response.headers.get("content-length", 0)) or None
+        now = DOWNLOADING[match_id] = {"match_id": match_id, "started": time.time(), "bytes": 0, "total": size}
+        try:
+            with dem.open("wb") as out:
+                for chunk in response.iter_bytes():
+                    now["bytes"] += len(chunk)  # as sent, compressed: Valve adds no content encoding
+                    # the name says bz2, but in 2026 Valve sends Zstandard; the first bytes tell which
+                    decompressor = decompressor or (
+                        zstd.ZstdDecompressor() if chunk.startswith(ZSTD_MAGIC) else bz2.BZ2Decompressor()
+                    )
+                    try:
+                        content = decompressor.decompress(chunk)
+                    except (OSError, EOFError, zstd.ZstdError) as error:
+                        raise ReplayError(f"{dem.name}: download is not a valid archive") from error
+                    out.write(content)
+        finally:
+            DOWNLOADING.pop(match_id, None)
+            whole = decompressor is not None and decompressor.eof
+            DOWNLOADED.append({**now, "seconds": time.time() - now["started"], "whole": whole})
     if decompressor is None or not decompressor.eof:
         raise ReplayError(f"{dem.name}: download ended early")
     return True

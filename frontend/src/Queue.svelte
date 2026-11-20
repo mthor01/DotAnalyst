@@ -24,6 +24,8 @@
   const next = (row: QueueStatus['queue'][number]) =>
     row.next_try > status!.now ? `in ${span(row.next_try - status!.now)}` : 'now'
   const STATES = ['pending', 'none', 'parsed', 'unavailable', 'failed']
+  const mb = (b: number) => (b / 2 ** 20).toFixed(1)
+  const speed = (b: number, s: number) => `${s > 0 ? (b / 2 ** 20 / s).toFixed(2) : '–'} MB/s`
 
   // in binary units, as the file manager counts them
   const size = (b: number) =>
@@ -69,6 +71,24 @@
         <tr>
           <th>Parser</th>
           <td class={status.parser ? '' : 'error'}>{status.parser ? 'answers on port 5600' : 'does not answer on port 5600: is Docker running?'}</td>
+        </tr>
+        <tr>
+          <th>Downloading</th>
+          <td>
+            {#each status.downloading as d (d.match_id)}
+              <div><a href="#match/{d.match_id}">{d.match_id}</a>: {mb(d.bytes)}{d.total ? ` / ${mb(d.total)}` : ''} MB, {speed(d.bytes, status.now - d.started)}</div>
+            {:else}<span class="muted">nothing right now</span>{/each}
+          </td>
+        </tr>
+        <tr>
+          <th>Last downloads</th>
+          <td>
+            {#each status.downloaded as d}
+              <div>
+                <span class="muted">{ago(d.started + d.seconds)}:</span> <a href="#match/{d.match_id}">{d.match_id}</a>, {mb(d.bytes)} MB in {span(d.seconds)}, {speed(d.bytes, d.seconds)}{#if !d.whole}, <span class="error">cut off{d.total ? ` at ${Math.round((100 * d.bytes) / d.total)}%` : ''}</span>{/if}
+              </div>
+            {:else}<span class="muted">none since the server started</span>{/each}
+          </td>
         </tr>
       </tbody>
     </table>

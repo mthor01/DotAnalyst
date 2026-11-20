@@ -162,6 +162,8 @@ export type QueueStatus = {
   /** the poll steps in their order; `last` is null until the step had work since the server started */
   steps: { key: string; name: string; planned: string; why: string[]; last: { at: number; what: string } | null }[]
   storage: { name: string; bytes: number }[] // always in the same order, so a part keeps its colour
+  downloading: Download[] // replay downloads under way
+  downloaded: (Download & { seconds: number; whole: boolean })[] // the last ones that ended, newest first
   queue: {
     match_id: number
     start_time: number
@@ -176,6 +178,8 @@ export type QueueStatus = {
   events: QueueEvent[]
 }
 export type QueuePlayer = { account_id: number; name: string | null; avatar: string | null }
+/** A replay download: compressed bytes as Valve sends them; `total` is null when Valve does not say the size. */
+export type Download = { match_id: number; started: number; bytes: number; total: number | null }
 /** A ward as a heatmap needs it: its kind, its place in map cells, and the side its owner played. */
 /** time: game second placed; league: on team pages, whether the game is one of the team's tournament games */
 export type WardSpot = { match_id: number; type: 'obs' | 'sen'; x: number; y: number; radiant: boolean; time: number; win: boolean; league?: boolean }
