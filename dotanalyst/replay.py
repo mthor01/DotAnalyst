@@ -17,7 +17,7 @@ PARSER_URL = "http://localhost:5600/"
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 OPENDOTA_MATCH = "https://api.opendota.com/api/matches/{}"
 SALT_SCRIPT = Path(__file__).parent.parent / "steam" / "salts.mjs"
-MAX_AGE_DAYS = 30  # how far back replays are downloaded; Valve keeps them about 100 days
+MAX_AGE_DAYS = 90  # how far back replays are downloaded; Valve keeps them about 100 days (30 before 2026-11-20)
 RETRY_DAYS = 14  # a match this old with no replay to get is given up on
 
 

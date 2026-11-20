@@ -200,7 +200,7 @@ export type TeamDetail = {
   heroes: TeamHero[]
   /** `wards` are those of the `replays` games of the player whose replay is parsed. `outside` are the player's last
    *  games outside the league, newest first, whatever the filters; `outside_listed` is false until they were asked for.
-   *  `usual_waiting`: usual games of the last 30 days whose replay the poller still means to get, null until Refresh
+   *  `usual_waiting`: usual games of the last 90 days whose replay the poller still means to get, null until Refresh
    *  on the team page asked for them. `main`: one of the five most seen in their newest `RECENT_GAMES` games
    *  (`recent` of them), the others stand in. `tracked`: an account of this site, whose profile it has.
    *  `position`: the position 1-5 they took most often in these games. */

@@ -15,7 +15,7 @@ Stack and rules are in [CLAUDE.md](CLAUDE.md). This file says what to build and 
 | First custom metrics | Lane CS differential, vision habits, fight participation |
 | Replay URLs | `replay_salt` comes from Valve's game coordinator through a second Steam account, or else from the OpenDota API; the site downloads from Valve itself |
 | Fetching | The backend polls while it is running |
-| Out of scope | Logins and multi-user, hosting beyond this PC, live-game tracking, pro matches, league games older than 30 days without being asked for (their drafts and scoreboards are in since November 2026; younger ones get their replays like any match, see Teams), global percentiles, MMR tracking, mobile layout, own Game Coordinator client |
+| Out of scope | Logins and multi-user, hosting beyond this PC, live-game tracking, pro matches, league games older than 90 days without being asked for (their drafts and scoreboards are in since November 2026; younger ones get their replays like any match, see Teams), global percentiles, MMR tracking, mobile layout, own Game Coordinator client |
 
 Defaults chosen without asking — change any of them before the milestone that uses it:
 
@@ -79,7 +79,7 @@ Raw data is fetched once and never refetched:
 - `data/opendota/{match_id}.json.gz` — the OpenDota response that supplied the replay salt.
 - `data/salts.json` — the replay salts the second Steam account got from Valve, by match id.
 - `data/steam/` — that account's login token and the Steam library's own files. Never committed.
-- `league_matches` — one row per league game: league, start time, both team ids and names, winner, and the full API response as JSON (the draft is its `picks_bans`). A league game younger than 30 days is copied into `matches` and `match_players` by the poller, and an older one when its replay is asked for; it joins no account's stats either way, since those select on the tracked account's rows.
+- `league_matches` — one row per league game: league, start time, both team ids and names, winner, and the full API response as JSON (the draft is its `picks_bans`). A league game younger than 90 days is copied into `matches` and `match_players` by the poller, and an older one when its replay is asked for; it joins no account's stats either way, since those select on the tracked account's rows.
 - `player_names` — Steam name per account of a league player, as it was when first asked for.
 - `heroes`, `items` — id-to-name lookups.
 - `recipes` — for each item that is built from others, the names of its components.
@@ -130,8 +130,8 @@ This comes before the replay stats because replays expire: raw output collected 
 
 - Each poll, for stored matches with replay state `none` or `pending`: get the `replay_salt` (see below), build the URL from the stored `cluster` and that salt, download from Valve, decompress with the standard library (Zstandard or bz2, told apart by the first bytes), parse, store, delete the `.dem`.
 - Every due match, never-tried matches first, newest first, 4 downloading and parsing at a time; the downloads step looks for due matches every 10 seconds, while the other steps run (changed 2026-11-20 from 10 a poll, one after another). A backlog is held back only by the downloads and parses themselves and by OpenDota's 60 calls a minute for salts.
-- League games younger than 30 days are copied into `matches` by the league step (since 2026-11-16) and so are downloaded like any match.
-- Matches older than 30 days are not downloaded (chosen on 2026-11-11; `MAX_AGE_DAYS` in `poll.py`). They keep state `none`.
+- League games younger than 90 days are copied into `matches` by the league step (since 2026-11-16) and so are downloaded like any match.
+- Matches older than 90 days are not downloaded (`MAX_AGE_DAYS` in `replay.py`; 30 days chosen on 2026-11-11, raised to 90 on 2026-11-20 because Valve keeps replays longer than expected, about 100 days). They keep state `none`.
 - A match is tried at most once per hour (since 2026-11-20: once per 10 seconds). A try that finds no salt or no file leaves it `pending`; once the match is 14 days old such a try makes it `unavailable`, and it is never tried again.
 - An OpenDota response with a salt is stored, so a salt is never requested twice.
 - Added 2026-11-14: when `STEAM_ALT_USER` and `STEAM_ALT_PASSWORD` are set, the salts come from Valve first. Once per poll `steam/salts.mjs` (Node, the `steam-user` library) logs in with that second account, connects to the Dota 2 game coordinator and asks for the match details of the next 10 due matches (`SALTS_PER_POLL`; Valve allows about 100 a day). Its salts are stored in `data/salts.json` and never asked for again. OpenDota is asked for the matches it got no salt for, and for all of them when the script fails. The first login is done by hand (`node --env-file=.env steam/salts.mjs`) to type the Steam Guard code; the login token it leaves in `data/steam/` serves the later ones.
@@ -168,7 +168,7 @@ This comes before the replay stats because replays expire: raw output collected 
   - Ward map and death map on the minimap image (`frontend/public/minimap.webp`, Valve's artwork as redrawn by the OpenDota project). A death is the hero's icon with an edge in its team's colour. Both maps show the whole game, or one ten-minute part of it (0–10, 10–20, …); a ward belongs to the part it was placed in, and what happened before 0:00 to the first. Both also show the buildings as they stood at the end of the time shown.
   - Death playback, folded away until opened: a list of the deaths (of the part of the game chosen for the maps), and for the chosen death a map that plays the 20 seconds before it, at the game's speed or twice as fast (a switch beside the slider), with every hero's position and the wards standing at each second. Positions come once a second; between them a hero moves on a curve through its positions (Catmull-Rom), and a move of more than 8 cells in a second (teleport, blink, respawn) is shown as a jump. An unfolded fight has the same playback for the whole fight, behind a button. Both playbacks also show the towers, barracks and Ancients: filled while standing, an empty outline from the second they fall (fall times from `buildings`; positions are fixed in MiniMap.svelte, fitted from where melee heroes stand when hitting each building; every map of the match page draws them). The parser output has no creep positions, so creeps are not shown.
   - Teamfight list: time, the net worth swing as a bar, deaths and damage per team, who took part. Only fights that start at 10:00 or later are listed; the `teamfights` table and the fight metrics still hold the earlier ones. A click unfolds a fight: the net worth and XP swing (what Radiant gained minus what Dire gained), a map of the part of the map where heroes died with their icons, and damage, healing, net worth and XP gained per hero. That map also shows the wards: a light mark for a ward standing when the fight started, a dark mark for one standing when it ended, so a ward that lasted through the fight is a dark mark on a light one.
-- Matches without a parsed replay show the scoreboard, say that no replay is available, and have a button that requests it (the `POST` above). That is the way to a replay of a match older than the 30 days the poller covers.
+- Matches without a parsed replay show the scoreboard, say that no replay is available, and have a button that requests it (the `POST` above). That is the way to a replay of a match older than the 90 days the poller covers.
 
 **Done when**
 
@@ -202,7 +202,7 @@ Known limit: the lane differences describe the lane, not the player, and a lane 
 
 ## Teams: scouting a league team (November 2026)
 
-For preparing a tournament match: what do other teams ban against this team, and does the team pick those heroes when they are left open? Built from drafts and scoreboards. The replay of a league game younger than 30 days is downloaded by the poller (since 2026-11-16), an older one only when asked for on the site: the wards and the first moves below need it.
+For preparing a tournament match: what do other teams ban against this team, and does the team pick those heroes when they are left open? Built from drafts and scoreboards. The replay of a league game younger than 90 days is downloaded by the poller (since 2026-11-16), an older one only when asked for on the site: the wards and the first moves below need it.
 
 - **Which games**: the tournaments in the `leagues` table. A new database has none; they are added by league id on the Tournaments page (since 2026-11-18; before, a list in `steam.py` gave a new database three seasons of one league).
 - **Fetching**: the button in the top bar (see below) or `dotanalyst sync-leagues`, and every poll (since 2026-11-16). `GetMatchHistory` with `league_id` lists a league's games, each with both team ids; every game not stored yet is fetched once through `GetMatchHistoryBySequenceNum`, like an account's match. The first run took half an hour (1,130 games); a later run only fetches new games. The players' Steam names come last, from `GetPlayerSummaries`, 100 per request.
@@ -216,7 +216,7 @@ For preparing a tournament match: what do other teams ban against this team, and
   - Games, newest first: season, opponent (a link to that team), side, result, their picks, the bans against them, their own bans, and whether the replay is parsed. The date opens the game as a match page, where a game without a replay has the button that requests it.
 - Picks are read from the ten players of a game, bans from `picks_bans`. A team's name is the newest one Steam sent that is not empty.
 
-Not built: a season filter, fetching the replays of league games older than 30 days without being asked.
+Not built: a season filter, fetching the replays of league games older than 90 days without being asked.
 
 ## The check button (November 2026)
 
@@ -234,7 +234,7 @@ The top bar ends in a button that fetches now instead of in the step's next roun
 - Whether the parser answers on port 5600, and where replay salts come from.
 - How many `.dem` files in the Dota client folder are waiting to be parsed or are still being written.
 - The number of matches in each replay state, and how many parsed matches have no stats yet.
-- The queue: every match whose replay the poller still wants, in the order it will take them, each with its last message. That is every pending match, and every never-tried match from the last 30 days.
+- The queue: every match whose replay the poller still wants, in the order it will take them, each with its last message. That is every pending match, and every never-tried match from the last 90 days.
 - The last 100 events: replays parsed, replays not there yet (no salt, or Valve has no file), download and stats errors.
 
 The events and what each step did last are kept in memory only: a restart empties them, and nothing about them is stored per match.
@@ -260,4 +260,4 @@ Every page shows a bar under the header: replays parsed out of the replays parse
 - **High-rank accounts**: their matches may be missing from `GetMatchHistory`. If a tracked account is affected, the fallback is OpenDota's player match list; that is a spec change, not a silent workaround.
 - **Private accounts**: a friend who has not enabled "Expose Public Match Data" yields nothing. `status` shows which accounts are affected.
 - **OpenDota dependency**: if it stops returning salts, replays still arrive through the Dota client folder. It already has no salt for some matches; those end as `unavailable`.
-- **Server not running for more than 30 days**: matches that age past the download window are skipped; basic stats are not lost. Raising `MAX_AGE_DAYS` (up to about 100) brings them back while Valve still has the files.
+- **Server not running for more than 90 days**: matches that age past the download window are skipped; basic stats are not lost. Raising `MAX_AGE_DAYS` (up to about 100) brings them back while Valve still has the files.

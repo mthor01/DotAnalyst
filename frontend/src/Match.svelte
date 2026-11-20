@@ -556,7 +556,7 @@
     {:else}
       <p class="muted">
         No replay data for this match (replay: {match.replay_state}), so only the scoreboard above is known. Replays are
-        fetched on their own for matches up to 30 days old; Valve keeps them for about 100 days.
+        fetched on their own for matches up to 90 days old; Valve keeps them for about 100 days.
       </p>
       <p>
         <button class="action" onclick={requestReplay} disabled={asking}>

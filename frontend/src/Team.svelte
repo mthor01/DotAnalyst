@@ -500,9 +500,9 @@
             </p>
           {/if}
           {#if p.usual_waiting === null}
-            <p class="muted">Refresh fetches the replays of their usual matches from the last 30 days, about ten a minute.</p>
+            <p class="muted">Refresh fetches the replays of their usual matches from the last 90 days, about ten a minute.</p>
           {:else if p.usual_waiting}
-            <p class="muted">{p.usual_waiting} more of their usual matches from the last 30 days wait for their replay.</p>
+            <p class="muted">{p.usual_waiting} more of their usual matches from the last 90 days wait for their replay.</p>
           {/if}
         </section>
         <section class="outside">

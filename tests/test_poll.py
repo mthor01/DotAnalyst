@@ -158,7 +158,7 @@ def test_poll_downloads_and_parses_replays(session, tmp_path):
 
 
 def test_a_requested_replay_is_fetched_whatever_the_age_of_the_match(session, tmp_path):
-    add_match(session, GOOD, age_days=60)  # outside the download window: no poll would fetch it
+    add_match(session, GOOD, age_days=100)  # outside the download window: no poll would fetch it
     calls = []
     client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
@@ -184,7 +184,7 @@ def league_game(session: Session, match_id: int, age_days: float) -> dict:
 
 def test_poll_downloads_the_replays_of_recent_league_games(session, tmp_path):
     league_game(session, GOOD, age_days=2)  # the parser of these tests answers with the log of GOOD
-    league_game(session, 1, age_days=60)  # outside the download window
+    league_game(session, 1, age_days=100)  # outside the download window
     calls = []
     client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
 
@@ -200,7 +200,7 @@ def test_poll_downloads_the_replays_of_recent_league_games(session, tmp_path):
 
 
 def test_a_requested_replay_of_a_league_game_makes_it_a_match(session, tmp_path):
-    game = league_game(session, GOOD, age_days=60)
+    game = league_game(session, GOOD, age_days=100)
     calls = []
     client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
@@ -214,7 +214,7 @@ def test_a_requested_replay_of_a_league_game_makes_it_a_match(session, tmp_path)
 
 
 def test_a_requested_replay_that_valve_no_longer_has_is_unavailable(session, tmp_path):
-    add_match(session, 1, age_days=60)
+    add_match(session, 1, age_days=100)
     add_match(session, 2, age_days=1)
     client = network([], opendota=(200, OPENDOTA))  # a salt, but no file
     assert request_replay(session, client, 1, tmp_path) == "unavailable"
@@ -225,7 +225,7 @@ def test_match_without_a_replay_is_retried_and_given_up_after_14_days(session, t
     recent, old, too_old = 1, 2, 3
     add_match(session, recent, age_days=13)
     add_match(session, old, age_days=15)
-    add_match(session, too_old, age_days=31)  # outside the download window: never asked about
+    add_match(session, too_old, age_days=100)  # outside the download window: never asked about
     calls = []
     client = network(calls)  # OpenDota knows neither match
 
@@ -253,7 +253,7 @@ def test_the_queue_shows_the_order_the_poller_takes_matches_in(session, tmp_path
     monkeypatch.setattr(poll.httpx, "get", parser_down)
     poll.EVENTS.clear()
     now = time.time()
-    for match_id, age, tried in [(1, 2, None), (2, 1, None), (3, 3, now - 7200), (4, 0, now - 5), (5, 31, None)]:
+    for match_id, age, tried in [(1, 2, None), (2, 1, None), (3, 3, now - 7200), (4, 0, now - 5), (5, 100, None)]:
         add_match(session, match_id, age_days=age)
         session.get(Match, match_id).replay_tried_at = tried
     session.get(Match, 3).replay_state = session.get(Match, 4).replay_state = "pending"
@@ -386,7 +386,7 @@ USUAL = json.loads(OPENDOTA)["match_id"]
 def test_the_usual_games_of_a_checked_teams_players_become_matches(session, tmp_path, monkeypatch):
     monkeypatch.setattr(poll, "NO_MATCH", set())
     player_game(session, 1001, USUAL, age_days=1, wanted=True)
-    player_game(session, 1001, 44, age_days=40, wanted=True)  # too old for its replay
+    player_game(session, 1001, 44, age_days=100, wanted=True)  # too old for its replay
     player_game(session, 1002, 55, age_days=1, wanted=False)  # their team was never checked
     calls = []
     poll_once(session, network(calls, opendota=(200, OPENDOTA)), "", tmp_path / "nowhere", tmp_path)
@@ -462,7 +462,7 @@ def test_the_steps_say_what_is_planned_and_why_some_of_it_waits(session, tmp_pat
         add_match(session, match_id)
     add_match(session, 20)
     session.get(Match, 20).replay_state, session.get(Match, 20).replay_tried_at = "pending", now - 3
-    add_match(session, 30, age_days=40)
+    add_match(session, 30, age_days=100)
     session.commit()
 
     steps = {s["key"]: s for s in poll.queue(session, tmp_path / "nowhere", tmp_path, now)["steps"]}
@@ -473,7 +473,7 @@ def test_the_steps_say_what_is_planned_and_why_some_of_it_waits(session, tmp_pat
     retry, parser, old = steps["downloads"]["why"]
     assert retry == "1 tried within the last 10 s wait for their retry, the next in 7 s"
     assert "port 5600" in parser
-    assert old.startswith("1 without a replay older than 30 days")
+    assert old.startswith("1 without a replay older than 90 days")
     assert steps["downloads"]["last"] is None  # no poll since the server started
 
     poll_once(session, network([]), "", tmp_path / "nowhere", tmp_path)  # OpenDota knows none of them
@@ -482,7 +482,7 @@ def test_the_steps_say_what_is_planned_and_why_some_of_it_waits(session, tmp_pat
 
 
 def test_progress_counts_parsed_and_waiting_replays_per_profile_and_tournament(session):
-    for match_id, age, state in [(1, 0, "parsed"), (2, 0, "none"), (3, 40, "none"), (4, 0, "unavailable"), (5, 40, "pending")]:
+    for match_id, age, state in [(1, 0, "parsed"), (2, 0, "none"), (3, 100, "none"), (4, 0, "unavailable"), (5, 100, "pending")]:
         add_match(session, match_id, age)
         session.get(Match, match_id).replay_state = state
     league_game(session, 1, 0)
