@@ -6,6 +6,7 @@
     folder: 'Replays in the Dota client folder', salts: 'Replay ids from Valve', downloads: 'Replay downloads and parsing',
     players: 'Game lists of league players', stats: 'Stats of parsed matches',
   }
+  let { current = false }: { current?: boolean } = $props() // whether the Queue page, which it opens, is shown
   $effect(() => follow())
 
   const p = $derived(progress.now)
@@ -24,20 +25,12 @@
 {/snippet}
 
 {#if p}
-  <!-- focusable, so the overview opens from the keyboard too, not only on hover -->
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-  <div class="progress" class:busy={p.busy} tabindex="0" aria-label="What runs in the background">
-    <div class="track top" role="progressbar" aria-label="Replays parsed" aria-valuemin={0} aria-valuemax={all} aria-valuenow={p.overall.parsed}>
-      <span class="fill" style:width="{share(p.overall.parsed, all)}%"></span>
-    </div>
-    <p class="line muted">
-      <span>Replays {n(p.overall.parsed)} / {n(all)} parsed</span>
-      {#if p.working.length}<span class="now">{p.working.length} being downloaded and parsed</span>{/if}
-      <span>
-        {#if running.length}{running.length} {running.length === 1 ? 'step' : 'steps'} at work: {running.map(([key]) => STEPS[key] ?? key).join(', ')}
-        {:else}Nothing to do; every step looks again within {p.loop_seconds} s{/if}
-      </span>
-    </p>
+  <!-- the link is focusable, so the overview below opens from the keyboard too, not only on hover -->
+  <div class="progress" class:busy={p.busy}>
+    <a href="#queue" aria-current={current ? 'page' : undefined} title="Replays parsed: open the Queue page">
+      <span class="track top" aria-hidden="true"><span class="fill" style:width="{share(p.overall.parsed, all)}%"></span></span>
+      <span class="label">Replays {n(p.overall.parsed)} / {n(all)}</span>
+    </a>
     <div class="panel card">
       <p class="muted">{running.length ? 'At work now' : 'No step has work'}{#if p.working.length}. Matches under way:
         {#each p.working as id, i}{i ? ', ' : ''}<a href="#match/{id}">{id}</a>{/each}{/if}</p>
@@ -57,7 +50,7 @@
         <h3>Tournaments</h3>
         <ul>{#each p.tournaments as t}{@render bar(t.name, t.parsed, t.parsed + t.waiting)}{/each}</ul>
       {/if}
-      <p class="muted">Replays older than {p.max_age_days} days that never came count in neither number. Details on the <a href="#queue">Queue</a> page.</p>
+      <p class="muted">Replays older than {p.max_age_days} days that never came count in neither number.</p>
     </div>
   </div>
 {/if}
@@ -65,8 +58,20 @@
 <style>
   .progress {
     position: relative;
-    margin: -8px 0 8px;
-    outline-offset: 2px;
+  }
+  .progress > a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    color: var(--muted);
+    font-size: 0.75em;
+    font-variant-numeric: tabular-nums;
+    text-decoration: none;
+  }
+  .progress > a:hover,
+  .progress > a[aria-current='page'] {
+    color: var(--text);
   }
   .track {
     display: block;
@@ -76,7 +81,7 @@
     overflow: hidden;
   }
   .track.top {
-    height: 6px;
+    width: 96px;
   }
   .fill {
     display: block;
@@ -98,32 +103,22 @@
       animation: none;
     }
   }
-  .line {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 16px;
-    margin: 4px 0 0;
-    font-size: 0.85em;
-  }
-  .now {
-    color: var(--series-1);
-  }
   .panel {
     display: none;
     position: absolute;
     z-index: 10;
     top: 100%;
     left: 0;
-    width: min(560px, 100%);
+    width: min(560px, 90vw);
     max-height: 70vh;
     overflow-y: auto;
     padding: 4px 16px 8px;
-    border: 1px solid var(--border);
-    margin-top: 4px;
+    border: 1px solid var(--border); /* no gap above it: the pointer on its way down would leave and close it */
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   }
+  /* keyboard focus opens it; a mouse click, which leaves focus on the link, does not keep it open over the Queue page */
   .progress:hover .panel,
-  .progress:focus-within .panel {
+  .progress:has(:focus-visible) .panel {
     display: block;
   }
   h3 {

@@ -313,17 +313,19 @@ The poller is eight steps, in `STEP_FUNCS` in `poll.py`: new matches of the acco
 
 The Queue page lists the steps with:
 
-- **Last done**: what the step reported the last time a round had work (`STEPS`, kept in memory, so empty after a restart). A step with work right now is marked, with what it does, since when, and how far it is (`RUNNING`, which each step fills while it works and empties when its round ends).
-- **Planned**: what the step's next round would do, counted now with the poller's own conditions.
-- **Why some of it waits**: every reason that keeps planned work back: no `STEAM_API_KEY` (no Steam calls) or `STEAM_ALT_USER` (salts from OpenDota only), replays the Dota client is still writing, the parser not answering, matches tried within the last 10 seconds (with when the next retry is), usual games OpenDota did not know and stats that failed (both skipped until a restart), and matches without a replay older than 90 days, which only Request replay on the match page fetches.
+- **Activity**: a step with work right now is marked "running", with what it does, since when, and how far it is (`RUNNING`, which each step fills while it works and empties when its round ends). Otherwise when its last round ended (`CHECKED`, set whether the round had work or not) and when the next one starts, 10 seconds after that.
+- **Planned**: a bare count of what the step's next round would do, counted now with the poller's own conditions ("12 replays, 1 waiting for a retry"; "off: no STEAM_API_KEY" or "off: no STEAM_ALT_USER" for a step that cannot run). Salts count the due matches Valve was not asked for yet and that have no salt from Valve or OpenDota.
+- **Finished**: what the step's rounds finished since the server started (`FINISHED`: `run_step` adds what each round returns; in memory, so 0 after a restart).
+
+The page no longer says why planned work waits (usual games OpenDota did not know, failed stats, old matches left alone, the next retry); the parser being down shows in the Poller card above, and each match's next try in the replay queue.
 
 Known limits: with nothing to do each step still reads the database every 10 seconds, and the accounts and leagues steps ask Steam (about one call per account and per league, paced to one a second). A match stored by the accounts and leagues steps at the same moment can fail one of them with a duplicate key; it is logged and the next round goes on.
 
 Known limit: the league players' count walks every league game on each refresh of the page (about 0.2 s on 2000 games).
 
-### Background progress (bar under the header, Replay column)
+### Background progress (bar in the header, Replay column)
 
-`progress` in `poll.py`, behind `GET /api/progress`, which every page reads every 3 seconds. A replay counts as **waiting** under the same condition as the queue (`wanted`: `pending`, or `none` and younger than 90 days), and as **parsed** when its state is `parsed`. Replays the poller gave up on (`unavailable`, `failed`, or `none` older than 90 days) count in neither, so the bar can reach 100 % while such matches remain. The bar shows parsed out of parsed plus waiting over all matches. The overview it opens adds:
+`progress` in `poll.py`, behind `GET /api/progress`, which every page reads every 3 seconds. A replay counts as **waiting** under the same condition as the queue (`wanted`: `pending`, or `none` and younger than 90 days), and as **parsed** when its state is `parsed`. Replays the poller gave up on (`unavailable`, `failed`, or `none` older than 90 days) count in neither, so the bar can reach 100 % while such matches remain. The bar shows parsed out of parsed plus waiting over all matches. It is a small bar with its count, in the header between the page tabs and the account; clicking it opens the Queue page, which has no tab of its own. Hovering it (or keyboard focus) opens an overview that adds:
 
 - one bar per **active** tracked account, counting the matches it played in (through `match_players`);
 - one bar per tracked tournament, counting its games that are already in `matches` (through `league_matches`). League games still only in `league_matches` are counted in no bar;

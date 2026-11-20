@@ -159,8 +159,9 @@ export type QueueStatus = {
   loop_seconds: number
   max_age_days: number
   states: Record<string, number>
-  /** the poll steps in their order; `last` is null until the step had work since the server started */
-  steps: { key: string; name: string; planned: string; why: string[]; last: { at: number; what: string } | null }[]
+  /** the poll steps in their order: `planned` and `finished` (since the server started) in numbers; `checked` is when
+   *  the step's last round ended, null until it had one */
+  steps: { key: string; name: string; planned: string; finished: string; checked: number | null }[]
   storage: { name: string; bytes: number }[] // always in the same order, so a part keeps its colour
   downloading: Download[] // replay downloads under way
   downloaded: (Download & { seconds: number; whole: boolean })[] // the last ones that ended, newest first

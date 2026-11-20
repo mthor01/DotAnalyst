@@ -124,10 +124,11 @@
   <header class="top">
     <h1><a class="brand" href="#{Object.keys(PAGES)[0]}"><img src="/logo.png" alt="DotAnalyst" width="209" height="32" /></a></h1>
     <nav aria-label="Pages">
-      {#each Object.entries(PAGES) as [id, title]}
+      {#each Object.entries(PAGES).filter(([id]) => id !== 'queue') as [id, title]}<!-- the progress bar opens Queue -->
         <a href="#{id}" aria-current={(teamId ? id === 'tournaments' : !matchId && page === id) ? 'page' : undefined}>{title}</a>
       {/each}
     </nav>
+    <Progress current={!matchId && page === 'queue'} />
     <div class="side">
       <label hidden={!!matchId || league || ALL_ACCOUNTS.includes(page) || page === 'queue'}>
         Account
@@ -152,7 +153,6 @@
       </button>
     </div>
   </header>
-  <Progress />
 
   <!-- a team page takes the time and the season; lobby and mode are the same in every league game -->
   <div class="filters" hidden={!!matchId || (league && !teamId) || page === 'queue'}>

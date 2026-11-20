@@ -96,26 +96,25 @@
 
   <h2>Steps</h2>
   <p class="muted">
-    Each step runs on its own, side by side with the others: it does all the work it finds, then looks again {status.loop_seconds} s later.
+    Each step runs on its own, side by side with the others: it does all the work it finds, then looks again {status.loop_seconds} s later. Finished counts since the server started.
   </p>
   <div class="card">
     <table class="steps">
-      <thead><tr><th>Step</th><th>Last done</th><th>Planned</th><th>Why some of it waits</th></tr></thead>
+      <thead><tr><th>Step</th><th>Activity</th><th>Planned</th><th>Finished</th></tr></thead>
       <tbody>
         {#each status.steps as s (s.key)}
           {@const now = status.running[s.key]}
           {@const running = !!now}
+          {@const next = s.checked === null ? 0 : s.checked + status.loop_seconds - status.now}
           <tr class:running aria-current={running ? 'step' : undefined}>
             <td class="name">{s.name}</td>
             <td>
-              {#if now}<strong>running now</strong>, for {span(status.now - now.since)}: {now.doing}{#if now.total} ({now.done} of {now.total}){/if}
-              {:else if s.last}<span class="muted">{ago(s.last.at)}:</span> {s.last.what}
-              {:else}<span class="muted">not since the server started</span>{/if}
+              {#if now}<strong>running</strong> for {span(status.now - now.since)}: {now.doing}{#if now.total}{` (${now.done} of ${now.total})`}{/if}
+              {:else if s.checked !== null}checked {ago(s.checked)}, next {next > 0 ? `in ${span(next)}` : 'now'}
+              {:else}<span class="muted">not checked since the server started</span>{/if}
             </td>
             <td>{s.planned}</td>
-            <td>
-              {#each s.why as reason}<div>{reason}</div>{:else}<span class="muted">nothing</span>{/each}
-            </td>
+            <td>{s.finished}</td>
           </tr>
         {/each}
       </tbody>
@@ -159,7 +158,7 @@
 
   <h2>Queue <span class="muted">{status.queue.length}</span></h2>
   <p class="muted">
-    The downloads step takes every due one, 4 at a time: never tried first, then newest first. A match without a replay yet
+    The downloads step takes every due one, one at a time: never tried first, then newest first. A match without a replay yet
     waits {span(status.retry_seconds)} before its next try.
   </p>
   {#if status.queue.length === 0}

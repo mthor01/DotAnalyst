@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import time
+from collections import Counter, deque
 from compression import zstd
 from pathlib import Path
 
@@ -80,15 +81,16 @@ def fresh_poller(monkeypatch):
     for name in ("NO_MATCH", "ASKED", "NO_STATS", "WORKING"):
         monkeypatch.setattr(poll, name, set())
     monkeypatch.setattr(poll, "RUNNING", {})
+    monkeypatch.setattr(poll, "CHECKED", {})
+    monkeypatch.setattr(poll, "FINISHED", Counter())
+    monkeypatch.setattr(poll, "EVENTS", deque(maxlen=200))
 
 
 def test_a_server_error_stops_the_downloads_left_until_the_next_round(session, tmp_path):
     for match_id in range(1, 21):
         add_match(session, match_id)
-    poll.STEPS.clear()
 
     poll_once(session, network([], opendota=(200, OPENDOTA), valve=(500, b"")), "", tmp_path / "nowhere", tmp_path)
-    assert "; then stopped: HTTPStatusError" in poll.STEPS["downloads"]["what"]
     assert any("download stopped, the rest waits for the next round" in e["message"] for e in poll.EVENTS)
     # none is lost: whether it ran or was cancelled, each stays wanted
     assert {session.get(Match, i).replay_state for i in range(1, 21)} <= {"none", "pending"}
@@ -111,7 +113,7 @@ def test_a_cut_off_download_is_retried_later_without_stopping_the_others(session
     poll_once(session, httpx.Client(transport=httpx.MockTransport(handler)), "", tmp_path / "nowhere", tmp_path)
     assert session.get(Match, GOOD).replay_state == "parsed"
     assert {session.get(Match, i).replay_state for i in range(1, poll.WORKERS + 1)} == {"pending"}
-    assert "stopped" not in poll.STEPS["downloads"]["what"]
+    assert not any("download stopped" in e["message"] for e in poll.EVENTS)
     # the queue page's download list: the cut ones too, with what came before the cut
     ended = {d["match_id"]: d for d in DOWNLOADED}
     assert ended[GOOD]["whole"] and ended[GOOD]["bytes"] == len(zstd.compress(REPLAY))
@@ -482,14 +484,13 @@ def test_the_queue_names_whose_match_it_is(session):
     assert poll.whose(session, [3])[3]["league"] == "Season 1"
 
 
-def test_the_steps_say_what_is_planned_and_why_some_of_it_waits(session, tmp_path, monkeypatch):
+def test_the_steps_count_what_is_planned_and_what_they_finished(session, tmp_path, monkeypatch):
     def parser_down(*args, **kwargs):
         raise httpx.ConnectError("down")
 
     monkeypatch.setattr(poll.httpx, "get", parser_down)
     monkeypatch.delenv("STEAM_API_KEY", raising=False)
     monkeypatch.delenv("STEAM_ALT_USER", raising=False)
-    poll.STEPS.clear()
     now = time.time()
     for match_id in range(1, 13):
         add_match(session, match_id)
@@ -500,18 +501,22 @@ def test_the_steps_say_what_is_planned_and_why_some_of_it_waits(session, tmp_pat
 
     steps = {s["key"]: s for s in poll.queue(session, tmp_path / "nowhere", tmp_path, now)["steps"]}
     assert list(steps) == ["accounts", "leagues", "usual", "folder", "salts", "downloads", "players", "stats"]
-    assert steps["accounts"]["why"] == ["STEAM_API_KEY is not set in .env, so Steam is not asked"]
-    assert steps["salts"]["planned"].startswith("none") and "STEAM_ALT_USER" in steps["salts"]["why"][0]
-    assert steps["downloads"]["planned"] == f"12 due replays downloaded and parsed, {poll.WORKERS} at a time"
-    retry, parser, old = steps["downloads"]["why"]
-    assert retry == "1 tried within the last 10 s wait for their retry, the next in 7 s"
-    assert "port 5600" in parser
-    assert old.startswith("1 without a replay older than 90 days")
-    assert steps["downloads"]["last"] is None  # no poll since the server started
+    assert steps["accounts"]["planned"] == "off: no STEAM_API_KEY"
+    assert steps["salts"]["planned"] == "off: no STEAM_ALT_USER"
+    assert steps["downloads"]["planned"] == "12 replays, 1 waiting for a retry"  # the 100 days old one is left alone
+    assert steps["downloads"]["finished"] == "0 replays"
+    assert steps["downloads"]["checked"] is None  # no round since the server started
 
     poll_once(session, network([]), "", tmp_path / "nowhere", tmp_path)  # OpenDota knows none of them
-    assert poll.STEPS["downloads"]["what"].startswith("0 of 12 downloaded and parsed")  # every due one, no cap a poll
-    assert poll.queue(session, tmp_path / "nowhere", tmp_path)["steps"][5]["last"] == poll.STEPS["downloads"]
+    downloads = poll.queue(session, tmp_path / "nowhere", tmp_path)["steps"][5]
+    assert downloads["finished"] == "0 replays" and downloads["checked"] >= now
+
+
+def test_finished_adds_up_what_each_round_of_a_step_returns(session, monkeypatch):
+    monkeypatch.setitem(poll.STEP_FUNCS, "stats", lambda *args: 2)
+    poll.run_step("stats", session, None, None)
+    poll.run_step("stats", session, None, None)
+    assert poll.FINISHED["stats"] == 4 and "stats" in poll.CHECKED
 
 
 def test_progress_counts_parsed_and_waiting_replays_per_profile_and_tournament(session):
