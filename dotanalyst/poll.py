@@ -27,7 +27,7 @@ from .steam import store_match, sync, sync_leagues
 
 log = logging.getLogger("uvicorn.error")  # the logger uvicorn already prints
 REPLAY_DIR = Path(r"C:\Program Files (x86)\Steam\steamapps\common\dota 2 beta\game\dota\replays")
-RETRY_SECONDS = 3600
+RETRY_SECONDS = 10  # in effect every poll; an unsalted retry costs one OpenDota call per poll
 WORKERS = 4  # replays downloaded and parsed at once; each holds a whole replay (up to ~250 MB) in memory
 SALTS_PER_POLL = 10  # asked of Valve, which allows the second account about 100 a day; OpenDota gives the rest
 # shortcut: forgotten on restart, so OpenDota is asked once more per run for a game it cannot give; store it if that adds up
@@ -440,8 +440,8 @@ def steps(session: Session, replay_dir: Path, waiting: list[Match], next_try, pa
         {"key": "downloads", "name": "Replay downloads and parsing",
          "planned": f"{len(due)} due replays downloaded and parsed, {WORKERS} at a time",
          "why": why(
-             later and f"{len(later)} tried within the last {RETRY_SECONDS // 60} minutes wait for their retry, the "
-                       f"next in {math.ceil((min(later) - now) / 60)} min",
+             later and f"{len(later)} tried within the last {RETRY_SECONDS} s wait for their retry, the "
+                       f"next in {math.ceil(min(later) - now)} s",
              due and no_parser,
              old and f"{old} without a replay older than {MAX_AGE_DAYS} days are left alone; Request replay on the "
                      "match page fetches one",

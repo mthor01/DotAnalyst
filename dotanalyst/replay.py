@@ -204,7 +204,7 @@ def fetch_replay(
 
     Without a salt from the caller (see steam_salts), OpenDota is asked for it.
     """
-    # recorded before any request, so a match that keeps erroring waits an hour like any other
+    # recorded before any request, so a match that keeps erroring waits for its retry like any other
     mark_tried(session, match)
     return settle(session, match, download_and_parse(match.match_id, match.cluster, client, data, salt))
 

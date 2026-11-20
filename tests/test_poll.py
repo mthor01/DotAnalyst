@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from dotanalyst.db import (Account, Base, Derived, League, LeagueMatch, Match, MatchPlayer, PlayerGame, PlayerGameList, PlayerMinute, PlayerName,)  # fmt: skip
 from dotanalyst import poll
-from dotanalyst.poll import poll_once, request_replay
+from dotanalyst.poll import RETRY_SECONDS, poll_once, request_replay
 from dotanalyst.replay import ReplayError, replay_complete
 from dotanalyst.steam import store_league_match
 
@@ -213,7 +213,7 @@ def test_a_requested_replay_that_valve_no_longer_has_is_unavailable(session, tmp
     assert request_replay(session, client, 2, tmp_path) == "pending"  # may still come
 
 
-def test_match_without_a_replay_is_retried_hourly_and_given_up_after_14_days(session, tmp_path):
+def test_match_without_a_replay_is_retried_and_given_up_after_14_days(session, tmp_path):
     recent, old, too_old = 1, 2, 3
     add_match(session, recent, age_days=13)
     add_match(session, old, age_days=15)
@@ -230,10 +230,10 @@ def test_match_without_a_replay_is_retried_hourly_and_given_up_after_14_days(ses
     assert session.get(Match, recent).replay_state == "pending"
     assert session.get(Match, old).replay_state == "unavailable"
     assert session.get(Match, too_old).replay_state == "none"
-    assert poll() == 0  # tried less than an hour ago
+    assert poll() == 0  # tried a moment ago
 
     for match in (session.get(Match, recent), session.get(Match, old)):
-        match.replay_tried_at -= 3601
+        match.replay_tried_at -= RETRY_SECONDS + 1
     session.commit()
     assert poll() == 1  # the pending one again; the unavailable one never
 
@@ -245,7 +245,7 @@ def test_the_queue_shows_the_order_the_poller_takes_matches_in(session, tmp_path
     monkeypatch.setattr(poll.httpx, "get", parser_down)
     poll.EVENTS.clear()
     now = time.time()
-    for match_id, age, tried in [(1, 2, None), (2, 1, None), (3, 3, now - 7200), (4, 0, now - 600), (5, 31, None)]:
+    for match_id, age, tried in [(1, 2, None), (2, 1, None), (3, 3, now - 7200), (4, 0, now - 5), (5, 31, None)]:
         add_match(session, match_id, age_days=age)
         session.get(Match, match_id).replay_tried_at = tried
     session.get(Match, 3).replay_state = session.get(Match, 4).replay_state = "pending"
@@ -253,16 +253,16 @@ def test_the_queue_shows_the_order_the_poller_takes_matches_in(session, tmp_path
 
     shown = poll.queue(session, tmp_path / "nowhere", tmp_path, now)
     assert [row["match_id"] for row in shown["queue"]] == [2, 1, 3, 4]  # 5 is outside the download window
-    assert [row["next_try"] for row in shown["queue"]] == [now, now, now, now - 600 + 3600]
+    assert [row["next_try"] for row in shown["queue"]] == [now, now, now, now - 5 + poll.RETRY_SECONDS]
     assert shown["parser"] is False
 
     poll_once(session, network([]), "", tmp_path / "nowhere", tmp_path)  # OpenDota knows none of them
-    assert sorted(e["match_id"] for e in poll.EVENTS) == [1, 2, 3]  # 4 was tried 10 minutes ago
+    assert sorted(e["match_id"] for e in poll.EVENTS) == [1, 2, 3]  # 4 was tried 5 seconds ago
     shown = poll.queue(session, tmp_path / "nowhere", tmp_path)
     assert shown["queue"][-1]["last"]["message"] == "no replay yet (no salt: OpenDota does not know it), now pending"
 
 
-def test_a_refresh_by_hand_does_not_wait_the_hour(session, tmp_path):
+def test_a_refresh_by_hand_does_not_wait_for_the_retry(session, tmp_path):
     add_match(session, 1)
     calls = []
     client = network(calls)  # OpenDota does not know the match
@@ -279,7 +279,7 @@ def test_salt_is_asked_for_once_even_if_the_download_has_to_be_repeated(session,
     client = network(calls, opendota=(200, OPENDOTA))  # a salt, but Valve has no file yet
 
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
-    session.get(Match, GOOD).replay_tried_at -= 3601
+    session.get(Match, GOOD).replay_tried_at -= poll.RETRY_SECONDS + 1
     session.commit()
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
 
@@ -453,7 +453,7 @@ def test_the_steps_say_what_is_planned_and_why_some_of_it_waits(session, tmp_pat
     for match_id in range(1, 13):
         add_match(session, match_id)
     add_match(session, 20)
-    session.get(Match, 20).replay_state, session.get(Match, 20).replay_tried_at = "pending", now - 600
+    session.get(Match, 20).replay_state, session.get(Match, 20).replay_tried_at = "pending", now - 3
     add_match(session, 30, age_days=40)
     session.commit()
 
@@ -463,7 +463,7 @@ def test_the_steps_say_what_is_planned_and_why_some_of_it_waits(session, tmp_pat
     assert steps["salts"]["planned"].startswith("none") and "STEAM_ALT_USER" in steps["salts"]["why"][0]
     assert steps["downloads"]["planned"] == "12 due replays downloaded and parsed, 4 at a time"
     retry, parser, old = steps["downloads"]["why"]
-    assert retry == "1 tried within the last 60 minutes wait for their retry, the next in 50 min"
+    assert retry == "1 tried within the last 10 s wait for their retry, the next in 7 s"
     assert "port 5600" in parser
     assert old.startswith("1 without a replay older than 30 days")
     assert steps["downloads"]["last"] is None  # no poll since the server started

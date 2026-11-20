@@ -294,7 +294,7 @@ A league game starts out in `league_matches` only; its match page is built from 
 
 ### Replay queue (Queue page)
 
-The queue is every match the poller still wants a replay for: `pending`, or `none` and younger than 30 days (`wanted` in `poll.py`, the same condition the poller uses). Each match's next try is now if it was never tried, else an hour (`RETRY_SECONDS`) after its last try, and never earlier than now. The queue is sorted by next try; among matches due now, never-tried ones come first, then the newest. That is the order the poller starts them in; the next poll takes every due match, 4 (`WORKERS`) downloading and parsing at a time, so they can finish in another order. A check by hand ignores the hour and takes every waiting match at once.
+The queue is every match the poller still wants a replay for: `pending`, or `none` and younger than 30 days (`wanted` in `poll.py`, the same condition the poller uses). Each match's next try is now if it was never tried, else 10 seconds (`RETRY_SECONDS`) after its last try, and never earlier than now. With polls a minute apart, that means every waiting match is tried again at every poll; for a match without a known salt, each try costs one OpenDota call (60 a minute, about 3000 a day). The queue is sorted by next try; among matches due now, never-tried ones come first, then the newest. That is the order the poller starts them in; the next poll takes every due match, 4 (`WORKERS`) downloading and parsing at a time, so they can finish in another order. A check by hand ignores the wait and takes every waiting match at once.
 
 A replay that is not there yet is put down to one of two causes. "Valve has no file for it" means a salt is known, from the second Steam account or from a cached OpenDota answer. "No salt" means neither source knew the match.
 
@@ -306,7 +306,7 @@ The Whose column names the tracked accounts that played the match (their label a
 
 - **Last done**: what the step reported the last time it ran (`STEPS`, kept in memory, so empty after a restart). The steps running now are marked; `poll_once` lists their keys in `NOW["step"]`.
 - **Planned**: what the next poll will do in it, counted now with the poller's own conditions. Nothing is capped per poll except the salts asked of Valve: 10 (`SALTS_PER_POLL`), since it allows the second account about 100 a day.
-- **Why some of it waits**: every reason that keeps planned work out of the next poll: no `STEAM_API_KEY` (no Steam calls) or `STEAM_ALT_USER` (salts from OpenDota only), more due than the salts Valve is asked for, replays the Dota client is still writing, the parser not answering, matches tried within the last hour (with when the next retry is), usual games OpenDota did not know (skipped until a restart), and matches without a replay older than 30 days, which only Request replay on the match page fetches.
+- **Why some of it waits**: every reason that keeps planned work out of the next poll: no `STEAM_API_KEY` (no Steam calls) or `STEAM_ALT_USER` (salts from OpenDota only), more due than the salts Valve is asked for, replays the Dota client is still writing, the parser not answering, matches tried within the last 10 seconds (with when the next retry is), usual games OpenDota did not know (skipped until a restart), and matches without a replay older than 30 days, which only Request replay on the match page fetches.
 
 Known limit: the league players' count walks every league game on each refresh of the page (about 0.2 s on 2000 games).
 
