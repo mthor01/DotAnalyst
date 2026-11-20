@@ -35,6 +35,8 @@ NO_MATCH: set[int] = set()
 BUSY = threading.Lock()  # the timed poll and a refresh from the site never fetch at the same time
 # for the queue page; kept in memory only, so a restart starts them empty
 NOW = {"doing": "starting", "step": [], "since": time.time(), "last_poll": None, "next_poll": None}
+JOBS: dict[str, Counter] = {"done": Counter(), "total": Counter()}  # per step of the poll running now
+WORKING: set[int] = set()  # matches whose replay a worker downloads or parses right now
 EVENTS: deque[dict] = deque(maxlen=200)
 STEPS: dict[str, dict] = {}  # per step of poll_once: when it last ended and what it did
 # what takes room in the data folder, in the order the storage chart colours it; everything else is "Other"
@@ -48,6 +50,15 @@ def doing(what: str, *steps: str) -> None:
 
 def did(step: str, what: str) -> None:
     STEPS[step] = {"at": time.time(), "what": what}
+
+
+def working(match_id: int, work: Callable, *args):
+    """work(*args), with the match in WORKING while it runs, so the site can show which replays are under way."""
+    WORKING.add(match_id)
+    try:
+        return work(*args)
+    finally:
+        WORKING.discard(match_id)
 
 
 def event(match_id: int | None, message: str, warn: bool = True) -> None:
@@ -124,6 +135,7 @@ def poll_once(
     files, opendota = ThreadPoolExecutor(WORKERS), ThreadPoolExecutor(1)
     jobs: dict[Future, tuple[str, Callable[[Future], None]]] = {}  # each job's step, and what to do with its result
     done, total, stopped = Counter(), Counter(), {}
+    JOBS.update(done=done, total=total)  # the site's progress bar reads them while the poll runs
 
     def submit(pool: ThreadPoolExecutor, step: str, then, work, *args) -> None:
         if step not in stopped:
@@ -175,7 +187,7 @@ def poll_once(
     salts = {}
 
     def download(match_id: int, cluster: int) -> None:
-        submit(files, "downloads", partial(downloaded, match_id=match_id), download_and_parse,
+        submit(files, "downloads", partial(downloaded, match_id=match_id), working, match_id, download_and_parse,
                match_id, cluster, client, data, salts.get(match_id))  # fmt: skip
 
     def downloaded(future: Future, match_id: int) -> None:
@@ -217,8 +229,8 @@ def poll_once(
         # a file the Dota client is still writing would parse as truncated and be marked failed for good
         ready = [dem for dem in in_folder if replay_complete(dem)]
         for dem in ready:
-            submit(files, "folder", partial(folder_parsed, match_id=int(dem.stem), name=dem.name), parse_dem,
-                   dem, int(dem.stem), client, data / "raw")  # fmt: skip
+            submit(files, "folder", partial(folder_parsed, match_id=int(dem.stem), name=dem.name), working,
+                   int(dem.stem), parse_dem, dem, int(dem.stem), client, data / "raw")  # fmt: skip
 
         # never tried first, so a new match is not stuck behind retries; each group newest first
         now = time.time()
@@ -346,6 +358,35 @@ def queue(session: Session, replay_dir: Path, data: Path = DATA, now: float | No
             for m in waiting
         ],
         "events": list(reversed(EVENTS))[:100],
+    }  # fmt: skip
+
+
+def progress(session: Session, now: float | None = None) -> dict:
+    """For the progress bar on every page, so it is cheap: what the poller does now, the jobs of the poll running, the
+    matches being downloaded or parsed, and per profile and per tournament how many replays are parsed of those it
+    can get (parsed + still wanted; replays it gave up on count in neither)."""
+    now = now or time.time()
+    counts = (func.count().filter(Match.replay_state == "parsed"), func.count().filter(wanted(now)))
+    profiles = (
+        select(Account.account_id, Account.label, *counts)
+        .join(MatchPlayer, MatchPlayer.account_id == Account.account_id).join(Match, Match.match_id == MatchPlayer.match_id)
+        .where(Account.active).group_by(Account.account_id).order_by(Account.label, Account.account_id)
+    )  # fmt: skip
+    tournaments = (
+        select(League.league_id, League.name, *counts)
+        .join(LeagueMatch, LeagueMatch.league_id == League.league_id).join(Match, Match.match_id == LeagueMatch.match_id)
+        .group_by(League.league_id).order_by(League.league_id.desc())
+    )  # fmt: skip
+    parsed, waiting = session.execute(select(*counts)).one()
+    busy = BUSY.locked()  # a finished poll's counts stay in JOBS until the next, so only a running one shows them
+    done, total = (JOBS["done"].copy(), JOBS["total"].copy()) if busy else ({}, {})  # copies: the poll goes on counting
+    return {
+        "busy": busy, "doing": NOW["doing"], "step": NOW["step"], "next_poll": NOW["next_poll"], "now": now,
+        "max_age_days": MAX_AGE_DAYS, "working": sorted(WORKING),
+        "jobs": {step: {"done": done[step], "total": n} for step, n in total.items()},
+        "overall": {"parsed": parsed, "waiting": waiting},
+        "profiles": [{"account_id": a, "name": name, "parsed": p, "waiting": w} for a, name, p, w in session.execute(profiles)],
+        "tournaments": [{"league_id": i, "name": name, "parsed": p, "waiting": w} for i, name, p, w in session.execute(tournaments)],
     }  # fmt: skip
 
 

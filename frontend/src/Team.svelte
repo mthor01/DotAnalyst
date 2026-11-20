@@ -3,6 +3,7 @@
   import { heroIcon, heroName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import Openings from './lib/Openings.svelte'
+  import ReplaySign from './lib/ReplaySign.svelte'
   import RoleWheel from './lib/RoleWheel.svelte'
   import WardHeat from './lib/WardHeat.svelte'
   import Match from './Match.svelte'
@@ -427,7 +428,7 @@
             <td>{@render icons(g.picks_against)}</td>
             <td>{@render icons(g.bans_against)}</td>
             <td>{@render icons(g.bans)}</td>
-            <td class="muted">{g.replay ? 'Parsed' : '–'}</td>
+            <td class="muted"><ReplaySign match_id={g.match_id} state={g.replay_state} start_time={g.start_time} /></td>
           </tr>
           {#if open}
             <tr class="more">

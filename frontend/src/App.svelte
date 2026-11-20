@@ -4,6 +4,7 @@
   import Match from './Match.svelte'
   import Compare from './Compare.svelte'
   import Profile from './Profile.svelte'
+  import Progress from './lib/Progress.svelte'
   import Queue from './Queue.svelte'
   import Team from './Team.svelte'
   import Tournaments from './Tournaments.svelte'
@@ -151,6 +152,7 @@
       </button>
     </div>
   </header>
+  <Progress />
 
   <!-- a team page takes the time and the season; lobby and mode are the same in every league game -->
   <div class="filters" hidden={!!matchId || (league && !teamId) || page === 'queue'}>

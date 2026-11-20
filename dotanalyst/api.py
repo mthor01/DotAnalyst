@@ -167,6 +167,11 @@ def queue(session: Db) -> dict:
     return poll.queue(session, poll.replay_dir())
 
 
+@app.get("/api/progress")
+def progress(session: Db) -> dict:
+    return poll.progress(session)
+
+
 @app.post("/api/teams/refresh")
 def refresh_leagues() -> dict:
     if not os.environ.get("STEAM_API_KEY"):

@@ -2,6 +2,7 @@
   import { GAME_MODES, LOBBY_TYPES, clock, get, type MatchRow } from './lib/api'
   import { constants, itemIcon } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
+  import ReplaySign from './lib/ReplaySign.svelte'
   import Match from './Match.svelte'
 
   let { query }: { query: string } = $props()
@@ -79,7 +80,7 @@
             <td class="muted">
               {LOBBY_TYPES[r.lobby_type] ?? `Lobby ${r.lobby_type}`} {GAME_MODES[r.game_mode] ?? `Mode ${r.game_mode}`}
             </td>
-            <td class="muted">{r.replay_state === 'parsed' ? 'Parsed' : '–'}</td>
+            <td class="muted"><ReplaySign match_id={r.match_id} state={r.replay_state} start_time={r.start_time} /></td>
           </tr>
           {#if open}<tr class="more"><td colspan="12"><Match id={String(r.match_id)} brief draft={false} /></td></tr>{/if}
         {/each}

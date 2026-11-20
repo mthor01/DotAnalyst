@@ -239,6 +239,10 @@ The top bar ends in a button that fetches now instead of at the next poll. The p
 
 The events and the last poll are kept in memory only: a restart empties them, and nothing about them is stored per match.
 
+## Background progress (November 2026)
+
+Every page shows a bar under the header: replays parsed out of the replays parsed or still wanted, how many are being downloaded and parsed now, and whether a poll runs or when the next one is due. Hovering it (or focusing it with the keyboard) opens an overview: the replays under way, a bar per step of the running poll, a bar per tracked profile and per tracked tournament. It reads `GET /api/progress` every 3 seconds. In the match lists of the profile and team pages the Replay column shows a spinner for a replay being fetched now and "Waiting" for one the poller still wants.
+
 ## Design and profile page (November 2026)
 
 - **Look**: dark only. The page is slate; the two strong colours are the teams, Radiant green (`--radiant`) and Dire red (`--dire`), and wins and losses use the same green and red. Colour blindness is deliberately not considered. All colours are CSS variables in `frontend/src/app.css`; charts read them through `Chart.svelte`.

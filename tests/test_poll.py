@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from dotanalyst.db import (Account, Base, Derived, League, LeagueMatch, Match, MatchPlayer, PlayerGame, PlayerGameList, PlayerMinute, PlayerName,)  # fmt: skip
 from dotanalyst import poll
 from dotanalyst.poll import poll_once, request_replay
-from dotanalyst.replay import replay_complete
+from dotanalyst.replay import ReplayError, replay_complete
 from dotanalyst.steam import store_league_match
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -471,3 +471,36 @@ def test_the_steps_say_what_is_planned_and_why_some_of_it_waits(session, tmp_pat
     poll_once(session, network([]), "", tmp_path / "nowhere", tmp_path)  # OpenDota knows none of them
     assert poll.STEPS["downloads"]["what"].startswith("0 of 12 downloaded and parsed")  # every due one, no cap a poll
     assert poll.queue(session, tmp_path / "nowhere", tmp_path)["steps"][5]["last"] == poll.STEPS["downloads"]
+
+
+def test_progress_counts_parsed_and_waiting_replays_per_profile_and_tournament(session):
+    for match_id, age, state in [(1, 0, "parsed"), (2, 0, "none"), (3, 40, "none"), (4, 0, "unavailable"), (5, 40, "pending")]:
+        add_match(session, match_id, age)
+        session.get(Match, match_id).replay_state = state
+    league_game(session, 1, 0)
+    league_game(session, 2, 0)
+    league_id = session.get(LeagueMatch, 1).league_id
+    session.add_all([
+        League(league_id=league_id, name="Season 1"),
+        Account(account_id=1001, label="Player 1", avatar=""),
+        Account(account_id=1002, label="Player 2", avatar="", active=False),  # no longer tracked
+        *[MatchPlayer(match_id=m, player_slot=0, account_id=1001, hero_id=1, items=[]) for m in (1, 2, 3, 4)],
+        MatchPlayer(match_id=5, player_slot=0, account_id=1002, hero_id=1, items=[]),
+    ])  # fmt: skip
+    session.commit()
+
+    found = poll.progress(session)
+    assert found["overall"] == {"parsed": 1, "waiting": 2}  # 2 is recent, 5 was asked for; 3 is too old, 4 is gone
+    assert found["profiles"] == [{"account_id": 1001, "name": "Player 1", "parsed": 1, "waiting": 1}]
+    assert found["tournaments"] == [{"league_id": league_id, "name": "Season 1", "parsed": 1, "waiting": 1}]
+    assert found["working"] == [] and found["jobs"] == {}
+
+
+def test_a_match_is_listed_as_worked_on_only_while_its_replay_is(session):
+    def work():
+        assert poll.WORKING == {1001}
+        raise ReplayError("broken")
+
+    with pytest.raises(ReplayError):
+        poll.working(1001, work)
+    assert poll.WORKING == set()

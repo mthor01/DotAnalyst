@@ -411,7 +411,8 @@ def team(
         return heroes.setdefault(hero_id, blank)
 
     ids = [g.match_id for g in rows]
-    parsed = set(session.scalars(select(Match.match_id).where(Match.match_id.in_(ids), Match.replay_state == "parsed")))
+    states = dict(session.execute(select(Match.match_id, Match.replay_state).where(Match.match_id.in_(ids))).all())
+    parsed = {m for m, state in states.items() if state == "parsed"}
     placed_by: dict[tuple[int, int], dict] = {}  # (match, player slot) -> the player
     side_of = {g.match_id: g.radiant_team_id == team_id for g in rows if g.match_id in parsed}  # True: Radiant
     tormentor, blood = _first_tormentors(session, side_of), _first_bloods(session, side_of)
@@ -467,7 +468,7 @@ def team(
                 "radiant": radiant, "win": win, "opponent_id": opponent, "opponent": names.get(opponent),
                 "picks": [p["hero_id"] for p in side], "picks_against": [p["hero_id"] for p in ten if p not in side],
                 "bans": own, "bans_against": against,
-                "replay": g.match_id in parsed, "tormentor": tormentor.get(g.match_id), "first_blood": blood.get(g.match_id),
+                "replay": g.match_id in parsed, "replay_state": states.get(g.match_id), "tormentor": tormentor.get(g.match_id), "first_blood": blood.get(g.match_id),
             }
         )  # fmt: skip
     for h in heroes.values():

@@ -310,6 +310,18 @@ The Whose column names the tracked accounts that played the match (their label a
 
 Known limit: the league players' count walks every league game on each refresh of the page (about 0.2 s on 2000 games).
 
+### Background progress (bar under the header, Replay column)
+
+`progress` in `poll.py`, behind `GET /api/progress`, which every page reads every 3 seconds. A replay counts as **waiting** under the same condition as the queue (`wanted`: `pending`, or `none` and younger than 30 days), and as **parsed** when its state is `parsed`. Replays the poller gave up on (`unavailable`, `failed`, or `none` older than 30 days) count in neither, so the bar can reach 100 % while such matches remain. The bar shows parsed out of parsed plus waiting over all matches. The overview it opens adds:
+
+- one bar per **active** tracked account, counting the matches it played in (through `match_players`);
+- one bar per tracked tournament, counting its games that are already in `matches` (through `league_matches`). League games still only in `league_matches` are counted in no bar;
+- while a poll runs, one bar per step with done / total for that poll (`JOBS`, filled by `poll_once`). The counts of a finished poll are left in `JOBS` but not shown, because `BUSY` is free.
+
+`WORKING` holds the match ids whose replay a worker thread is downloading or parsing right now (`working` adds the id and removes it when the job ends, failed or not). The Replay column of the match lists shows a spinner ("Parsing…") for those, "⏳ Waiting" for the other wanted ones, "Parsed", or "–". On the team page a league game not yet in `matches` has no state; it counts as waiting while it is younger than 30 days, since the next poll copies it in.
+
+Known limit: a list loaded before a replay finished keeps its old state for that row ("Waiting" again once the spinner stops) until the page is reloaded; only the bar and the spinner follow live.
+
 ### Storage (Queue page)
 
 `storage` in `poll.py` adds up the size of every file in the data folder by its top-level part: `raw` is the parser output, `dotanalyst.db` with its `-wal` and `-shm` files the database, `opendota` and `steam` the cached API answers, `tmp` the replays being fetched; anything else is Other. Sizes are shown in binary units (1 GB = 2³⁰ bytes), as the file manager counts them. The parts always come in that order with their fixed colour, an empty part included in the table but left out of the donut.

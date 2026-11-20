@@ -132,6 +132,23 @@ export type TournamentRow = {
 export type TeamRow = { team_id: number; name: string | null; games: number; wins: number; last_played: number }
 /** Something the poller did to one match's replay, or to none (`match_id` null). Times are unix seconds. */
 export type QueueEvent = { at: number; match_id: number | null; message: string }
+/** Replays parsed of those the poller can get: parsed + `waiting` (still wanted). Those it gave up on count in neither. */
+export type Backlog = { parsed: number; waiting: number }
+/** The progress bar's view of the poller. `jobs`: the running poll's done/total per step key, empty between polls;
+ *  `working`: the matches whose replay is being downloaded or parsed right now. */
+export type Progress = {
+  busy: boolean
+  doing: string
+  step: string[]
+  next_poll: number | null
+  now: number
+  max_age_days: number
+  working: number[]
+  jobs: Record<string, { done: number; total: number }>
+  overall: Backlog
+  profiles: (Backlog & { account_id: number; name: string | null })[]
+  tournaments: (Backlog & { league_id: number; name: string })[]
+}
 /** What the poller has to do: every match whose replay it still wants, in the order it takes them. */
 export type QueueStatus = {
   doing: string
@@ -177,6 +194,8 @@ export type TeamDetail = {
   logo: string | null
   /** Newest first. `picks` are in player slot order; `replay` says whether the game's replay is parsed. */
   games: { match_id: number; start_time: number; league: string; radiant: boolean; win: boolean; opponent_id: number; opponent: string | null; picks: number[]; picks_against: number[]; bans: number[]; bans_against: number[]; replay: boolean
+    /** null while the league game is not a stored match yet */
+    replay_state: string | null
     /** From the parsed replay, null without one: the game's first Tormentor and whether they drew first blood */
     tormentor: { time: number; taken: boolean; enemies_dead: number; lead: number } | null
     first_blood: boolean | null
