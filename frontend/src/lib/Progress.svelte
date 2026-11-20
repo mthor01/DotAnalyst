@@ -12,10 +12,7 @@
   const all = $derived(p ? p.overall.parsed + p.overall.waiting : 0)
   const share = (done: number, total: number) => (total ? (100 * done) / total : 100)
   const n = (x: number) => x.toLocaleString()
-  const until = (at: number) => {
-    const s = Math.max(0, Math.round(at - p!.now))
-    return s < 60 ? `${s} s` : `${Math.round(s / 60)} min`
-  }
+  const running = $derived(p ? Object.entries(p.running) : [])
 </script>
 
 {#snippet bar(name: string, done: number, total: number)}
@@ -37,15 +34,20 @@
       <span>Replays {n(p.overall.parsed)} / {n(all)} parsed</span>
       {#if p.working.length}<span class="now">{p.working.length} being downloaded and parsed</span>{/if}
       <span>
-        {#if p.busy}Poll running: {p.doing}{:else if p.next_poll}Next poll in {until(p.next_poll)}{:else}{p.doing}{/if}
+        {#if running.length}{running.length} {running.length === 1 ? 'step' : 'steps'} at work: {running.map(([key]) => STEPS[key] ?? key).join(', ')}
+        {:else}Nothing to do; every step looks again within {p.loop_seconds} s{/if}
       </span>
     </p>
     <div class="panel card">
-      <p class="muted">{p.busy ? `Now: ${p.doing}` : 'No poll running'}{#if p.working.length}. Replays under way:
+      <p class="muted">{running.length ? 'At work now' : 'No step has work'}{#if p.working.length}. Matches under way:
         {#each p.working as id, i}{i ? ', ' : ''}<a href="#match/{id}">{id}</a>{/each}{/if}</p>
-      {#if Object.keys(p.jobs).length}
-        <h3>This poll</h3>
-        <ul>{#each Object.entries(p.jobs) as [key, job]}{@render bar(STEPS[key] ?? key, job.done, job.total)}{/each}</ul>
+      {#if running.length}
+        <ul>
+          {#each running as [key, r]}
+            {#if r.total}{@render bar(STEPS[key] ?? key, r.done ?? 0, r.total)}
+            {:else}<li><span class="name">{STEPS[key] ?? key}</span><span class="doing muted">{r.doing}</span></li>{/if}
+          {/each}
+        </ul>
       {/if}
       {#if p.profiles.length}
         <h3>Profiles <span class="muted">replays parsed / to get</span></h3>
@@ -145,6 +147,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .doing {
+    grid-column: 2 / -1;
   }
   .count {
     color: var(--text-2);

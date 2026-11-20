@@ -1,5 +1,4 @@
 """Run with: uv run uvicorn dotanalyst.api:app (it reads .env when there is one)"""
-import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import date
@@ -14,7 +13,6 @@ from sqlalchemy.orm import Session
 
 from . import derive, load_env, opendota, poll, queries
 from .db import DATA, Ability, Account, Hero, Item, League, open_engine
-from .poll import poll_forever
 from .replay import ReplayError
 from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, store_avatars, team_logo
 
@@ -25,9 +23,9 @@ FRONTEND = Path("frontend/dist")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    poller = asyncio.create_task(poll_forever(engine))
+    stop = poll.start(engine)
     yield
-    poller.cancel()
+    stop.set()
 
 
 app = FastAPI(lifespan=lifespan)

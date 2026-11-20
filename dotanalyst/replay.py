@@ -1,6 +1,7 @@
 import bz2
 import gzip
 import json
+import os
 import subprocess
 import time
 from compression import zstd
@@ -140,7 +141,9 @@ def steam_salts(match_ids: list[int], data: Path = DATA) -> dict[int, int]:
     # a salt goes into a URL, so nothing but a number passes
     known |= {int(k): v for k, v in answer.items() if k in missing and type(v) is int}
     data.mkdir(parents=True, exist_ok=True)
-    stored.write_text(json.dumps(known))
+    # the downloads step reads this file while the salts step writes it, so it is swapped in whole
+    (data / "salts.json.tmp").write_text(json.dumps(known))
+    os.replace(data / "salts.json.tmp", stored)
     return known
 
 

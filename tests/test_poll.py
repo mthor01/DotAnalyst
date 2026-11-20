@@ -74,14 +74,22 @@ def for_replays(calls: list[str]) -> list[str]:
     return [url for url in calls if "/players/" not in url]
 
 
-def test_a_server_error_stops_the_downloads_left_until_the_next_poll(session, tmp_path):
+@pytest.fixture(autouse=True)
+def fresh_poller(monkeypatch):
+    """What the poller remembers in memory starts empty in each test, as after a restart."""
+    for name in ("NO_MATCH", "ASKED", "NO_STATS", "WORKING"):
+        monkeypatch.setattr(poll, name, set())
+    monkeypatch.setattr(poll, "RUNNING", {})
+
+
+def test_a_server_error_stops_the_downloads_left_until_the_next_round(session, tmp_path):
     for match_id in range(1, 21):
         add_match(session, match_id)
     poll.STEPS.clear()
 
     poll_once(session, network([], opendota=(200, OPENDOTA), valve=(500, b"")), "", tmp_path / "nowhere", tmp_path)
     assert "; then stopped: HTTPStatusError" in poll.STEPS["downloads"]["what"]
-    assert any("download stopped, the rest waits for the next poll" in e["message"] for e in poll.EVENTS)
+    assert any("download stopped, the rest waits for the next round" in e["message"] for e in poll.EVENTS)
     # none is lost: whether it ran or was cancelled, each stays wanted
     assert {session.get(Match, i).replay_state for i in range(1, 21)} <= {"none", "pending"}
 
@@ -310,10 +318,10 @@ def test_salts_come_from_the_second_steam_account_and_from_opendota_for_the_rest
     assert to("opendota", calls) == [f"https://api.opendota.com/api/matches/{WRONG_LOG}"]
 
     for match_id in (GOOD, WRONG_LOG):
-        session.get(Match, match_id).replay_tried_at -= 3601
+        session.get(Match, match_id).replay_tried_at -= poll.RETRY_SECONDS + 1
     session.commit()
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path, alt=True)
-    assert asked[1:] == [[str(WRONG_LOG)]]  # the salt of GOOD was kept
+    assert asked[1:] == []  # the salt of GOOD was kept, and Valve is asked for WRONG_LOG once a run
     assert f"http://replay{CLUSTER}.valve.net/570/{GOOD}_111.dem.bz2" in to("valve.net", calls)[2:]
 
 
@@ -493,14 +501,18 @@ def test_progress_counts_parsed_and_waiting_replays_per_profile_and_tournament(s
     assert found["overall"] == {"parsed": 1, "waiting": 2}  # 2 is recent, 5 was asked for; 3 is too old, 4 is gone
     assert found["profiles"] == [{"account_id": 1001, "name": "Player 1", "parsed": 1, "waiting": 1}]
     assert found["tournaments"] == [{"league_id": league_id, "name": "Season 1", "parsed": 1, "waiting": 1}]
-    assert found["working"] == [] and found["jobs"] == {}
+    assert found["working"] == [] and found["running"] == {} and not found["busy"]
 
 
-def test_a_match_is_listed_as_worked_on_only_while_its_replay_is(session):
-    def work():
-        assert poll.WORKING == {1001}
-        raise ReplayError("broken")
+def test_two_steps_never_work_on_the_same_match():
+    assert poll.claim(1001)
+    assert not poll.claim(1001)  # taken by the first
+    poll.release(1001)
+    assert poll.claim(1001)
 
-    with pytest.raises(ReplayError):
-        poll.working(1001, work)
-    assert poll.WORKING == set()
+
+def test_a_replay_asked_for_from_the_site_waits_for_the_poller_working_on_it():
+    poll.claim(1001)
+    with pytest.raises(ReplayError, match="right now"):
+        poll.refresh_replay(None, 1001)
+    assert poll.WORKING == {1001}  # still the poller's

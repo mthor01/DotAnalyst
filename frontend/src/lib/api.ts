@@ -134,35 +134,32 @@ export type TeamRow = { team_id: number; name: string | null; games: number; win
 export type QueueEvent = { at: number; match_id: number | null; message: string }
 /** Replays parsed of those the poller can get: parsed + `waiting` (still wanted). Those it gave up on count in neither. */
 export type Backlog = { parsed: number; waiting: number }
-/** The progress bar's view of the poller. `jobs`: the running poll's done/total per step key, empty between polls;
- *  `working`: the matches whose replay is being downloaded or parsed right now. */
+/** A poll step with work right now: what it does, since when, and how far it is when it can count its work. */
+export type Running = { doing: string; since: number; done: number | null; total: number | null }
+/** The progress bar's view of the poller. `running`: per step key, the steps with work right now (each checks for
+ *  work every `loop_seconds` on its own); `working`: the matches being downloaded, parsed or computed right now. */
 export type Progress = {
   busy: boolean
-  doing: string
-  step: string[]
-  next_poll: number | null
+  running: Record<string, Running>
   now: number
+  loop_seconds: number
   max_age_days: number
   working: number[]
-  jobs: Record<string, { done: number; total: number }>
   overall: Backlog
   profiles: (Backlog & { account_id: number; name: string | null })[]
   tournaments: (Backlog & { league_id: number; name: string })[]
 }
 /** What the poller has to do: every match whose replay it still wants, in the order it takes them. */
 export type QueueStatus = {
-  doing: string
-  step: string[] // the keys of the poll steps running now, empty between polls
-  since: number
   busy: boolean
+  running: Record<string, Running> // per step key, the steps with work right now
   now: number
-  last_poll: { at: number; seconds: number; new?: number; parsed?: number; error?: string } | null
-  next_poll: number | null
   parser: boolean
   retry_seconds: number
+  loop_seconds: number
   max_age_days: number
   states: Record<string, number>
-  /** the steps of a poll in their order; `last` is null until the step ran since the server started */
+  /** the poll steps in their order; `last` is null until the step had work since the server started */
   steps: { key: string; name: string; planned: string; why: string[]; last: { at: number; what: string } | null }[]
   storage: { name: string; bytes: number }[] // always in the same order, so a part keeps its colour
   queue: {

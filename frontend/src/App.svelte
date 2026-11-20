@@ -106,9 +106,9 @@
           checked += `, the games of ${some(asked.players, 'player')} loaded`
         }
       } else {
-        const found = await post<{ matches: number; replays: number; waiting: number }>('refresh')
-        checked = `${some(found.matches, 'new match', 'new matches')}, ${some(found.replays, 'replay')} parsed`
-        if (found.waiting) checked += `, ${some(found.waiting, 'match', 'matches')} still without a replay`
+        const found = await post<{ matches: number; waiting: number }>('refresh')
+        checked = some(found.matches, 'new match', 'new matches')
+        if (found.waiting) checked += `, ${some(found.waiting, 'match', 'matches')} still without a replay: the poller fetches them`
       }
       version += 1
     } catch (e) {

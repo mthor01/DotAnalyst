@@ -108,7 +108,7 @@ No Game Coordinator and no OpenDota.
 - Run with `uv run uvicorn dotanalyst.api:app`, then open `http://localhost:8000/`.
 - FastAPI: `GET /api/accounts`, `/api/constants`, `/api/matches`, `/api/heroes`, `/api/teammates`, `/api/matchups`. The last four take `account_id`, `date_from`, `date_to`, `game_mode` and `lobby_type`.
 - `sync-constants` also stores item names, taken from `odota/dotaconstants` because the Web API has no working item list. Hero and item icons load from Valve's CDN.
-- Polling: a background task in the FastAPI process runs `sync` every `POLL_MINUTES` (default 1 since 2026-11-16, 15 before). It also parses any new `.dem` in the Dota client folder whose match is stored, once the file is whole: its header points at the file info record that ends every replay, and a file that does not end exactly there is still being written (checked on 50 replays; before 2026-11-16 a file was left alone for 2 minutes instead).
+- Polling: background threads in the FastAPI process, one per step (new matches, league games, usual games, folder replays, salts, downloads, player lists, stats). Each step looks for work every 10 seconds and does all it finds, independent of the others (since 2026-11-20; before, one poll ran the steps in order every `POLL_MINUTES`, default 1 since 2026-11-16, 15 before). It also parses any new `.dem` in the Dota client folder whose match is stored, once the file is whole: its header points at the file info record that ends every replay, and a file that does not end exactly there is still being written (checked on 50 replays; before 2026-11-16 a file was left alone for 2 minutes instead).
 - The first poll after a start reads each account's whole history (500 matches, 5 requests) and every league's whole list, so whatever an interrupted run missed is picked up. Later polls stop at the first page whose matches are all stored: about 1 request per account and per league when nothing is new. With 7 accounts and 3 leagues that is about 10 Steam requests a minute, 14,000 a day, against the Web API's 100,000.
 - Svelte pages:
   - **Matches** — filterable table: hero, result, K/D/A, GPM/XPM, duration, items.
@@ -122,24 +122,24 @@ No Game Coordinator and no OpenDota.
 - `uv run pytest` passes, including tests of the aggregation queries on fixture data.
 - `curl "http://localhost:8000/api/heroes?account_id=<id>"` returns a non-empty JSON array with games and wins per hero.
 - `http://localhost:8000/` shows the Matches table, and the Heroes page renders the win-rate bar chart.
-- With the server left running, the log shows a poll after `POLL_MINUTES`, and a replay newly downloaded in the Dota client appears as parsed in `dotanalyst status` without a manual command.
+- With the server left running, the Queue page shows the steps at work within 10 seconds, and a replay newly downloaded in the Dota client appears as parsed in `dotanalyst status` without a manual command.
 
 ## Milestone 3 — Automatic replay download
 
 This comes before the replay stats because replays expire: raw output collected now can be turned into stats later, but a missed replay is gone.
 
 - Each poll, for stored matches with replay state `none` or `pending`: get the `replay_salt` (see below), build the URL from the stored `cluster` and that salt, download from Valve, decompress with the standard library (Zstandard or bz2, told apart by the first bytes), parse, store, delete the `.dem`.
-- Every due match each poll, never-tried matches first, newest first, 4 downloading and parsing at a time (changed 2026-11-20 from 10 a poll, one after another). A backlog is held back only by the downloads and parses themselves and by OpenDota's 60 calls a minute for salts.
-- League games younger than 30 days are copied into `matches` each poll (since 2026-11-16) and so are downloaded like any match.
+- Every due match, never-tried matches first, newest first, 4 downloading and parsing at a time; the downloads step looks for due matches every 10 seconds, while the other steps run (changed 2026-11-20 from 10 a poll, one after another). A backlog is held back only by the downloads and parses themselves and by OpenDota's 60 calls a minute for salts.
+- League games younger than 30 days are copied into `matches` by the league step (since 2026-11-16) and so are downloaded like any match.
 - Matches older than 30 days are not downloaded (chosen on 2026-11-11; `MAX_AGE_DAYS` in `poll.py`). They keep state `none`.
-- A match is tried at most once per hour (since 2026-11-20: once per 10 seconds, so in effect at every poll). A try that finds no salt or no file leaves it `pending`; once the match is 14 days old such a try makes it `unavailable`, and it is never tried again.
+- A match is tried at most once per hour (since 2026-11-20: once per 10 seconds). A try that finds no salt or no file leaves it `pending`; once the match is 14 days old such a try makes it `unavailable`, and it is never tried again.
 - An OpenDota response with a salt is stored, so a salt is never requested twice.
 - Added 2026-11-14: when `STEAM_ALT_USER` and `STEAM_ALT_PASSWORD` are set, the salts come from Valve first. Once per poll `steam/salts.mjs` (Node, the `steam-user` library) logs in with that second account, connects to the Dota 2 game coordinator and asks for the match details of the next 10 due matches (`SALTS_PER_POLL`; Valve allows about 100 a day). Its salts are stored in `data/salts.json` and never asked for again. OpenDota is asked for the matches it got no salt for, and for all of them when the script fails. The first login is done by hand (`node --env-file=.env steam/salts.mjs`) to type the Steam Guard code; the login token it leaves in `data/steam/` serves the later ones.
 
 **Done when**
 
-- `uv run pytest` passes with a saved OpenDota response and a fake download. Tests cover the URL built from cluster and salt, the hourly retry limit, the 14-day cutoff, and a failed parse leaving the state `failed` with no raw file written.
-- A match played after this milestone shows as `parsed` in `dotanalyst status` after the poll that found it, with no manual download. If OpenDota has no salt yet, it follows on a later hourly retry.
+- `uv run pytest` passes with a saved OpenDota response and a fake download. Tests cover the URL built from cluster and salt, the retry wait, the 14-day cutoff, and a failed parse leaving the state `failed` with no raw file written.
+- A match played after this milestone shows as `parsed` in `dotanalyst status` soon after the accounts step found it, with no manual download. If OpenDota has no salt yet, it follows on a later retry.
 
 ## Milestone 4 — Replay stats and the match page
 
@@ -220,24 +220,24 @@ Not built: a season filter, fetching the replays of league games older than 30 d
 
 ## The check button (November 2026)
 
-The top bar ends in a button that fetches now instead of at the next poll. The page shows what was found and loads its data again.
+The top bar ends in a button that fetches now instead of in the step's next round. The page shows what was found and loads its data again.
 
 - On the Teams pages it reads "Check for new league games": `POST /api/teams/refresh` runs `sync-leagues`, about 50 seconds.
-- Everywhere else it reads "Check for new games": `POST /api/refresh` runs one poll (new matches of every account and league games, then replays), about half a minute plus 10 seconds per replay. Unlike the timed poll it tries every waiting replay again, whenever it was last tried: someone who presses it after starting Docker expects the replays that failed a minute ago. It answers with the new matches, the replays parsed, and how many matches still have none.
-- The timed poll and both checks share one lock, so they never fetch at the same time; a check started during a poll waits for it.
+- Everywhere else it reads "Check for new games": `POST /api/refresh` runs the accounts step once (new matches of every account). It answers with the new matches and how many matches still have no replay; the downloads step fetches those on its own (since 2026-11-20; before, it ran a whole poll including the replays).
+- Each check shares a lock with the step that does the same work, so the two never fetch at the same time; a check started during that step's round waits for it.
 
 ## Queue page, for debugging (November 2026)
 
 `#queue` (`GET /api/queue`, reloaded every 5 seconds while open) shows what the poller does with replays:
 
-- What it is doing now, and since when. Its last poll: when it ran, how long it took, and what it found or why it failed. When the next poll is due.
+- Which steps are at work now, what each is doing, since when, and how far it is. For each step what it did last, what it plans, and why some of it waits.
 - Whether the parser answers on port 5600, and where replay salts come from.
 - How many `.dem` files in the Dota client folder are waiting to be parsed or are still being written.
 - The number of matches in each replay state, and how many parsed matches have no stats yet.
 - The queue: every match whose replay the poller still wants, in the order it will take them, each with its last message. That is every pending match, and every never-tried match from the last 30 days.
 - The last 100 events: replays parsed, replays not there yet (no salt, or Valve has no file), download and stats errors.
 
-The events and the last poll are kept in memory only: a restart empties them, and nothing about them is stored per match.
+The events and what each step did last are kept in memory only: a restart empties them, and nothing about them is stored per match.
 
 ## Background progress (November 2026)
 

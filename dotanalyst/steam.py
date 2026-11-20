@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import threading
 import time
 from pathlib import Path
 
@@ -22,7 +23,9 @@ ITEM_IDS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/i
 ITEMS = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/items.json"
 ABILITIES = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/abilities.json"
 HERO_FILE = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/heroes.json"
-PAUSE = 1.0  # seconds before every request
+PAUSE = 1.0  # seconds between Steam calls, from whatever thread: the poll steps call it side by side
+_paced = {"last": 0.0}
+_pace_lock = threading.Lock()
 ANONYMOUS = 4294967295
 HISTORY_NOT_EXPOSED = 15
 STATS = (
@@ -35,8 +38,15 @@ class SteamError(Exception):
     pass
 
 
+def pace() -> None:
+    """Wait until PAUSE has passed since the last Steam call. Call it right before each one."""
+    with _pace_lock:
+        time.sleep(max(0.0, _paced["last"] + PAUSE - time.monotonic()))
+        _paced["last"] = time.monotonic()
+
+
 def call(client: httpx.Client, key: str, path: str, **params) -> dict:
-    time.sleep(PAUSE)
+    pace()
     try:
         response = client.get(f"{BASE}/{path}", params={"key": key, **params}, timeout=30)
     except httpx.HTTPError as error:
@@ -252,7 +262,7 @@ def team_logo(client: httpx.Client, key: str, ugc_id: int, data: Path = DATA) ->
     known = json.loads(stored.read_text()) if stored.exists() else {}
     if str(ugc_id) in known or not key:
         return known.get(str(ugc_id))
-    time.sleep(PAUSE)
+    pace()
     try:
         response = client.get(f"{BASE}/{LOGO}", params={"key": key, "appid": 570, "ugcid": ugc_id}, timeout=30)
     except httpx.HTTPError:

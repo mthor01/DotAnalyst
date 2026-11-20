@@ -20,9 +20,9 @@
     s < 90 ? `${Math.round(s)} s` : s < 5400 ? `${Math.round(s / 60)} min` : s < 172800 ? `${Math.round(s / 3600)} h` : `${Math.round(s / 86400)} days`
   const ago = (t: number) => `${span(status!.now - t)} ago`
   const date = (t: number) => new Date(t * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-  // a poll takes every due match, in this order
+  // the downloads step takes every due match, in this order
   const next = (row: QueueStatus['queue'][number]) =>
-    row.next_try > status!.now ? `in ${span(row.next_try - status!.now)}` : 'next poll'
+    row.next_try > status!.now ? `in ${span(row.next_try - status!.now)}` : 'now'
   const STATES = ['pending', 'none', 'parsed', 'unavailable', 'failed']
 
   // in binary units, as the file manager counts them
@@ -62,18 +62,9 @@
   <div class="card">
     <table>
       <tbody>
-        <tr><th>Now</th><td>{status.doing}, for {span(status.now - status.since)}</td></tr>
         <tr>
-          <th>Last poll</th>
-          <td>
-            {#if !status.last_poll}<span class="muted">none since the server started</span>
-            {:else if status.last_poll.error}<span class="error">{ago(status.last_poll.at)}, failed: {status.last_poll.error}</span>
-            {:else}{ago(status.last_poll.at)}, took {span(status.last_poll.seconds)}: {status.last_poll.new} new matches, {status.last_poll.parsed} replays parsed{/if}
-          </td>
-        </tr>
-        <tr>
-          <th>Next poll</th>
-          <td>{status.next_poll ? (status.next_poll > status.now ? `in ${span(status.next_poll - status.now)}` : 'running') : 'after the first'}</td>
+          <th>Now</th>
+          <td>{Object.keys(status.running).length ? `${Object.keys(status.running).length} steps at work` : `no step has work; each looks again within ${status.loop_seconds} s`}</td>
         </tr>
         <tr>
           <th>Parser</th>
@@ -83,20 +74,21 @@
     </table>
   </div>
 
-  <h2>Steps of a poll</h2>
+  <h2>Steps</h2>
   <p class="muted">
-    A poll runs the first two in order, then the rest side by side. Between polls everything planned waits for the next one.
+    Each step runs on its own, side by side with the others: it does all the work it finds, then looks again {status.loop_seconds} s later.
   </p>
   <div class="card">
     <table class="steps">
       <thead><tr><th>Step</th><th>Last done</th><th>Planned</th><th>Why some of it waits</th></tr></thead>
       <tbody>
         {#each status.steps as s (s.key)}
-          {@const running = status.busy && status.step.includes(s.key)}
+          {@const now = status.running[s.key]}
+          {@const running = !!now}
           <tr class:running aria-current={running ? 'step' : undefined}>
             <td class="name">{s.name}</td>
             <td>
-              {#if running}<strong>running now</strong>, for {span(status.now - status.since)}
+              {#if now}<strong>running now</strong>, for {span(status.now - now.since)}: {now.doing}{#if now.total} ({now.done} of {now.total}){/if}
               {:else if s.last}<span class="muted">{ago(s.last.at)}:</span> {s.last.what}
               {:else}<span class="muted">not since the server started</span>{/if}
             </td>
@@ -147,8 +139,8 @@
 
   <h2>Queue <span class="muted">{status.queue.length}</span></h2>
   <p class="muted">
-    All due ones each poll: never tried first, then newest first. A match without a replay yet waits
-    {span(status.retry_seconds)}; "Check for new games" does not wait.
+    The downloads step takes every due one, 4 at a time: never tried first, then newest first. A match without a replay yet
+    waits {span(status.retry_seconds)} before its next try.
   </p>
   {#if status.queue.length === 0}
     <p class="muted">Nothing waiting: every replay the poller wants is parsed or given up.</p>

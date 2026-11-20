@@ -321,7 +321,8 @@ TABLES = (
 
 def open_engine() -> Engine:
     DATA.mkdir(exist_ok=True)
-    engine = create_engine(f"sqlite:///{DATA / 'dotanalyst.db'}")
+    # the poll steps write from their own threads: one waits up to 30 s for another's write instead of failing
+    engine = create_engine(f"sqlite:///{DATA / 'dotanalyst.db'}", connect_args={"timeout": 30})
     Base.metadata.create_all(engine)
     Derived.metadata.create_all(engine)
     with engine.begin() as c:  # create_all adds no columns to a table that exists
