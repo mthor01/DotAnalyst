@@ -272,6 +272,9 @@ def downloads_step(session: Session, client: httpx.Client, setup: Setup) -> int:
                         event(match_id, f"no replay yet ({why}), now {match.replay_state}", warn=False)
                 except ReplayError as error:
                     event(match_id, str(error))
+                # Valve's replay servers often cut a download off midway: only that match waits for its retry
+                except (httpx.RemoteProtocolError, httpx.ReadError) as error:
+                    event(match_id, f"download cut off, tried again later: {error!r}")
                 except (OSError, httpx.HTTPError) as error:  # a server or the disk is in trouble
                     event(match_id, f"download stopped, the rest waits for the next round: {error!r}")
                     stopped = f"; then stopped: {error!r}"

@@ -94,6 +94,26 @@ def test_a_server_error_stops_the_downloads_left_until_the_next_round(session, t
     assert {session.get(Match, i).replay_state for i in range(1, 21)} <= {"none", "pending"}
 
 
+def test_a_cut_off_download_is_retried_later_without_stopping_the_others(session, tmp_path):
+    for match_id in range(1, poll.WORKERS + 1):
+        add_match(session, match_id)  # newest, so they fill every worker first
+    add_match(session, GOOD, age_days=1)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.opendota.com":
+            return httpx.Response(200, content=OPENDOTA)
+        if request.url.host == "localhost":
+            return httpx.Response(200, content=LOG)
+        if f"/{GOOD}_" in request.url.path:
+            return httpx.Response(200, content=zstd.compress(REPLAY))
+        raise httpx.RemoteProtocolError("peer closed connection without sending complete message body", request=request)
+
+    poll_once(session, httpx.Client(transport=httpx.MockTransport(handler)), "", tmp_path / "nowhere", tmp_path)
+    assert session.get(Match, GOOD).replay_state == "parsed"
+    assert {session.get(Match, i).replay_state for i in range(1, poll.WORKERS + 1)} == {"pending"}
+    assert "stopped" not in poll.STEPS["downloads"]["what"]
+
+
 def test_poll_parses_downloaded_replays_of_stored_matches(session, tmp_path):
     for match_id in (GOOD, WRONG_LOG, STILL_DOWNLOADING):
         add_match(session, match_id)
