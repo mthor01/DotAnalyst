@@ -15,9 +15,11 @@
     moved?: { x: number; y: number; size: number } | null
     chosen?: string[]
     flipped?: boolean[]
+    /** Only the map with its counts, or only the controls and the legend (with a Reset view for the shared zoom) */
+    only?: 'map' | 'controls'
   }
   let {
-    wards, games, label, byGame = false,
+    wards, games, label, byGame = false, only,
     periods = $bindable([true, true, true, true, true]), // the stretches of the timeline (PERIODS) switched on
     share = $bindable(0), // percent: only squares warded in at least this share of the chosen games
     moved = $bindable(null), chosen = $bindable([]), flipped = $bindable([]),
@@ -125,7 +127,7 @@
   const count = (type: string) => wards.filter((w) => w.type === type).length
 </script>
 
-<MiniMap bind:moved bind:chosen bind:flipped reset={false} label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
+<MiniMap bind:moved bind:chosen bind:flipped {only} reset={only === 'controls'} label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
   {#snippet children(_, on)}
     {@const of = tally(on)}
     {@const shown = common(shownOf(on), of)}
@@ -146,6 +148,7 @@
     {/each}
   {/snippet}
 </MiniMap>
+{#if only !== 'map'}
 <p class="timeline">
   <span class="choice" role="group" aria-label="When the wards were placed, in minutes">
     {#each PERIODS as name, i}
@@ -160,17 +163,21 @@
   <input type="range" min="0" max="50" step="1" bind:value={share} />
   <b>{share ? `${share}%` : 'Every spot'}</b>
 </label>
+{/if}
 <p class="legend">
-  <span>{count('obs')} observers and {count('sen')} sentries.</span>
-  {#each KINDS as kind}
-    <span class="scale">{KIND_NAMES[kind]}: one <i class="ramp" style:background={strip(RAMPS[kind])}></i> the most</span>
-  {/each}
-  <span>The buttons, dropdowns, slider and timeline choose which wards count; hover a spot for its numbers.</span>
+  {#if only !== 'controls'}<span>{count('obs')} observers and {count('sen')} sentries.</span>{/if}
+  {#if only !== 'map'}
+    {#each KINDS as kind}
+      <span class="scale">{KIND_NAMES[kind]}: one <i class="ramp" style:background={strip(RAMPS[kind])}></i> the most</span>
+    {/each}
+    <span>The buttons, dropdowns, slider and timeline choose which wards count; hover a spot for its numbers.</span>
+  {/if}
 </p>
 
 <style>
   .share {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 10px;
     max-width: 520px;
@@ -180,6 +187,7 @@
   }
   .share input {
     flex: 1;
+    min-width: 80px;
     margin: 0;
   }
   .share b {
@@ -201,6 +209,7 @@
   }
   .choice button {
     flex: 1;
+    white-space: nowrap;
     padding: 4px 6px;
   }
   .unit {

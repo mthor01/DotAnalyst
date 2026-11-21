@@ -108,12 +108,15 @@
 
       <h2>Wards</h2>
       <div class="maps">
-        {#each [0, 1] as i}
+        <!-- one panel between the maps holds every control; the maps only show, and zoom together -->
+        {#each ['map', 'controls', 'map'] as const as only, k}
+          {@const i = k ? 1 : 0}
           {@const a = account(chosen[i])}
-          <div class="card">
+          <div class="card {only}">
             <WardHeat
-              wards={sides[i].wards}
-              games={sides[i].matches.filter((r) => r.replay_state === 'parsed')}
+              {only}
+              wards={only === 'map' ? sides[i].wards : []}
+              games={only === 'map' ? sides[i].matches.filter((r) => r.replay_state === 'parsed') : []}
               label={`${a?.label ?? chosen[i]}'s wards`}
               bind:periods={maps.periods}
               bind:share={maps.share}
@@ -124,7 +127,7 @@
           </div>
         {/each}
       </div>
-      <p class="muted">The two maps move together: every button, dropdown, slider and zoom applies to both.</p>
+      <p class="muted">Left the first player's wards, right the second's; the panel in the middle and a zoom on either map apply to both.</p>
     {/if}
   </div>
 {/if}
@@ -223,7 +226,18 @@
   }
   .maps {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    grid-template-columns: minmax(0, 520px) 360px minmax(0, 520px); /* 520: as wide as a map gets */
+    justify-content: center;
+    align-items: start;
     gap: 16px;
+  }
+  /* too narrow for three columns: the panel on top, the maps below it */
+  @media (max-width: 1200px) {
+    .maps {
+      grid-template-columns: 1fr;
+    }
+    .controls {
+      order: -1;
+    }
   }
 </style>

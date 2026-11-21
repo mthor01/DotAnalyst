@@ -82,9 +82,11 @@
     moved?: View | null
     chosen?: string[]
     flipped?: boolean[]
+    /** Only the picture, or only the row of controls: two maps bound together can share one row */
+    only?: 'map' | 'controls'
   }
   let {
-    label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = [], controls, reset = true, children,
+    label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = [], controls, reset = true, children, only,
     moved = $bindable(null), chosen = $bindable([]), flipped = $bindable([]),
   }: Props = $props() // prettier-ignore
 
@@ -95,7 +97,7 @@
     moved = null
   })
   const shown = $derived(moved ?? view)
-  let svg: SVGSVGElement
+  let svg = $state<SVGSVGElement>() // the picture is left out (only: 'controls') or not
 
   function place(x: number, y: number, size: number) {
     const inside = (v: number) => Math.min(127 - size, Math.max(0, v))
@@ -106,14 +108,14 @@
     const to = Math.min(127, Math.max(CLOSEST, size * (e.deltaY < 0 ? 0.8 : 1.25)))
     if (to === size) return // at either end the wheel scrolls the page again
     e.preventDefault()
-    const frame = svg.getBoundingClientRect()
+    const frame = svg!.getBoundingClientRect()
     // the cell under the pointer stays under it
     place(x + ((e.clientX - frame.left) / frame.width) * (size - to), y + ((e.clientY - frame.top) / frame.height) * (size - to), to)
   }
   let grip: { x: number; y: number } | null = null // where the pointer was at the last step of a drag
   function drag(e: PointerEvent) {
     if (!grip) return
-    const cells = shown.size / svg.getBoundingClientRect().width // per pixel
+    const cells = shown.size / svg!.getBoundingClientRect().width // per pixel
     place(shown.x - (e.clientX - grip.x) * cells, shown.y - (e.clientY - grip.y) * cells, shown.size)
     grip = { x: e.clientX, y: e.clientY }
   }
@@ -142,6 +144,7 @@
 </script>
 
 <div class="map">
+  {#if only !== 'map'}
   <p>
     <span class="controls">
       {@render controls?.()}
@@ -162,6 +165,8 @@
       <button class="action" disabled={!moved || box(moved) === given} onclick={() => (moved = null)}>Reset view</button>
     {/if}
   </p>
+  {/if}
+  {#if only !== 'controls'}
   <!-- one unit of the viewBox is one map cell, so marks are placed with mapX/mapY and sized in cells.
        Moving the map is an extra for the mouse: all it shows is in the label and the titles -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -171,7 +176,7 @@
     role="img"
     aria-label="{label}. Scroll to zoom, drag to move."
     onwheel={zoom}
-    onpointerdown={(e) => ((grip = { x: e.clientX, y: e.clientY }), svg.setPointerCapture(e.pointerId))}
+    onpointerdown={(e) => ((grip = { x: e.clientX, y: e.clientY }), svg!.setPointerCapture(e.pointerId))}
     onpointermove={drag}
     onpointerup={() => (grip = null)}
     onpointercancel={() => (grip = null)}
@@ -195,6 +200,7 @@
     {/if}
     {@render children?.(shown.size, on)}
   </svg>
+  {/if}
 </div>
 
 <style>
