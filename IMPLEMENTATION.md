@@ -199,9 +199,9 @@ In `dotanalyst/queries.py`. Nothing here is stored; it is counted on each reques
 
 ### Filters: time and tournament
 
-Every account page and every team page take a time span and a tournament (the Tournament dropdown, `season` in the code); account pages also take lobby and mode.
+Every account page and every team page take a time span; a team page also takes a tournament (the Tournament dropdown, `season` in the code), account pages lobby and mode. The Profile and the Player comparison show no Tournament dropdown: they take every game the other filters keep (the API still reads `league_id` on account requests).
 
-- **Time** is last month, last 3, 6 or 12 months, all time, or two dates. A span of months starts on today's date that many calendar months back (`monthsAgo` in `App.svelte`) and has no end. The dates are local days and both count: from 1 Nov to 3 Nov is all of the 1st to the end of the 3rd (`between` in `queries.py`).
+- **Time** is all time, last month, last 3, 6 or 12 months, or two dates. A span of months starts on today's date that many calendar months back (`monthsAgo` in `App.svelte`) and has no end. The dates are local days and both count: from 1 Nov to 3 Nov is all of the 1st to the end of the 3rd (`between` in `queries.py`).
 - **Tournament** is one of the tracked tournaments (see Tracked tournaments). A match belongs to it when `league_matches` has it under that league id, so on an account page a tournament shows only league games the account itself played.
 - A known team without a game in the filters gets an empty page, not "unknown team".
 - The team pages keep their own time and season (`times` in `App.svelte`), apart from the account pages: a season picked on a team page does not narrow the profile, and the other way round. Both are kept until the page reloads.

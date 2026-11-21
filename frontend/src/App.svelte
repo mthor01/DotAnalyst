@@ -24,7 +24,8 @@
   let error = $state('')
   let filters = $state({ account_id: '', lobby_type: '', game_mode: '' })
   // a number is that many months back from today; only "dates" uses the From and To days
-  const SPANS = { '1': 'Last month', '3': 'Last 3 months', '6': 'Last 6 months', '12': 'Last year', all: 'All time', dates: 'Dates…' }
+  // a Map: an object puts the numeric keys first, whatever order they are written in, and All time goes top left
+  const SPANS = new Map([['all', 'All time'], ['1', 'Last month'], ['3', 'Last 3 months'], ['6', 'Last 6 months'], ['12', 'Last year'], ['dates', 'Dates…']])
   // season and time: the team pages keep their own, so a team's season does not narrow the profile
   const times = $state({
     player: { league_id: '', span: 'all', date_from: '', date_to: '' },
@@ -222,7 +223,7 @@
       <section>
         <h3>Time</h3>
         <div class="choice spans" role="group" aria-label="Time">
-          {#each Object.entries(SPANS) as [id, name]}
+          {#each SPANS as [id, name]}
             <button aria-pressed={time.span === id} onclick={() => (time.span = id)}>{name}</button>
           {/each}
         </div>
@@ -231,13 +232,15 @@
           <label class="day">To <input type="date" bind:value={time.date_to} /></label>
         {/if}
       </section>
-      <section>
-        <h3><label for="tournament">Tournament</label></h3>
-        <select id="tournament" bind:value={time.league_id}>
-          <option value="">All games</option>
-          {#each Object.entries(constants.leagues).reverse() as [id, name]}<option value={id}>{name}</option>{/each}
-        </select>
-      </section>
+      {#if league}<!-- a team's season; the profile and the comparison take every game -->
+        <section>
+          <h3><label for="tournament">Tournament</label></h3>
+          <select id="tournament" bind:value={time.league_id}>
+            <option value="">All games</option>
+            {#each Object.entries(constants.leagues).reverse() as [id, name]}<option value={id}>{name}</option>{/each}
+          </select>
+        </section>
+      {/if}
     </aside>
   {/if}
 
