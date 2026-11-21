@@ -137,6 +137,34 @@ def _lane_enemies(session: Session, where: list) -> dict[tuple[int, int], list[i
     }
 
 
+MIRROR = {1: 3, 2: 2, 3: 1, 4: 5, 5: 4}  # the enemy position a position lanes against: cores face cores, supports supports
+
+
+def _mirrors(session: Session, where: list, found: dict[tuple[int, int], int]) -> dict[tuple[int, int], dict]:
+    """For each player in the matches `where` finds, by (match_id, player_slot): the enemy in the MIRROR position
+    (`found` holds the positions) as `mirror_hero_id`, and the player's net worth and last hits at 10:00 minus that
+    enemy's as `mirror_nw_diff` and `mirror_cs_diff`, None without a parsed replay."""
+    nw, cs = aliased(Metric), aliased(Metric)
+    at = lambda m, name: and_(m.match_id == OTHER.match_id, m.player_slot == OTHER.player_slot, m.name == name)  # noqa: E731
+    rows = session.execute(
+        select(OTHER.match_id, OTHER.player_slot, OTHER.hero_id, nw.value.label("nw"), cs.value.label("cs"))
+        .outerjoin(nw, at(nw, "net_worth_at_10"))
+        .outerjoin(cs, at(cs, "last_hits_at_10"))
+        .where(OTHER.match_id.in_(_mine(MatchPlayer.match_id).where(*where)))
+    ).all()
+    seat = {(r.match_id, r.player_slot < 128, found[r.match_id, r.player_slot]): r for r in rows}
+    minus = lambda a, b: None if a is None or b is None else a - b  # noqa: E731
+    result = {}
+    for me in rows:
+        them = seat.get((me.match_id, me.player_slot >= 128, MIRROR[found[me.match_id, me.player_slot]]))
+        result[me.match_id, me.player_slot] = {
+            "mirror_hero_id": them and them.hero_id,
+            "mirror_nw_diff": minus(me.nw, them and them.nw),
+            "mirror_cs_diff": minus(me.cs, them and them.cs),
+        }
+    return result
+
+
 def _parties(session: Session, where: list) -> set[int]:
     """The matches `where` finds in which the player queued with someone: OpenDota's party size above 1 where it is
     stored, otherwise a teammate who was on the player's team in at least PARTY_TOGETHER stored matches."""
@@ -161,7 +189,7 @@ def _parties(session: Session, where: list) -> set[int]:
 def matches(session: Session, where: list) -> list[dict]:
     """The account's matches, newest first. `lane` and the ROW_METRICS are None without a parsed replay; `position`
     is 1-5, see positions; `lane_enemies` the enemy heroes in the player's lane, see _lane_enemies; `party` whether
-    the player queued with someone, see _parties."""
+    the player queued with someone, see _parties; `mirror_*` the enemy in the mirrored position, see _mirrors."""
     p = MatchPlayer
     joined = {name: aliased(Metric) for name in ROW_METRICS}
     with_tracked = (
@@ -188,9 +216,11 @@ def matches(session: Session, where: list) -> list[dict]:
         )
     rows = _rows(session, statement)
     found, enemies, parties = _positions(session, where), _lane_enemies(session, where), _parties(session, where)
+    mirrors = _mirrors(session, where, found)
     for r in rows:
         key = r["match_id"], r.pop("player_slot")
         r["position"], r["lane_enemies"], r["party"] = found[key], enemies.get(key, []), r["match_id"] in parties
+        r.update(mirrors[key])
     return rows
 
 

@@ -64,7 +64,7 @@
   ]
   const QUEUES = ['Solo and party', 'Solo', 'Party'] // see Solo or party in IMPLEMENTATION.md
   const TOP_HEROES = 10
-  const WORST_MATCHUPS = 5
+  const LANES = 5 // matches in the best and in the worst lanes
   const EVEN = 500 // a lane within this much net worth at 10:00 counts as even
   const played = $derived(rows.filter((r) => ROLES[role][1].includes(r.position) && (!queue || r.party === (queue === 2))))
   const recent = $derived(played.slice(0, size)) // the API returns newest first
@@ -109,10 +109,16 @@
   const laneGames = $derived(onHero ? recent.filter((r) => r.hero_id === laneHero) : recent)
   const at10 = (key: keyof MatchRow) => mean(laneGames.map((r) => r[key] as number | null))
   const laneMatches = $derived(laneGames.filter((r) => r.xp_at_10 !== null).length)
+  // the leads compare the whole lane, or you with the enemy in the mirrored position (see Mirror in IMPLEMENTATION.md)
+  let versus = $state<'lane' | 'mirror'>('lane')
+  const VERSUS = { lane: 'Your lane vs theirs', mirror: 'You vs your mirror' }
+  const lead = $derived(versus === 'lane'
+    ? { nw: 'lane_nw_diff', cs: 'lane_cs_diff', unit: 'your lane minus the enemy lane at 10:00' } as const
+    : { nw: 'mirror_nw_diff', cs: 'mirror_cs_diff', unit: 'you minus the enemy in your mirrored position at 10:00' } as const) // prettier-ignore
   const laning = $derived([
     ['General', [
-      ['Net worth lead', at10('lane_nw_diff'), 'your lane minus the enemy lane at 10:00', 'signed'],
-      ['Last-hit lead', at10('lane_cs_diff'), 'your lane minus the enemy lane at 10:00', 'signed'],
+      ['Net worth lead', at10(lead.nw), lead.unit, 'signed'],
+      ['Last-hit lead', at10(lead.cs), lead.unit, 'signed'],
       ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals at 10:00', ''],
       ['Denies', at10('denies_at_10'), 'at 10:00', ''],
       ['Net worth', at10('net_worth_at_10'), 'at 10:00', ''],
@@ -130,23 +136,13 @@
       ['You took', at10('damage_taken_at_10'), 'from all enemy heroes', ''],
     ]],
   ] as const) // prettier-ignore
-  // the enemy heroes met in lane at least twice, the ones you fell furthest behind against first
-  const matchups = $derived.by(() => {
-    const met = new Map<number, MatchRow[]>()
-    for (const r of laneGames) for (const hero of r.lane_enemies) met.set(hero, [...(met.get(hero) ?? []), r])
-    return [...met]
-      .filter(([, games]) => games.length >= 2)
-      .map(([hero_id, games]) => ({
-        hero_id,
-        games: games.length,
-        wins: games.filter((r) => r.win).length,
-        nw: mean(games.map((r) => r.lane_nw_diff)),
-        cs: mean(games.map((r) => r.lane_cs_diff)),
-        deaths: mean(games.map((r) => r.deaths_by_10)),
-      }))
-      .sort((a, b) => (a.nw ?? Infinity) - (b.nw ?? Infinity))
-      .slice(0, WORST_MATCHUPS)
+  // the matches with the biggest and smallest net worth lead; with few matches each list takes its half, so none is in both
+  const extremes = $derived.by(() => {
+    const ranked = laneGames.filter((r) => r[lead.nw] !== null).sort((a, b) => b[lead.nw]! - a[lead.nw]!)
+    const best = ranked.slice(0, Math.min(LANES, Math.ceil(ranked.length / 2)))
+    return [['Best lanes', best], ['Worst lanes', ranked.slice(best.length).reverse().slice(0, LANES)]] as const
   })
+  const opponents = (r: MatchRow) => (versus === 'lane' ? r.lane_enemies : r.mirror_hero_id === null ? [] : [r.mirror_hero_id])
   const shownStat = (value: number | null, kind: string) =>
     value === null ? '–' : kind === 'signed' ? signed(value) : kind === 'tenths' ? value.toFixed(1) : Math.round(value).toLocaleString()
 
@@ -360,6 +356,11 @@
       {#each heroes as h (h.hero_id)}<option value={h.hero_id}>{heroName(h.hero_id)} ({h.games})</option>{/each}
     </select>
   </label>
+  <div class="choice" role="group" aria-label="Whom the leads compare you with">
+    {#each Object.entries(VERSUS) as [id, title]}
+      <button aria-pressed={versus === id} onclick={() => (versus = id as typeof versus)}>{title}</button>
+    {/each}
+  </div>
   {#each laning as [title, stats]}
     <h3 class="group">{title}</h3>
     <dl class="card numbers">
@@ -374,37 +375,45 @@
       {/each}
     </dl>
   {/each}
-  <h3 class="group">Worst lane matchups</h3>
-  {#if matchups.length}
-    <section class="card">
-      <table>
-        <thead>
-          <tr><th>Enemy hero</th><th class="num">Matches</th><th>Win rate</th><th class="num">Net worth lead</th><th class="num">Last-hit lead</th><th class="num">Deaths</th></tr>
-        </thead>
-        <tbody>
-          {#each matchups as m (m.hero_id)}
-            <tr>
-              <td class="hero"><img src={heroPortrait(m.hero_id)} alt={heroName(m.hero_id)} title={heroName(m.hero_id)} width="44" height="25" loading="lazy" /></td>
-              <td class="num">{m.games}</td>
-              <td><WinRate wins={m.wins} games={m.games} /></td>
-              <td class="num" class:good={m.nw !== null && m.nw > 0} class:bad={m.nw !== null && m.nw < 0}>{shownStat(m.nw, 'signed')}</td>
-              <td class="num" class:good={m.cs !== null && m.cs > 0} class:bad={m.cs !== null && m.cs < 0}>{shownStat(m.cs, 'signed')}</td>
-              <td class="num">{shownStat(m.deaths, 'tenths')}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </section>
-  {:else}
-    <p class="muted">No enemy hero met in lane twice in these matches.</p>
-  {/if}
+  {#each extremes as [title, games]}
+    <h3 class="group">{title}</h3>
+    {#if games.length}
+      <section class="card">
+        <table>
+          <thead>
+            <tr><th>Match</th><th>Hero</th><th>Against</th><th>Result</th><th class="num">Net worth lead</th><th class="num">Last-hit lead</th><th class="num">Deaths</th></tr>
+          </thead>
+          <tbody>
+            {#each games as r (r.match_id)}
+              {@const nw = r[lead.nw]}
+              {@const cs = r[lead.cs]}
+              <tr>
+                <td><a href="#match/{r.match_id}">{date(r.start_time)}</a></td>
+                <td class="hero"><img src={heroPortrait(r.hero_id)} alt={heroName(r.hero_id)} title={heroName(r.hero_id)} width="44" height="25" loading="lazy" /></td>
+                <td class="hero">
+                  {#each opponents(r) as hero}<img src={heroIcon(hero)} alt={heroName(hero)} title={heroName(hero)} width="25" height="25" loading="lazy" />{/each}
+                </td>
+                <td><span class="dot {r.win ? 'won' : 'lost'}"></span>{r.win ? 'Won' : 'Lost'}</td>
+                <td class="num" class:good={nw !== null && nw > 0} class:bad={nw !== null && nw < 0}>{shownStat(nw, 'signed')}</td>
+                <td class="num" class:good={cs !== null && cs > 0} class:bad={cs !== null && cs < 0}>{shownStat(cs, 'signed')}</td>
+                <td class="num">{shownStat(r.deaths_by_10, 'tenths')}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </section>
+    {:else}
+      <p class="muted">No match with a parsed replay here.</p>
+    {/if}
+  {/each}
   <p class="muted laning">
     Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your
     lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is
     usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log
-    records it. Lotuses, pulls and twin gate trips count the whole match. The matchups are the enemy heroes you
-    laned against in at least two of these matches, the {WORST_MATCHUPS} you fell furthest behind against in net worth
-    at 10:00 first; the leads and deaths are at 10:00, as above.
+    records it. Lotuses, pulls and twin gate trips count the whole match. With "You vs your mirror" the leads compare
+    you alone with the enemy whose position mirrors yours: 1 with 3, 2 with 2, 4 with 5. The best and worst lanes
+    are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00; click a date to open
+    the match.
   </p>
   {:else}
   <section class="card vision">

@@ -54,6 +54,10 @@ export type MatchRow = {
   party: boolean // queued with someone, see Solo or party in IMPLEMENTATION.md
   with_tracked: boolean
   position: 1 | 2 | 3 | 4 | 5 // from the lane and the farm, see IMPLEMENTATION.md
+  /** the enemy in the mirrored position (1-3, 2-2, 4-5), and net worth and last hits at 10:00 minus theirs */
+  mirror_hero_id: number | null
+  mirror_nw_diff: number | null
+  mirror_cs_diff: number | null
 }
 
 export type HeroRow = {
