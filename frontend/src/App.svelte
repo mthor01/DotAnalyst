@@ -31,6 +31,22 @@
     team: { league_id: '', span: 'all', date_from: '', date_to: '' },
   })
   const time = $derived(league ? times.team : times.player)
+  // the player's own filters, sent as position, party and last; the league pages have none of them
+  const SIZES = [25, 100, 500, 0] // 0: every match
+  /** The role picker: a short name, a long one and the positions it takes in (see Position 1–5 in IMPLEMENTATION.md) */
+  const ROLES: [string, string, number[]][] = [
+    ['All', 'Every role', []],
+    ['1', 'Pos 1 (carry)', [1]],
+    ['2', 'Pos 2 (mid)', [2]],
+    ['3', 'Pos 3 (offlane)', [3]],
+    ['4', 'Pos 4 (soft support)', [4]],
+    ['5', 'Pos 5 (hard support)', [5]],
+    ['Cores', 'Cores (pos 1–3)', [1, 2, 3]],
+    ['Supports', 'Supports (pos 4–5)', [4, 5]],
+  ]
+  const QUEUES = ['Both', 'Solo', 'Party'] // see Solo or party in IMPLEMENTATION.md
+  const own = $state({ size: 100, role: 0, queue: 0 })
+  const showFilters = $derived(!matchId && !(league && !teamId) && page !== 'queue')
   function monthsAgo(n: number) {
     const day = new Date()
     day.setMonth(day.getMonth() - n)
@@ -42,7 +58,13 @@
     const { span, ...dates } = time
     const sent = { ...filters, ...dates }
     if (span !== 'dates') [sent.date_from, sent.date_to] = [span === 'all' ? '' : monthsAgo(Number(span)), '']
-    return new URLSearchParams(Object.entries(sent).filter(([, v]) => v !== '')).toString()
+    const pairs: [string, string][] = Object.entries(sent).filter(([, v]) => v !== '')
+    if (!league) {
+      pairs.push(...ROLES[own.role][2].map((p): [string, string] => ['position', String(p)]))
+      if (own.queue) pairs.push(['party', String(own.queue === 2)])
+      if (own.size) pairs.push(['last', String(own.size)])
+    }
+    return new URLSearchParams(pairs).toString()
   })
 
   const loadAccounts = async () => (accounts = await get<Account[]>('accounts'))
@@ -154,43 +176,72 @@
     </div>
   </header>
 
-  <!-- a team page takes the time and the season; lobby and mode are the same in every league game -->
-  <div class="filters" hidden={!!matchId || (league && !teamId) || page === 'queue'}>
-    <label hidden={league}>
-      Lobby
-      <select bind:value={filters.lobby_type}>
-        <option value="">All</option>
-        {#each Object.entries(LOBBY_TYPES) as [id, name]}<option value={id}>{name}</option>{/each}
-      </select>
-    </label>
-    <label hidden={league}>
-      Mode
-      <select bind:value={filters.game_mode}>
-        <option value="">All</option>
-        {#each Object.entries(GAME_MODES).filter(([id]) => id !== '1') as [id, name]}
-          <option value={id}>{name}</option>
-        {/each}
-      </select>
-    </label>
-    <label>
-      Tournament
-      <select bind:value={time.league_id}>
-        <option value="">All games</option>
-        {#each Object.entries(constants.leagues).reverse() as [id, name]}<option value={id}>{name}</option>{/each}
-      </select>
-    </label>
-    <label>
-      Time
-      <select bind:value={time.span}>
-        {#each Object.entries(SPANS) as [id, name]}<option value={id}>{name}</option>{/each}
-      </select>
-    </label>
-    {#if time.span === 'dates'}
-      <label>From <input type="date" bind:value={time.date_from} /></label>
-      <label>To <input type="date" bind:value={time.date_to} /></label>
-    {/if}
-  </div>
+  <div class="layout" class:paneled={showFilters}>
+  {#if showFilters}
+    <!-- every tab below takes all of these. A team page takes only the time and the season: its games are league games -->
+    <aside class="panel" aria-label="Filters">
+      {#if !league}
+        <section>
+          <h3>Matches</h3>
+          <div class="choice" role="group" aria-label="How many of the newest matches">
+            {#each SIZES as n}<button aria-pressed={own.size === n} onclick={() => (own.size = n)}>{n || 'All'}</button>{/each}
+          </div>
+        </section>
+        <section>
+          <h3>Role</h3>
+          <div class="choice roles" role="group" aria-label="Role">
+            {#each ROLES as [short, long], i}
+              <button aria-pressed={own.role === i} title={long} aria-label={long} onclick={() => (own.role = i)}>{short}</button>
+            {/each}
+          </div>
+        </section>
+        <section>
+          <h3>Queue</h3>
+          <div class="choice" role="group" aria-label="Solo or party">
+            {#each QUEUES as name, i}<button aria-pressed={own.queue === i} onclick={() => (own.queue = i)}>{name}</button>{/each}
+          </div>
+        </section>
+        <section>
+          <h3>Lobby</h3>
+          <div class="choice" role="group" aria-label="Lobby">
+            {#each [['', 'All'], ...Object.entries(LOBBY_TYPES)] as [id, name]}
+              <button aria-pressed={filters.lobby_type === id} onclick={() => (filters.lobby_type = id)}>{name}</button>
+            {/each}
+          </div>
+        </section>
+        <section>
+          <h3><label for="mode">Mode</label></h3>
+          <select id="mode" bind:value={filters.game_mode}>
+            <option value="">All modes</option>
+            {#each Object.entries(GAME_MODES).filter(([id]) => id !== '1') as [id, name]}
+              <option value={id}>{name}</option>
+            {/each}
+          </select>
+        </section>
+      {/if}
+      <section>
+        <h3>Time</h3>
+        <div class="choice spans" role="group" aria-label="Time">
+          {#each Object.entries(SPANS) as [id, name]}
+            <button aria-pressed={time.span === id} onclick={() => (time.span = id)}>{name}</button>
+          {/each}
+        </div>
+        {#if time.span === 'dates'}
+          <label class="day">From <input type="date" bind:value={time.date_from} /></label>
+          <label class="day">To <input type="date" bind:value={time.date_to} /></label>
+        {/if}
+      </section>
+      <section>
+        <h3><label for="tournament">Tournament</label></h3>
+        <select id="tournament" bind:value={time.league_id}>
+          <option value="">All games</option>
+          {#each Object.entries(constants.leagues).reverse() as [id, name]}<option value={id}>{name}</option>{/each}
+        </select>
+      </section>
+    </aside>
+  {/if}
 
+  <div class="content">
   {#key version}
   {#if error}
     <p class="error" role="alert">Could not reach the API: {error}</p>
@@ -210,4 +261,6 @@
     <Compare {query} {accounts} />
   {/if}
   {/key}
+  </div>
+  </div>
 </main>

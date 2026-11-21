@@ -518,12 +518,26 @@ def test_positions_without_a_replay_rank_the_farm():
 
 
 def test_last_keeps_the_newest_matches_of_the_other_filters(session):
-    assert ids(queries.matches(session, queries.conditions(ME, last=2))) == [3, 2]
-    assert ids(queries.matches(session, queries.conditions(ME, game_mode=22, last=1))) == [2]
+    newest = lambda last, **shared: queries.narrowed(session, queries.conditions(ME, **shared), last=last)
+    assert ids(queries.matches(session, newest(2))) == [3, 2]
+    assert ids(queries.matches(session, newest(1, game_mode=22))) == [2]
     # match 3 is the newest: hero 1, lost, the friend on my team
-    assert [(r["hero_id"], r["games"], r["wins"]) for r in queries.heroes(session, queries.conditions(ME, last=1))] == [(1, 1, 0)]
-    assert queries.teammates(session, queries.conditions(ME, last=1)) == [{"account_id": FRIEND, "label": "friend", "games": 1, "wins": 0}]
-    assert {r["hero_id"] for r in queries.matchups(session, queries.conditions(ME, last=1))} == set(range(2, 11))
+    assert [(r["hero_id"], r["games"], r["wins"]) for r in queries.heroes(session, newest(1))] == [(1, 1, 0)]
+    assert queries.teammates(session, newest(1)) == [{"account_id": FRIEND, "label": "friend", "games": 1, "wins": 0}]
+    assert {r["hero_id"] for r in queries.matchups(session, newest(1))} == set(range(2, 11))
+
+
+def test_narrowed_keeps_the_role_and_queue_the_rows_show(session):
+    rows = queries.matches(session, queries.conditions(ME))
+    for position in ([1], [2, 3], [4, 5], [rows[1]["position"]]):
+        for party in (None, True, False):
+            expected = [r["match_id"] for r in rows if r["position"] in position and party in (None, r["party"])]
+            assert ids(queries.matches(session, queries.narrowed(session, queries.conditions(ME), position, party))) == expected
+    # the role first, then the newest of what is left
+    position = [rows[1]["position"]]
+    assert ids(queries.matches(session, queries.narrowed(session, queries.conditions(ME), position, last=1))) == [
+        next(r["match_id"] for r in rows if r["position"] in position)
+    ]
 
 
 def test_team_players_position_is_the_one_they_took_most(league):

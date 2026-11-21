@@ -44,10 +44,8 @@ def conditions(
     game_mode: int | None = None,
     lobby_type: int | None = None,
     league_id: int | None = None,
-    last: int | None = None,
 ) -> list:
-    """SQL conditions for the filters every view shares. Dates are local days, both inclusive. `last` keeps only
-    the newest that many matches the other filters find."""
+    """SQL conditions for the filters every view shares. Dates are local days, both inclusive."""
     found = [MatchPlayer.account_id == account_id, *between(Match.start_time, date_from, date_to)]
     if league_id is not None:
         found.append(Match.match_id.in_(select(LeagueMatch.match_id).where(LeagueMatch.league_id == league_id)))
@@ -55,11 +53,25 @@ def conditions(
         found.append(Match.game_mode == game_mode)
     if lobby_type is not None:
         found.append(Match.lobby_type == lobby_type)
+    return found
+
+
+def narrowed(
+    session: Session, where: list, position: list[int] | None = None, party: bool | None = None, last: int | None = None
+) -> list:
+    """`where` narrowed to the matches in which the player took one of the positions `position` (see positions) and
+    queued in a party (`party` True) or alone (False), see _parties; then to the newest `last` of those. None or an
+    empty list narrows nothing."""
+    if position or party is not None:
+        found, parties = _positions(session, where), _parties(session, where) if party is not None else set()
+        mine = session.execute(_mine(MatchPlayer.match_id, MatchPlayer.player_slot).where(*where))
+        kept = [m for m, slot in mine if (not position or found[m, slot] in position) and (party is None or (m in parties) == party)]
+        where = [*where, Match.match_id.in_(kept)]
     if last is not None:
         # correlate(None): the subquery has its own Match and MatchPlayer, not the outer query's
-        newest = _mine(Match.match_id).where(*found).order_by(Match.start_time.desc()).limit(last).correlate(None)
-        found.append(Match.match_id.in_(newest))
-    return found
+        newest = _mine(Match.match_id).where(*where).order_by(Match.start_time.desc()).limit(last).correlate(None)
+        where = [*where, Match.match_id.in_(newest)]
+    return where
 
 
 def _mine(*columns):
@@ -266,7 +278,7 @@ def frequent_teammates(session: Session, account_id: int) -> list[int]:
         session.scalars(
             _mine(OTHER.account_id)
             .join(OTHER, and_(OTHER.match_id == MatchPlayer.match_id, OTHER.account_id != MatchPlayer.account_id, SAME_TEAM))
-            .where(*conditions(account_id, last=TEAMMATE_MATCHES), OTHER.account_id != ANONYMOUS)
+            .where(*narrowed(session, conditions(account_id), last=TEAMMATE_MATCHES), OTHER.account_id != ANONYMOUS)
             .group_by(OTHER.account_id)
             .having(games >= TEAMMATE_GAMES)
             .order_by(games.desc(), OTHER.account_id)

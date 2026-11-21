@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Annotated
 
 import httpx
-from fastapi import Body, Depends, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -37,7 +37,20 @@ def db():
 
 
 Db = Annotated[Session, Depends(db)]
-Where = Annotated[list, Depends(queries.conditions)]
+
+
+def where(
+    session: Db,
+    found: Annotated[list, Depends(queries.conditions)],
+    position: Annotated[list[int] | None, Query()] = None,
+    party: bool | None = None,
+    last: int | None = None,
+) -> list:
+    """The shared filters, then the role, the queue and the newest `last` of what is left: see queries.narrowed."""
+    return queries.narrowed(session, found, position, party, last)
+
+
+Where = Annotated[list, Depends(where)]
 
 
 @app.get("/api/accounts")

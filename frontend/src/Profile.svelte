@@ -31,44 +31,23 @@
   }
   const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding', teammates: 'Teammates' }
   const shown = $derived<keyof typeof TABS>(tab in TABS ? (tab as keyof typeof TABS) : 'overview')
-  const filtered = $derived(!['matches', 'heroes', 'teammates'].includes(shown)) // the tabs the role and the queue apply to
-  const counted = $derived(shown !== 'matches') // the tabs the count applies to
-  let rows = $state<MatchRow[]>([])
-  let wards = $state.raw<WardSpot[]>([]) // of every match of these filters
+  // the server narrows to every filter, the role, the queue and the number of matches among them; newest first
+  let recent = $state<MatchRow[]>([])
+  let wards = $state.raw<WardSpot[]>([]) // of the same matches
   let error = $state('')
-  let size = $state(100)
-  const lastQuery = $derived(`${query}&last=${size}`) // heroes and teammates: the server counts the newest `size`
-  let role = $state(0) // index into ROLES
-  let queue = $state(0) // index into QUEUES
 
   $effect(() => {
     let current = true
     Promise.all([get<MatchRow[]>('matches', query), get<typeof wards>('wards', query)]).then(
-      ([found, placed]) => current && ((rows = found), (wards = placed), (error = '')),
+      ([found, placed]) => current && ((recent = found), (wards = placed), (error = '')),
       (e) => current && (error = e.message),
     )
     return () => (current = false)
   })
 
-  const SIZES = [25, 100, 500]
-  /** The role picker: a name and the positions it takes in (see Position 1–5 in IMPLEMENTATION.md) */
-  const ROLES: [string, number[]][] = [
-    ['All roles', [1, 2, 3, 4, 5]],
-    ['Pos 1 (carry)', [1]],
-    ['Pos 2 (mid)', [2]],
-    ['Pos 3 (offlane)', [3]],
-    ['Pos 4 (soft support)', [4]],
-    ['Pos 5 (hard support)', [5]],
-    ['Cores (pos 1–3)', [1, 2, 3]],
-    ['Supports (pos 4–5)', [4, 5]],
-  ]
-  const QUEUES = ['Solo and party', 'Solo', 'Party'] // see Solo or party in IMPLEMENTATION.md
   const TOP_HEROES = 10
   const LANES = 5 // matches in the best and in the worst lanes
   const EVEN = 500 // a lane within this much net worth at 10:00 counts as even
-  const played = $derived(rows.filter((r) => ROLES[role][1].includes(r.position) && (!queue || r.party === (queue === 2))))
-  const recent = $derived(played.slice(0, size)) // the API returns newest first
-  const as = $derived((role ? ` as ${ROLES[role][0].toLowerCase()}` : '') + ['', ' solo', ' in a party'][queue])
   const wins = $derived(recent.filter((r) => r.win).length)
   const share = (part: number) => `${percent(part, recent.length)}%`
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
@@ -84,11 +63,6 @@
     `${heroName(r.hero_id)}, ${date(r.start_time)}: ${r.win ? 'won' : 'lost'}` +
     (r.lane_nw_diff === null ? '' : `, lane ${signed(r.lane_nw_diff)} net worth at 10:00`)
 
-  // ---- the ward heatmap: the wards of the matches shown
-  const warded = $derived.by(() => {
-    const shown = new Set(recent.map((r) => r.match_id))
-    return wards.filter((w) => shown.has(w.match_id))
-  })
   const parsed = $derived(recent.filter((r) => r.replay_state === 'parsed').length)
   /** The mean of a replay stat over the matches that have it, null with none */
   function mean(values: (number | null)[]) {
@@ -146,10 +120,10 @@
   const shownStat = (value: number | null, kind: string) =>
     value === null ? '–' : kind === 'signed' ? signed(value) : kind === 'tenths' ? value.toFixed(1) : Math.round(value).toLocaleString()
 
-  // ---- activity: games per day over the last 3 months, of every role, one column per week from Monday
+  // ---- activity: games per day over the last 3 months, one column per week from Monday
   const dayOf = (d: Date) => d.toLocaleDateString('en-CA')
   const perDay = $derived(
-    rows.reduce((m, r) => {
+    recent.reduce((m, r) => {
       const key = dayOf(new Date(r.start_time * 1000))
       const day = m.get(key) ?? { games: 0, wins: 0 }
       return m.set(key, { games: day.games + 1, wins: day.wins + r.win })
@@ -190,7 +164,7 @@
 
 {#if error}
   <p class="error" role="alert">{error}</p>
-{:else if rows.length === 0}
+{:else if recent.length === 0}
   <p class="muted">No matches for these filters.</p>
 {:else}
   <header class="title">
@@ -198,31 +172,7 @@
       {#if account?.avatar}<img class="avatar" src={account.avatar} alt="" width="40" height="40" />{/if}
       {account?.label ?? account?.account_id}
     </h2>
-    {#if counted && !filtered}
-      <p class="muted">The last {Math.min(size, rows.length)} of {rows.length} matches for these filters</p>
-    {/if}
-    {#if filtered}
-      <p class="muted">The last {recent.length} of {played.length} matches{as} for these filters</p>
-      <label class="role">
-        Role
-        <select bind:value={role}>
-          {#each ROLES as [name], i}<option value={i}>{name}</option>{/each}
-        </select>
-      </label>
-      <label>
-        Queue
-        <select bind:value={queue}>
-          {#each QUEUES as name, i}<option value={i}>{name}</option>{/each}
-        </select>
-      </label>
-    {/if}
-    {#if counted}
-      <div class="choice" role="group" aria-label="How many matches">
-        {#each SIZES as n}
-          <button aria-pressed={size === n} onclick={() => (size = n)}>{n} matches</button>
-        {/each}
-      </div>
-    {/if}
+    <p class="muted">{recent.length} matches for these filters</p>
     <p class="track">
       <span class="muted" role="status">{tracked}</span>
       <button
@@ -245,11 +195,9 @@
   {#if shown === 'matches'}
     <Matches {query} />
   {:else if shown === 'heroes'}
-    <Heroes query={lastQuery} matches={rows.slice(0, size)} />
+    <Heroes {query} matches={recent} />
   {:else if shown === 'teammates'}
-    <Teammates query={lastQuery} />
-  {:else if recent.length === 0}
-    <p class="muted">No matches{as} for these filters. Pick another role or queue above.</p>
+    <Teammates {query} />
   {:else if shown === 'overview'}
   <dl class="card numbers">
     <div>
@@ -301,7 +249,7 @@
   </div>
 
   <section class="card form">
-    <div class="strip" class:dense={size > 25} class:packed={size > 100}>
+    <div class="strip" class:dense={recent.length > 25} class:packed={recent.length > 100}>
       {#each strip as r (r.match_id)}
         {@const lead = r.lane_nw_diff}
         <a href="#match/{r.match_id}" title={note(r)} aria-label={note(r)}>
@@ -343,7 +291,7 @@
         {active.reduce((n, d) => n + d.games, 0)} games on {active.length} days in the last 3 months, at most {busiest}
         in one day. One square per day, a column per week from Monday. The bigger the circle, the more games that day; its
         colour is the day's win rate: yellow at half, the redder the more were lost, full red at 25 % or less, the greener the
-        more were won, full green at 75 % or more. Every role counts here.
+        more were won, full green at 75 % or more.
       </p>
     </div>
   </section>
@@ -418,7 +366,7 @@
   {:else}
   <section class="card vision">
     <div>
-      <WardHeat wards={warded} games={recent.filter((r) => r.replay_state === 'parsed')} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches" />
+      <WardHeat {wards}games={recent.filter((r) => r.replay_state === 'parsed')} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches" />
     </div>
     <div class="muted">
       <dl class="wardstats">
@@ -471,12 +419,8 @@
   .title p {
     margin: 0;
   }
-  .role,
   .track {
     margin-left: auto;
-  }
-  .role ~ .track {
-    margin-left: 0;
   }
 
   .overview {
