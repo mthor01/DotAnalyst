@@ -106,6 +106,14 @@ def test_matches_carry_side_lane_and_company(session):
     assert extras(3) == (True, None, None, True)
 
 
+def test_matches_carry_lane_allies(session):
+    session.add_all(
+        [Lane(match_id=1, player_slot=s, lane=lane) for s, lane in ((0, "bot"), (1, "bot"), (2, "top"), (128, "bot"), (129, "bot"))]
+    )
+    me = next(r for r in queries.matches(session, queries.conditions(ME)) if r["match_id"] == 1)
+    assert (me["lane_allies"], sorted(me["lane_enemies"])) == ([2], [6, 7])  # myself and the top laner left out
+
+
 def test_matches_compare_with_the_mirrored_enemy(session):
     session.add_all(
         [

@@ -116,7 +116,6 @@
     const best = ranked.slice(0, Math.min(LANES, Math.ceil(ranked.length / 2)))
     return [['Best lanes', best], ['Worst lanes', ranked.slice(best.length).reverse().slice(0, LANES)]] as const
   })
-  const opponents = (r: MatchRow) => (versus === 'lane' ? r.lane_enemies : r.mirror_hero_id === null ? [] : [r.mirror_hero_id])
   const shownStat = (value: number | null, kind: string) =>
     value === null ? '–' : kind === 'signed' ? signed(value) : kind === 'tenths' ? value.toFixed(1) : Math.round(value).toLocaleString()
 
@@ -329,7 +328,7 @@
       <section class="card">
         <table>
           <thead>
-            <tr><th>Match</th><th>Hero</th><th>Against</th><th>Result</th><th class="num">Net worth lead</th><th class="num">Last-hit lead</th><th class="num">Deaths</th></tr>
+            <tr><th>Match</th><th>Your heroes</th><th>Enemy heroes</th><th>Result</th><th class="num">Net worth lead</th><th class="num">Last-hit lead</th><th class="num">Deaths</th></tr>
           </thead>
           <tbody>
             {#each games as r (r.match_id)}
@@ -337,10 +336,12 @@
               {@const cs = r[lead.cs]}
               <tr>
                 <td><a href="#match/{r.match_id}">{date(r.start_time)}</a></td>
-                <td class="hero"><img src={heroPortrait(r.hero_id)} alt={heroName(r.hero_id)} title={heroName(r.hero_id)} width="44" height="25" loading="lazy" /></td>
-                <td class="hero">
-                  {#each opponents(r) as hero}<img src={heroIcon(hero)} alt={heroName(hero)} title={heroName(hero)} width="25" height="25" loading="lazy" />{/each}
-                </td>
+                <!-- the whole lane on both sides, whichever lead is picked: you first, then your lane partners -->
+                {#each [[r.hero_id, ...r.lane_allies], r.lane_enemies] as side}
+                  <td class="laners">
+                    {#each side as hero}<img src={heroPortrait(hero)} alt={heroName(hero)} title={heroName(hero)} width="64" height="36" loading="lazy" />{/each}
+                  </td>
+                {/each}
                 <td><span class="dot {r.win ? 'won' : 'lost'}"></span>{r.win ? 'Won' : 'Lost'}</td>
                 <td class="num" class:good={nw !== null && nw > 0} class:bad={nw !== null && nw < 0}>{shownStat(nw, 'signed')}</td>
                 <td class="num" class:good={cs !== null && cs > 0} class:bad={cs !== null && cs < 0}>{shownStat(cs, 'signed')}</td>
@@ -360,8 +361,8 @@
     usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log
     records it. Lotuses, pulls and twin gate trips count the whole match. With "You vs your mirror" the leads compare
     you alone with the enemy whose position mirrors yours: 1 with 3, 2 with 2, 4 with 5. The best and worst lanes
-    are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00; click a date to open
-    the match.
+    are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of
+    both lanes, yours first; click a date to open the match.
   </p>
   {:else}
   <section class="card vision">
@@ -619,14 +620,14 @@
   .group {
     margin: 20px 0 8px;
   }
-  .hero {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+  .laners {
+    white-space: nowrap;
   }
-  .hero img {
+  .laners img {
+    margin-right: 4px;
     object-fit: cover;
     border-radius: 3px;
+    vertical-align: middle;
   }
   .pick select {
     margin-left: 6px;

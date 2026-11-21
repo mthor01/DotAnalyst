@@ -49,7 +49,8 @@ export type MatchRow = {
   lotuses: number | null
   camps_pulled: number | null
   twin_gates: number | null
-  /** the enemy heroes in the player's lane, empty without a replay or outside the three lanes */
+  /** the other heroes in the player's lane, empty without a replay or outside the three lanes */
+  lane_allies: number[]
   lane_enemies: number[]
   party: boolean // queued with someone, see Solo or party in IMPLEMENTATION.md
   with_tracked: boolean

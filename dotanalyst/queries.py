@@ -131,9 +131,9 @@ ROW_METRICS = (
 )  # fmt: skip
 
 
-def _lane_enemies(session: Session, where: list) -> dict[tuple[int, int], list[int]]:
-    """Heroes of the other team in each player's lane (top, mid or bot), by (match_id, player_slot), for the matches
-    `where` finds. A player outside the three lanes or without a parsed replay has no entry."""
+def _laners(session: Session, where: list) -> dict[tuple[int, int], tuple[list[int], list[int]]]:
+    """The heroes in each player's lane (top, mid or bot) as (allies, enemies), the player left out, by (match_id,
+    player_slot), for the matches `where` finds. A player outside the three lanes or without a parsed replay has no entry."""
     rows = session.execute(
         select(OTHER.match_id, OTHER.player_slot, OTHER.hero_id, Lane.lane)
         .join(Lane, and_(Lane.match_id == OTHER.match_id, Lane.player_slot == OTHER.player_slot))
@@ -143,7 +143,10 @@ def _lane_enemies(session: Session, where: list) -> dict[tuple[int, int], list[i
     for r in rows:
         lanes.setdefault((r.match_id, r.lane), []).append((r.player_slot, r.hero_id))
     return {
-        (match_id, slot): [hero for other, hero in laners if (other < 128) != (slot < 128)]
+        (match_id, slot): (
+            [hero for other, hero in laners if other != slot and (other < 128) == (slot < 128)],
+            [hero for other, hero in laners if (other < 128) != (slot < 128)],
+        )
         for (match_id, _), laners in lanes.items()
         for slot, _ in laners
     }
@@ -200,7 +203,7 @@ def _parties(session: Session, where: list) -> set[int]:
 
 def matches(session: Session, where: list) -> list[dict]:
     """The account's matches, newest first. `lane` and the ROW_METRICS are None without a parsed replay; `position`
-    is 1-5, see positions; `lane_enemies` the enemy heroes in the player's lane, see _lane_enemies; `party` whether
+    is 1-5, see positions; `lane_allies` and `lane_enemies` the other heroes in the player's lane, see _laners; `party` whether
     the player queued with someone, see _parties; `mirror_*` the enemy in the mirrored position, see _mirrors."""
     p = MatchPlayer
     joined = {name: aliased(Metric) for name in ROW_METRICS}
@@ -227,11 +230,12 @@ def matches(session: Session, where: list) -> list[dict]:
             m, and_(m.match_id == p.match_id, m.player_slot == p.player_slot, m.name == name)
         )
     rows = _rows(session, statement)
-    found, enemies, parties = _positions(session, where), _lane_enemies(session, where), _parties(session, where)
+    found, laners, parties = _positions(session, where), _laners(session, where), _parties(session, where)
     mirrors = _mirrors(session, where, found)
     for r in rows:
         key = r["match_id"], r.pop("player_slot")
-        r["position"], r["lane_enemies"], r["party"] = found[key], enemies.get(key, []), r["match_id"] in parties
+        r["position"], r["party"] = found[key], r["match_id"] in parties
+        r["lane_allies"], r["lane_enemies"] = laners.get(key, ([], []))
         r.update(mirrors[key])
     return rows
 
