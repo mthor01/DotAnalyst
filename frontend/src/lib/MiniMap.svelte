@@ -64,7 +64,7 @@
     fallen?: { name: string; time: number }[]
     /** The game second the buildings are shown at: one that fell later still stands. Left out, the end of the game. */
     at?: number
-    /** What the reader can show besides the buildings: one dropdown per group, key -> the name of its option. The
+    /** What the reader can show besides the buildings (always drawn): one dropdown per group, key -> the name of its option. The
      *  first option is chosen at first; the key '' shows every key of its group. */
     layers?: Record<string, string>[]
     /** Pairs the reader switches between, key -> name: one button per pair, its first key shown at first (see
@@ -112,7 +112,7 @@
   }
 
   let chosen = $state<string[]>([]) // the option of each group the reader picked
-  const groups = $derived([...layers, ...(fallen ? [{ buildings: 'Buildings shown', none: 'No buildings' }] : [])])
+  const groups = $derived(layers)
   // an option no longer offered (another game list, say) falls back to the group's first
   const picked = $derived(groups.map((g, i) => (chosen[i] in g ? chosen[i] : Object.keys(g)[0])))
   let flipped = $state<boolean[]>([]) // the pairs the reader switched to their second key
@@ -172,7 +172,7 @@
     onpointercancel={() => (grip = null)}
   >
     <image href="/minimap.webp" width="127" height="127" opacity="0.8" />
-    {#if on.buildings}
+    {#if buildings.length}
       {#each buildings as b, i (i)}
         {@const size = unit * (b.name.endsWith('fort') ? 1.8 : b.name.includes('rax') ? 0.76 : 1)}
         <rect

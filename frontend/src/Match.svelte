@@ -541,9 +541,9 @@
         <span>■ building standing at the end</span>
         <span>□ destroyed</span>
       </p>
-      <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings} toggles={[SIDES]}>
-        {#snippet children(size, on)}
-          {#each onLanes.filter((at) => on[teamOf(at.player_slot)]) as at (at.player_slot)}
+      <MiniMap label="Map of the lane each hero played, and of the buildings standing at the end of the match" fallen={match.buildings}>
+        {#snippet children(size)}
+          {#each onLanes as at (at.player_slot)}
             {@render heroMark(at, size * 0.04, `${name(at.player_slot)}: ${LANES[at.lane]}`)}
           {/each}
         {/snippet}
