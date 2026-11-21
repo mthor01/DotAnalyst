@@ -4,7 +4,7 @@
   import Heroes from './Heroes.svelte'
   import Matches from './Matches.svelte'
   import Teammates from './Teammates.svelte'
-  import RoleWheel, { tally, type Role } from './lib/RoleWheel.svelte'
+  import RoleWheel, { tally } from './lib/RoleWheel.svelte'
   import WardHeat from './lib/WardHeat.svelte'
   import WinRate from './lib/WinRate.svelte'
   import Count from './lib/Count.svelte'
@@ -73,13 +73,8 @@
   const share = (part: number) => `${percent(part, recent.length)}%`
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
 
-  // ---- roles: the lane seen from the player's side. Radiant's safe lane is bottom, Dire's is top.
-  function roleOf(r: MatchRow): Role {
-    if (r.lane === 'top' || r.lane === 'bot') return (r.lane === 'bot') === r.radiant ? 'safe' : 'off'
-    return r.lane ?? 'none'
-  }
   const heroes = $derived(tally(recent))
-  const roles = $derived(recent.map((r) => ({ ...r, role: roleOf(r) })))
+  const roles = $derived(recent.map((r) => ({ ...r, role: r.position })))
 
   // ---- the strip: one column per match, oldest on the left
   const strip = $derived([...recent].reverse())

@@ -1,7 +1,8 @@
 <script module lang="ts">
   import { percent } from './api'
 
-  export type Role = 'safe' | 'mid' | 'off' | 'jungle' | 'none'
+  /** A lane (team pages) or a position 1–5 (profile) */
+  export type Role = 'safe' | 'mid' | 'off' | 'jungle' | 'none' | 1 | 2 | 3 | 4 | 5
   export type Game = { hero_id: number; win: number | boolean; role: Role; kills: number | null; deaths: number | null; assists: number | null }
   export type Tally = { hero_id: number; games: number; wins: number; kills: number; deaths: number; assists: number }
 
@@ -33,22 +34,27 @@
   /** `none` names the games without a known lane. */
   let { games, none }: { games: Game[]; none: string } = $props()
 
-  const ROLES: Record<Role, { title: string; color: string }> = {
-    safe: { title: 'Safe lane', color: 'series-1' },
-    mid: { title: 'Mid lane', color: 'series-2' },
-    off: { title: 'Off lane', color: 'series-4' },
-    jungle: { title: 'Jungle', color: 'series-3' },
-    none: { title: none, color: 'axis' },
-  }
+  const ROLES = new Map<Role, { title: string; color: string }>([
+    [1, { title: 'Pos 1 (carry)', color: 'series-1' }],
+    [2, { title: 'Pos 2 (mid)', color: 'series-2' }],
+    [3, { title: 'Pos 3 (offlane)', color: 'series-4' }],
+    [4, { title: 'Pos 4 (soft support)', color: 'series-3' }],
+    [5, { title: 'Pos 5 (hard support)', color: 'series-5' }],
+    ['safe', { title: 'Safe lane', color: 'series-1' }],
+    ['mid', { title: 'Mid lane', color: 'series-2' }],
+    ['off', { title: 'Off lane', color: 'series-4' }],
+    ['jungle', { title: 'Jungle', color: 'series-3' }],
+    ['none', { title: none, color: 'axis' }],
+  ])
   /** Each role's share of the games, and inside it the heroes played there. `from` and `to` are turns. */
   const wheel = $derived.by(() => {
     let at = 0
-    return (Object.keys(ROLES) as Role[]).flatMap((id) => {
+    return [...ROLES.keys()].flatMap((id) => {
       const mine = games.filter((g) => g.role === id)
       if (!mine.length) return []
       const from = at
       const slices = tally(mine).map((t) => ({ ...t, from: at, to: (at += t.games / games.length) }))
-      return [{ id, ...ROLES[id], games: mine.length, wins: mine.filter((g) => g.win).length, from, to: at, slices }]
+      return [{ id, ...ROLES.get(id)!, games: mine.length, wins: mine.filter((g) => g.win).length, from, to: at, slices }]
     })
   })
   const point = (r: number, turn: number) => `${r * Math.sin(2 * Math.PI * turn)} ${-r * Math.cos(2 * Math.PI * turn)}`
@@ -78,7 +84,7 @@
 </script>
 
 <div class="roles">
-  <svg viewBox="-100 -100 200 200" role="group" aria-label="Roles and heroes of the last {games.length} matches; click a lane in the middle ring to see it alone; the lists beside it have the numbers">
+  <svg viewBox="-100 -100 200 200" role="group" aria-label="Roles and heroes of the last {games.length} matches; click a part of the middle ring to see it alone; the lists beside it have the numbers">
     {#each wheel as role (role.id)}
       <path
         class="role"
@@ -122,10 +128,10 @@
       </li>
     {/each}
     <li class="muted key">
-      Outer ring: the heroes played there, green when winning at least half, red when losing more. Click a lane in the
+      Outer ring: the heroes played there, green when winning at least half, red when losing more. Click a part of the
       middle ring to see its heroes alone.
     </li>
-    {#if alone}<li><button class="action" onclick={() => show()}>Show all lanes</button></li>{/if}
+    {#if alone}<li><button class="action" onclick={() => show()}>Show all</button></li>{/if}
   </ul>
 </div>
 

@@ -351,7 +351,7 @@ The Role dropdown above the page keeps only the matches the account played in on
 
 A lane counts as won or lost when `lane_nw_diff` is beyond ±500 net worth, and as even inside that (`EVEN` in `Profile.svelte`).
 
-The role wheel (`RoleWheel.svelte`) gives each lane its share of the middle ring and the heroes played there their share of the outer ring. Clicking a lane in the middle ring turns the wheel in 0.7 s (cubic in-out, at once with reduced motion) until that lane fills the middle ring and its heroes fill the outer one. The number in the centre then counts that lane's matches, and "Show all lanes" turns the wheel back.
+The role wheel (`RoleWheel.svelte`) gives each position 1–5 (see Position 1–5 of a player) its share of the middle ring and the heroes played there their share of the outer ring; on a team page the middle ring is the lanes instead. Clicking a part of the middle ring turns the wheel in 0.7 s (cubic in-out, at once with reduced motion) until that part fills the middle ring and its heroes fill the outer one. The number in the centre then counts that part's matches, and "Show all" turns the wheel back.
 
 ### Activity (Profile)
 
