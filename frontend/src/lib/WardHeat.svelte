@@ -4,7 +4,24 @@
 
   /** games: those the wards could come from, warded or not. byGame: wards and games carry `league`, and a dropdown
    *  splits tournament games from the rest */
-  let { wards, games, label, byGame = false }: { wards: WardSpot[]; games: { radiant: boolean; win: boolean | number; league?: boolean }[]; label: string; byGame?: boolean } = $props()
+  type Props = {
+    wards: WardSpot[]
+    games: { radiant: boolean; win: boolean | number; league?: boolean }[]
+    label: string
+    byGame?: boolean
+    /** Bindable, so that two heatmaps move as one: the timeline, the slider, and MiniMap's moved, chosen and flipped */
+    periods?: boolean[]
+    share?: number
+    moved?: { x: number; y: number; size: number } | null
+    chosen?: string[]
+    flipped?: boolean[]
+  }
+  let {
+    wards, games, label, byGame = false,
+    periods = $bindable([true, true, true, true, true]), // the stretches of the timeline (PERIODS) switched on
+    share = $bindable(0), // percent: only squares warded in at least this share of the chosen games
+    moved = $bindable(null), chosen = $bindable([]), flipped = $bindable([]),
+  }: Props = $props() // prettier-ignore
 
   const SQUARE = 2 // map cells to a side of the squares that tell, on hover, how many wards went there
   const SCALE = 2 // pixels of the heat picture per map cell
@@ -16,9 +33,7 @@
   const PERIODS = ['0–10', '10–20', '20–30', '30–40', '40+']
   /** The ten minutes a ward was placed in, as an index of PERIODS; wards before the horn count to the first. */
   const period = (w: WardSpot) => Math.min(PERIODS.length - 1, Math.floor(Math.max(0, w.time) / 600))
-  let periods = $state(PERIODS.map(() => true)) // the stretches of the timeline switched on
   const every = $derived(periods.every(Boolean))
-  let share = $state(0) // percent: only squares warded in at least this share of the chosen games
   // the heat colours of each kind, from a lone ward to its busiest spot: [where on the scale, red, green, blue, opacity]
   const RAMPS = {
     obs: [
@@ -50,7 +65,7 @@
   const picked = (g: { radiant: boolean; win: boolean | number; league?: boolean }, on: Record<string, boolean>) =>
     on[g.radiant ? 'radiant' : 'dire'] && on[g.win ? 'won' : 'lost'] && (!byGame || on[g.league ? 'league' : 'usual'])
   /** How many games the buttons and dropdowns choose: the timeline picks wards, not games */
-  const chosen = (on: Record<string, boolean>) => games.filter((g) => picked(g, on)).length
+  const tally = (on: Record<string, boolean>) => games.filter((g) => picked(g, on)).length
   const square = (w: WardSpot) => `${Math.floor(mapX(w.x) / SQUARE) * SQUARE} ${Math.floor(mapY(w.y) / SQUARE) * SQUARE}`
   /** Only the wards in squares warded in at least the slider's share of the `of` games */
   function common(shown: WardSpot[], of: number) {
@@ -110,9 +125,9 @@
   const count = (type: string) => wards.filter((w) => w.type === type).length
 </script>
 
-<MiniMap reset={false} label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
+<MiniMap bind:moved bind:chosen bind:flipped reset={false} label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
   {#snippet children(_, on)}
-    {@const of = chosen(on)}
+    {@const of = tally(on)}
     {@const shown = common(shownOf(on), of)}
     <!-- the map is darkened so that the heat stands out from its greens and greys -->
     <rect class="veil" width="127" height="127" />
@@ -134,7 +149,7 @@
 <p class="timeline">
   <span class="choice" role="group" aria-label="When the wards were placed, in minutes">
     {#each PERIODS as name, i}
-      <button aria-pressed={periods[i]} onclick={() => (periods[i] = !periods[i])}>{name}</button>
+      <button aria-pressed={periods[i]} onclick={() => (periods = periods.map((on, j) => on !== (i === j)))}>{name}</button>
     {/each}
   </span>
   <button class="action" onclick={() => (periods = PERIODS.map(() => !every))}>{every ? 'All off' : 'All on'}</button>

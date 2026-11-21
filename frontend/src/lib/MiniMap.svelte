@@ -77,11 +77,18 @@
     /** Gets the width of the picture in map cells, to size its marks by so that they stay as large on the screen
      *  when the reader zooms, and which layers are shown. */
     children?: Snippet<[number, Record<string, boolean>]>
+    /** Bindable, so that two maps can share them: where the reader took the picture (null: `view`), the option
+     *  picked in each dropdown, and the pairs switched to their second key. Only ever reassigned, never mutated. */
+    moved?: View | null
+    chosen?: string[]
+    flipped?: boolean[]
   }
-  let { label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = [], controls, reset = true, children }: Props = $props()
+  let {
+    label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = [], controls, reset = true, children,
+    moved = $bindable(null), chosen = $bindable([]), flipped = $bindable([]),
+  }: Props = $props() // prettier-ignore
 
   const box = (v: View) => `${v.x} ${v.y} ${v.size} ${v.size}`
-  let moved = $state<View | null>(null) // where the reader has taken the picture; null is the view given
   const given = $derived(box(view))
   $effect(() => {
     given // another view given (another fight, another death) starts from that view again
@@ -111,11 +118,9 @@
     grip = { x: e.clientX, y: e.clientY }
   }
 
-  let chosen = $state<string[]>([]) // the option of each group the reader picked
   const groups = $derived(layers)
   // an option no longer offered (another game list, say) falls back to the group's first
   const picked = $derived(groups.map((g, i) => (chosen[i] in g ? chosen[i] : Object.keys(g)[0])))
-  let flipped = $state<boolean[]>([]) // the pairs the reader switched to their second key
   const on = $derived({
     ...Object.fromEntries(groups.flatMap((g, i) => Object.keys(g).map((key) => [key, picked[i] === '' || picked[i] === key]))),
     ...Object.fromEntries(toggles.flatMap((t, i) => Object.keys(t).map((key, k) => [key, k === +!!flipped[i]]))),
@@ -143,10 +148,10 @@
       {#each toggles as pair, i}
         {@const [[key, name], [, other]] = flipped[i] ? Object.entries(pair).reverse() : Object.entries(pair)}
         <button class="toggle" style:--tint={TINTS[key]} aria-label="{name}, switch to {other}" title="Switch to {other}"
-          onclick={() => (flipped[i] = !flipped[i])}><i></i>{name}</button>
+          onclick={() => (flipped = toggles.map((_, j) => !!flipped[j] !== (i === j)))}><i></i>{name}</button>
       {/each}
       {#each groups as group, i}
-        <select aria-label="What the map shows" value={picked[i]} onchange={(e) => (chosen[i] = e.currentTarget.value)}>
+        <select aria-label="What the map shows" value={picked[i]} onchange={(e) => (chosen = picked.map((v, j) => (j === i ? e.currentTarget.value : v)))}>
           {#each Object.entries(group) as [key, name] (key)}
             <option value={key}>{name}</option>
           {/each}
