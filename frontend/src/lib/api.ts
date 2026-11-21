@@ -258,7 +258,10 @@ export const METRICS: { name: string; label: string; show: (v: number) => string
 
 /** The shared filters, but for another account. */
 export function queryFor(query: string, accountId: number, more: Record<string, string> = {}): string {
-  return new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(query)), ...more, account_id: String(accountId) }).toString()
+  // set, not an object: Object.fromEntries would keep one of a repeated key, so Supports (position=4&position=5) became pos 5
+  const params = new URLSearchParams(query)
+  for (const [k, v] of Object.entries({ ...more, account_id: String(accountId) })) params.set(k, v)
+  return params.toString()
 }
 
 export type Constants = {
