@@ -6,7 +6,7 @@ from collections import Counter
 from math import hypot
 from pathlib import Path
 
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import delete, insert, inspect, select, update
 from sqlalchemy.orm import Session
 
 from . import queries
@@ -531,12 +531,21 @@ def derive_match(session: Session, match_id: int, raw_dir: Path = DATA / "raw") 
 
 
 def recompute(session: Session, raw_dir: Path = DATA / "raw") -> tuple[int, list[str]]:
-    """Rebuild every derived table from the raw logs. Returns (matches done, what went wrong)."""
+    """Rebuild every match's derived rows from the raw logs, newest first. Returns (matches done, what went wrong)."""
     bind = session.get_bind()
-    Derived.metadata.drop_all(bind)
+    # only a table whose columns changed starts empty; the others keep each match's old rows until it is redone, so
+    # the site stays filled during the hour this takes. shortcut: compares column names only, a changed type or key
+    # needs the table dropped by hand
+    found = inspect(bind)
+    changed = [
+        table for table in Derived.metadata.sorted_tables
+        if found.has_table(table.name) and {c["name"] for c in found.get_columns(table.name)} != set(table.columns.keys())
+    ]  # fmt: skip
+    Derived.metadata.drop_all(bind, tables=changed)
     Derived.metadata.create_all(bind)
     done, problems = 0, []
-    for match_id in session.scalars(select(Match.match_id).where(Match.replay_state == "parsed")).all():
+    parsed = select(Match.match_id).where(Match.replay_state == "parsed").order_by(Match.start_time.desc())  # recent first
+    for match_id in session.scalars(parsed).all():
         try:
             derive_match(session, match_id, raw_dir)
             done += 1

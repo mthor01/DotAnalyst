@@ -157,7 +157,7 @@ class Recipe(Base):
 
 
 class Derived(DeclarativeBase):
-    """Tables computed from the raw replay logs. `recompute` drops and rebuilds them, so their shape may change freely."""
+    """Tables computed from the raw replay logs. `recompute` rebuilds them and drops a table whose columns changed, so their shape may change freely."""
 
 
 class PlayerMinute(Derived):

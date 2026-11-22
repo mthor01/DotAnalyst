@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from dotanalyst import queries
 from dotanalyst.db import (
     AbilityUpgrade, Base, Building, Death, Derived, Lane, Match, MatchPlayer, PlayerMinute, Purchase, Teamfight, TeamfightPlayer, Tormentor, Ward,
-    WisdomRune,
+    Metric, WisdomRune,
 )  # fmt: skip
 from dotanalyst.derive import (
     TABLES, WISDOM_SPOTS, Log, derive, fights, positions, read_log, recompute, store_parties, tormentors, wisdom_runes,
@@ -274,6 +274,30 @@ def test_recompute_is_repeatable_and_feeds_the_match_query():
         assert len(found["deaths"]) == 37 and len(found["teamfights"]) == 5 and len(found["lanes"]) == 10
         assert queries.match(session, 2)["player_minute"] == []
         assert queries.match(session, 3) is None
+
+
+
+def test_recompute_keeps_the_rows_it_has_not_redone_and_rebuilds_a_changed_table():
+    # the site reads these tables while a recompute runs for an hour: they must not go empty first
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    Derived.metadata.create_all(engine)
+    with engine.begin() as c:  # an older shape of lanes, without most of its columns
+        c.exec_driver_sql("DROP TABLE lanes")
+        c.exec_driver_sql("CREATE TABLE lanes (match_id INTEGER, player_slot INTEGER, PRIMARY KEY (match_id, player_slot))")
+        c.exec_driver_sql("INSERT INTO lanes VALUES (1, 0)")
+    with Session(engine) as session:
+        session.add(
+            Match(
+                match_id=1, match_seq_num=1, start_time=0, duration=911, radiant_win=False,
+                game_mode=22, lobby_type=7, cluster=0, raw_json={}, replay_state="parsed",
+            )
+        )
+        session.add(Metric(match_id=1, player_slot=0, name="old", value=1.0))  # match 1 has no raw log to redo it from
+        session.commit()
+        recompute(session, FIXTURES)
+        assert session.scalar(select(func.count()).select_from(Metric)) == 1
+        assert session.scalar(select(func.count()).select_from(Lane)) == 0  # rebuilt in the model's shape
 
 
 def test_store_parties_copies_opendota_party_sizes(tmp_path):

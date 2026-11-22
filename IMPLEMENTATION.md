@@ -14,7 +14,7 @@ Terms used below:
 
 ## From the replay
 
-All of this is in `dotanalyst/derive.py` and is stored in the derived tables. `dotanalyst recompute` throws those tables away and builds them again, so a changed rule reaches old matches by running it.
+All of this is in `dotanalyst/derive.py` and is stored in the derived tables. `dotanalyst recompute` builds them again match by match, newest first, so a changed rule reaches old matches by running it. A match keeps its old rows until it is redone, so the site stays filled while it runs (about an hour for 2,300 matches); only a table whose columns changed is thrown away first.
 
 ### Lane of a player
 
