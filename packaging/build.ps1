@@ -16,6 +16,7 @@ npm.cmd run build
 if ($LASTEXITCODE) { throw "site build failed" }
 Pop-Location
 
+Set-Content build\VERSION $Version -Encoding ascii  # bundled: the exe compares it with GitHub's newest release
 uv run pyinstaller packaging\dotanalyst.spec --noconfirm --distpath build\dist --workpath build\pyinstaller
 if ($LASTEXITCODE) { throw "pyinstaller failed" }
 

@@ -57,6 +57,8 @@ powershell -ExecutionPolicy Bypass -File packaging\build.ps1 -Version 0.1.0
 
 It builds the parser, the site and `build\dist\DotAnalyst\DotAnalyst.exe` (PyInstaller, `packaging\dotanalyst.spec`) first. A newer setup installs over a running DotAnalyst; uninstalling keeps the data.
 
+The program updates itself. Every hour, `.github/workflows/release.yml` checks whether [odota/parser](https://github.com/odota/parser) (which OpenDota updates for each Dota patch) or this repo has a commit the last GitHub release was not built from. If one does, it runs the tests, builds the setup, parses a recent pro replay with it, and publishes it as release `v0.1.<run>`. At every start the program asks GitHub for the newest release and downloads a newer setup in the background. When the window is closed, the program installs it silently, so the next start runs the new version. A program built by hand with `build.ps1` checks for updates the same way; one run from the repo never does. GitHub turns the hourly schedule off after 60 days without a commit; **Actions → Release → Enable workflow** turns it back on.
+
 The program keeps its database, `.env` and logs in `%LOCALAPPDATA%\DotAnalyst`, not in the repo folder. It cannot ask the second Steam account for replay salts (that needs Node.js), so it takes them from OpenDota.
 
 ## Adding players

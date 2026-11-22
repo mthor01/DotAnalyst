@@ -21,9 +21,23 @@ def main() -> None:
     from sqlalchemy import select
     from sqlalchemy.orm import Session
 
+    from dotanalyst import update
     from dotanalyst.api import app, engine  # after the chdir: it opens data/ and reads .env
     from dotanalyst.db import Hero
     from dotanalyst.steam import sync_constants
+
+    pending: list[Path] = []
+
+    def check(version: str) -> None:  # every start; a download the window outlasts is installed when it closes
+        try:
+            with httpx.Client() as client:
+                if setup := update.download(client, version, Path("update")):
+                    pending.append(setup)
+        except Exception as error:
+            print(f"update check failed: {error}")
+
+    if version := update.installed_version():
+        threading.Thread(target=check, args=(version,), daemon=True).start()
 
     def constants() -> None:  # every start, so heroes and items of a new Dota patch get their names
         try:
@@ -55,6 +69,8 @@ def main() -> None:
     webview.start(private_mode=False)  # private mode would forget the window's local storage at every close
     server.should_exit = True
     thread.join()
+    if pending:
+        update.install(pending[0])
 
 
 if __name__ == "__main__":
