@@ -11,21 +11,23 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import derive, load_env, opendota, poll, queries
+from . import derive, load_env, opendota, parser, poll, queries
 from .db import DATA, Ability, Account, Hero, Item, League, open_engine
 from .replay import ReplayError
 from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, store_avatars, team_logo
 
 load_env()  # before the poller reads the keys, and so the salts script it starts inherits them
 engine = open_engine()
-FRONTEND = Path("frontend/dist")
+FRONTEND = Path(__file__).parent.parent / "frontend" / "dist"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    replay_parser = parser.start()  # before the poller, which sends it replays
     stop = poll.start(engine)
     yield
     stop.set()
+    parser.stop(replay_parser)
 
 
 app = FastAPI(lifespan=lifespan)

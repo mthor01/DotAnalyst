@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from .db import DATA, Match
 from .opendota import pace
 
-PARSER_URL = "http://localhost:5600/"
+PARSER_URL = "http://127.0.0.1:5600/"  # the parser listens on IPv4 only
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 OPENDOTA_MATCH = "https://api.opendota.com/api/matches/{}"
 SALT_SCRIPT = Path(__file__).parent.parent / "steam" / "salts.mjs"

@@ -59,7 +59,7 @@ def network(calls: list[str], opendota=(404, b""), valve=(404, b"")) -> httpx.Cl
             return httpx.Response(opendota[0], content=opendota[1])
         if request.url.host.endswith(".valve.net"):
             return httpx.Response(valve[0], content=valve[1])
-        assert request.url.host == "localhost"
+        assert request.url.host == "127.0.0.1"
         assert request.content == REPLAY  # the parser gets the decompressed file
         return httpx.Response(200, content=LOG)
 
@@ -104,7 +104,7 @@ def test_a_cut_off_download_is_retried_later_without_stopping_the_others(session
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "api.opendota.com":
             return httpx.Response(200, content=OPENDOTA)
-        if request.url.host == "localhost":
+        if request.url.host == "127.0.0.1":
             return httpx.Response(200, content=LOG)
         if f"/{GOOD}_" in request.url.path:
             return httpx.Response(200, content=zstd.compress(REPLAY))
@@ -145,14 +145,14 @@ def test_poll_parses_downloaded_replays_of_stored_matches(session, tmp_path):
     assert session.get(Match, GOOD).replay_state == "parsed"
     assert session.get(Match, WRONG_LOG).replay_state == "failed"
     assert session.get(Match, STILL_DOWNLOADING).replay_state == "pending"  # no replay online either
-    assert len(to("localhost", calls)) == 2  # not the unknown match, the unfinished file or the non-numeric name
+    assert len(to("127.0.0.1", calls)) == 2  # not the unknown match, the unfinished file or the non-numeric name
 
     assert poll_once(session, client, "", replays, tmp_path) == (0, 0)
-    assert len(to("localhost", calls)) == 2  # parsed and failed replays are not sent again
+    assert len(to("127.0.0.1", calls)) == 2  # parsed and failed replays are not sent again
 
     (replays / f"{STILL_DOWNLOADING}.dem").write_bytes(REPLAY)  # the download finished
     poll_once(session, client, "", replays, tmp_path)
-    assert len(to("localhost", calls)) == 3
+    assert len(to("127.0.0.1", calls)) == 3
 
 
 @pytest.mark.parametrize(
@@ -398,7 +398,7 @@ def test_a_broken_download_is_retried_not_parsed(session, tmp_path, body):
     client = network(calls, opendota=(200, OPENDOTA), valve=(200, body))
 
     assert poll_once(session, client, "", tmp_path / "nowhere", tmp_path) == (0, 0)
-    assert to("localhost", calls) == []
+    assert to("127.0.0.1", calls) == []
     assert session.get(Match, GOOD).replay_state == "pending"
     assert list((tmp_path / "tmp").iterdir()) == []
 

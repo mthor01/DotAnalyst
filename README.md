@@ -5,22 +5,23 @@ A local Dota 2 stats site for the players I care about. There are plenty of stat
 How it works:
 - Match data comes from Valve's Steam Web API.
 - The salt each match's replay URL needs comes from Valve's game coordinator, asked by a second Steam account (`steam/salts.mjs`), or else from the [OpenDota API](https://docs.opendota.com).
-- Replays are parsed by [odota/parser](https://github.com/odota/parser), OpenDota's replay parser, running locally in Docker.
+- Replays are parsed by [odota/parser](https://github.com/odota/parser), OpenDota's replay parser, built with its own trimmed Java runtime and started by the server.
 
 ![A player's profile page: win rate, lanes won, the heroes played in each lane, and the most played heroes](docs/profile.png)
 
 ## Setup
 
-The setup is written for Windows; every command runs in PowerShell, in the repo folder. You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.14 itself), [Node.js](https://nodejs.org) and [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+The setup is written for Windows; every command runs in PowerShell, in the repo folder. You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.14 itself), [Node.js](https://nodejs.org) and [git](https://git-scm.com).
 
 1. Install the Python packages:
    ```powershell
    uv sync
    ```
-2. Start the replay parser once; Docker restarts it from then on. The port stays on localhost because the parser fetches any URL it is given.
+2. Build the replay parser into `build\parser`. The first time it downloads Java 21 and Maven into `build\tools` (a few minutes), so nothing gets installed. The server starts the parser and stops it again. It listens on localhost only, because it fetches any URL it is given.
    ```powershell
-   docker run -d -p 127.0.0.1:5600:5600 --restart unless-stopped --name parser odota/parser:latest
+   powershell -ExecutionPolicy Bypass -File packaging\build_parser.ps1
    ```
+   A parser that already answers on port 5600, such as one in Docker, is used instead.
 3. Get a Steam Web API key at <https://steamcommunity.com/dev/apikey>. This line asks for it and saves it in a file `.env` in the repo folder, replacing one that is there:
    ```powershell
    Set-Content .env "STEAM_API_KEY=$(Read-Host 'Steam API key')"

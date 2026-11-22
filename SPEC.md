@@ -33,7 +33,7 @@ Read from the OpenDota source (`odota/core`, `odota/parser`) in November 2026:
 - **`GetMatchHistory`** returns 100 matches per page and 500 at most per account, paged with `start_at_match_id`. The hero filter does not work. `status: 15` means the account has not enabled "Expose Public Match Data". High-rank matches have been omitted from results since March 2025.
 - **Party size is not in the Web API.** "Played together" is derived from tracked accounts appearing on the same team.
 - **Replay URL** is `http://replay{cluster}.valve.net/570/{match_id}_{replay_salt}.dem.bz2`. The salt is not in the Web API. Despite the name, the file is Zstandard-compressed (see below).
-- **Parser**: the image `odota/parser:latest` is published on Docker Hub. `POST /` with the raw `.dem` body returns the raw event stream as JSON lines. `GET /healthz` returns `ok`. The server answers HTTP 200 even when the parse fails, so a result is valid only if it contains an `epilogue` line.
+- **Parser**: `odota/parser` builds with Maven into one jar (`stats-0.1.0.jar`, main class `opendota.Main`, Java 21). It listens on port 5600, fixed in its code, and on every network interface, so `packaging/build_parser.ps1` patches it to listen on localhost only. Its Docker image runs it with `-XX:-UseCompressedClassPointers -XX:+ExitOnOutOfMemoryError`. Its output from the bundled runtime is byte for byte what the Docker image gives (checked on one replay, November 2026). `POST /` with the raw `.dem` body returns the raw event stream as JSON lines. `GET /healthz` returns `ok`. The server answers HTTP 200 even when the parse fails, so a result is valid only if it contains an `epilogue` line.
 - **Event times** are seconds on the game clock, with 0 at the horn.
 - **`interval` events** arrive once per second per player and carry `slot`, `x`, `y`, `gold`, `lh`, `denies`, `xp`, `networth`, `level`, `kills`, `deaths`, `assists`, `obs_placed`, `sen_placed`, `camps_stacked`, `rune_pickups`.
 - **`player_slot` events** map event slot 0–9 to `player_slot` (0–4 Radiant, 128–132 Dire), which joins replay data to Web API data.
@@ -64,7 +64,7 @@ Checked on 2026-11-12 against 69 parsed replays:
 ## Prerequisites
 
 1. Install `uv`; it installs Python 3.14 itself. This PC has only Python 3.9.
-2. Start Docker Desktop, then `docker run -d -p 127.0.0.1:5600:5600 --restart unless-stopped --name parser odota/parser:latest`. The port is bound to localhost because the parser will fetch any URL it is given.
+2. Build the replay parser with `packaging/build_parser.ps1`. It downloads JDK 21 and Maven into `build/tools`, then uses jlink to make a runtime of just the modules the parser needs. The server starts the parser from `build/parser` unless one already answers on port 5600. It listens on localhost only because the parser will fetch any URL it is given.
 3. Put `STEAM_API_KEY=...` in `.env`. Commands run as `uv run python -m dotanalyst <command>`, written below as `dotanalyst <command>`.
 4. Approve the dependency list: `fastapi`, `uvicorn`, `sqlalchemy`, `httpx`, `pytest`; frontend `svelte`, `vite`, `typescript`, `echarts`. Nothing else is added without asking.
 

@@ -70,7 +70,7 @@
         </tr>
         <tr>
           <th>Parser</th>
-          <td class={status.parser ? '' : 'error'}>{status.parser ? 'answers on port 5600' : 'does not answer on port 5600: is Docker running?'}</td>
+          <td class={status.parser ? '' : 'error'}>{status.parser ? 'answers on port 5600' : 'does not answer on port 5600: restart DotAnalyst, or see data/parser.log'}</td>
         </tr>
         <tr>
           <th>Downloading</th>

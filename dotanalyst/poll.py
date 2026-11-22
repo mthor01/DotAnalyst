@@ -437,7 +437,7 @@ def queue(session: Session, replay_dir: Path, data: Path = DATA, now: float | No
     waiting = sorted(waiting, key=lambda m: (next_try(m), m.replay_tried_at is not None, -m.start_time))
     states = dict(session.execute(select(Match.replay_state, func.count()).group_by(Match.replay_state)).all())
     try:
-        httpx.get(PARSER_URL, timeout=1)  # any answer will do: it shows the container is up
+        httpx.get(PARSER_URL, timeout=1)  # any answer will do: it shows the parser is up
         parser = True
     except httpx.HTTPError:
         parser = False
@@ -567,7 +567,7 @@ def refresh_replay(engine: Engine, match_id: int) -> str | None:
         with Session(engine) as session, httpx.Client() as client:
             return request_replay(session, client, match_id, alt=bool(os.environ.get("STEAM_ALT_USER")))
     except (OSError, httpx.HTTPError) as error:
-        reason = f"the download or the parser failed ({type(error).__name__}); is Docker running?"
+        reason = f"the download or the parser failed ({type(error).__name__}); does the parser answer on port 5600?"
         raise ReplayError(reason) from error
     finally:
         release(match_id)
