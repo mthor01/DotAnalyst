@@ -344,6 +344,11 @@ def match(session: Session, match_id: int) -> dict | None:
         ]
     else:
         return None
+    ids = [p["account_id"] for p in players if p["account_id"]]
+    names = dict(session.execute(select(PlayerName.account_id, PlayerName.name).where(PlayerName.account_id.in_(ids))).all())
+    tracked = set(session.scalars(select(Account.account_id).where(Account.active, Account.account_id.in_(ids))))
+    for player in players:
+        player["name"], player["tracked"] = names.get(player["account_id"]), player["account_id"] in tracked
     result = {
         "match_id": match_id, "start_time": found.start_time, "duration": found.duration,
         "radiant_win": found.radiant_win, "game_mode": found.game_mode, "lobby_type": found.lobby_type,

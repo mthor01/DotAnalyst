@@ -86,6 +86,8 @@ export type MatchPlayer = {
   player_slot: number
   account_id: number | null
   label: string | null
+  name: string | null // Steam name, asked when the match was first opened
+  tracked: boolean // has a profile here
   hero_id: number
   kills: number
   deaths: number

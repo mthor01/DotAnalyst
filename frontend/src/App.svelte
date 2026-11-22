@@ -87,6 +87,7 @@
     if (location.hash === '#teams') history.replaceState(null, '', '#tournaments/teams') // where Teams was before
     const picked = /^account\/(\d+)$/.exec(location.hash.slice(1))?.[1]
     if (picked) {
+      if (!accounts.some((a) => String(a.account_id) === picked)) loadAccounts() // added from a match page
       filters.account_id = picked
       localStorage.setItem('account_id', picked) // still the one picked once the accounts have loaded
       history.replaceState(null, '', '#profile')

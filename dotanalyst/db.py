@@ -88,7 +88,7 @@ class League(Base):
 
 
 class PlayerName(Base):
-    """Steam name of a league player, as it was when first asked for."""
+    """Steam name of a league player, or of a player of a match that was opened, as it was when first asked for."""
 
     __tablename__ = "player_names"
 

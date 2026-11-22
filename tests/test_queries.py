@@ -54,6 +54,14 @@ def session():
         yield s
 
 
+def test_match_players_carry_their_steam_name_and_whether_they_are_tracked(session):
+    session.add(PlayerName(account_id=STRANGER, name="Stranger"))
+    players = {p["account_id"]: p for p in queries.match(session, 1)["players"]}
+    assert (players[ME]["name"], players[ME]["tracked"]) == (None, True)
+    assert (players[STRANGER]["name"], players[STRANGER]["tracked"]) == ("Stranger", False)  # no longer tracked
+    assert (players[None]["name"], players[None]["tracked"]) == (None, False)
+
+
 def ids(rows):
     return [r["match_id"] for r in rows]
 
@@ -470,6 +478,7 @@ def test_a_league_game_is_a_match_page_before_its_replay_was_asked_for(league):
     first = LEAGUE_TEMPLATE["players"][0]
     assert (found["players"][0]["kills"], found["players"][0]["net_worth"]) == (first["kills"], first["net_worth"])
     assert found["players"][5]["account_id"] == 1000 and found["players"][5]["label"] is None
+    assert (found["players"][5]["name"], found["players"][5]["tracked"]) == ("Carry", False)
     assert found["wards"] == [] and found["player_minute"] == []
     assert found["draft"][:2] == [{"hero_id": 50, "pick": False, "radiant": True}, {"hero_id": 51, "pick": False, "radiant": False}]
     assert found["draft"][2:] == [

@@ -204,20 +204,25 @@ def sync_leagues(session: Session, client: httpx.Client, key: str, newest_only: 
         return 0  # no new players to name, and reading every stored game each minute is not free
     players = {p.get("account_id") for raw in session.scalars(select(LeagueMatch.raw_json)) for p in raw["players"]}
     unnamed = players - {None, ANONYMOUS} - set(session.scalars(select(PlayerName.account_id)))
-    asked = sorted(unnamed | no_picture.keys())
-    for i in range(0, len(asked), 100):  # Steam takes 100 ids in one request
-        steam_ids = ",".join(str(a + STEAM_ID_BASE) for a in asked[i : i + 100])
+    store_names(session, client, key, sorted(unnamed | no_picture.keys()))
+    return new
+
+
+def store_names(session: Session, client: httpx.Client, key: str, account_ids: list[int]) -> None:
+    """Ask Steam for these players' names and pictures and store them; a player with a stored name gets the picture."""
+    stored = {n.account_id: n for n in session.scalars(select(PlayerName).where(PlayerName.account_id.in_(account_ids)))}
+    for i in range(0, len(account_ids), 100):  # Steam takes 100 ids in one request
+        steam_ids = ",".join(str(a + STEAM_ID_BASE) for a in account_ids[i : i + 100])
         for p in call(client, key, NAMES, steamids=steam_ids)["players"]:
             account_id, avatar = int(p["steamid"]) - STEAM_ID_BASE, p.get("avatarmedium", "")
-            if account_id in no_picture:
-                no_picture[account_id].avatar = avatar
+            if account_id in stored:
+                stored[account_id].avatar = avatar
             else:
                 session.add(PlayerName(account_id=account_id, name=p["personaname"], avatar=avatar))
-        for account_id in asked[i : i + 100]:
-            if account_id in no_picture and no_picture[account_id].avatar is None:
-                no_picture[account_id].avatar = ""  # Steam has no profile now: not asked again
+        for account_id in account_ids[i : i + 100]:
+            if account_id in stored and stored[account_id].avatar is None:
+                stored[account_id].avatar = ""  # Steam has no profile now: not asked again
         session.commit()
-    return new
 
 
 def sync_constants(session: Session, client: httpx.Client, key: str) -> tuple[int, int]:

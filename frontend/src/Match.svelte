@@ -34,6 +34,18 @@
     return () => (current = false)
   })
 
+  // ---- a player without a profile here can get one from the scoreboard
+  let added = $state(new Set<number>())
+  let notAdded = $state<{ account_id: number; why: string } | null>(null) // shown in that player's cell, the match stays
+  async function addProfile(account_id: number) {
+    try {
+      await post('accounts', { account_id: String(account_id) })
+      added = new Set([...added, account_id])
+    } catch (e) {
+      notAdded = { account_id, why: (e as Error).message }
+    }
+  }
+
   // ---- a match without a replay can ask for it: the server downloads and parses it while the request waits
   let asking = $state(false)
   let asked = $state('') // why the last request brought no replay
@@ -504,7 +516,18 @@
             </tr>
             {#each team as p (p.player_slot)}
               <tr class={teamOf(p.player_slot)}>
-                <td><Hero id={p.hero_id} />{#if p.label}<span class="tag">{p.label}</span>{/if}</td>
+                <td><div class="player">
+                  <Hero id={p.hero_id} />
+                  {#if p.account_id && (p.tracked || added.has(p.account_id))}
+                    <a href="#account/{p.account_id}">{p.label ?? p.name ?? 'Profile'}</a>
+                  {:else if p.account_id}
+                    <span>{p.name ?? 'Unknown player'}</span>
+                    <button type="button" class="add" title="Add this player's profile" aria-label="Add {p.name ?? 'this player'}'s profile" onclick={() => addProfile(p.account_id!)}>+</button>
+                    {#if notAdded?.account_id === p.account_id}<span class="error" role="alert">{notAdded.why}</span>{/if}
+                  {:else}
+                    <span class="muted">Anonymous</span>
+                  {/if}
+                </div></td>
                 <td class="num">{p.level}</td>
                 <td class="num">{p.kills} / {p.deaths} / {p.assists}</td>
                 <td class="num">{p.last_hits} / {p.denies}</td>
@@ -1087,6 +1110,16 @@
   }
   .score .muted {
     font-size: 13px;
+  }
+  .player {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  .player .add {
+    padding: 0 6px;
+    line-height: 18px;
   }
   @media (max-width: 860px) {
     .faceoff {

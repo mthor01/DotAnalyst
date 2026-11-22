@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from . import derive, load_env, opendota, parser, poll, queries, save_env
 from .db import DATA, Ability, Account, Hero, Item, League, open_engine
 from .replay import ReplayError
-from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, store_avatars, team_logo
+from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, store_avatars, store_names, team_logo
 
 load_env()  # before the poller reads the keys, and so the salts script it starts inherits them
 engine = open_engine()
@@ -119,6 +119,16 @@ def match(session: Db, match_id: int) -> dict:
     found = queries.match(session, match_id)
     if found is None:
         raise HTTPException(404, f"match {match_id} is not stored")
+    # the players' Steam names, asked once, when the match is first opened
+    # shortcut: one Steam has no profile for is asked again at every opening; store it nameless if that ever matters
+    unnamed = [p["account_id"] for p in found["players"] if p["account_id"] and p["name"] is None]
+    if unnamed and (key := os.environ.get("STEAM_API_KEY")):
+        try:
+            with httpx.Client() as client:
+                store_names(session, client, key, unnamed)
+            found = queries.match(session, match_id)
+        except SteamError:
+            pass  # the scoreboard shows without names
     return found
 
 
