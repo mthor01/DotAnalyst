@@ -70,7 +70,8 @@
   const name = (slot: number | null) => (slot === null ? '' : heroName(hero.get(slot) ?? 0))
   const hasReplay = $derived(!!match?.player_minute.length)
   const hasDraft = $derived(!!match?.draft.length && (draft || !brief))
-  const tabs = $derived(Object.entries(TABS).filter(([id]) => id === 'general' || (id === 'draft' ? hasDraft : hasReplay)))
+  const captains = $derived(match?.game_mode === 2) // only Captains Mode has a draft worth a tab; other games show the pick order
+  const tabs = $derived(Object.entries(TABS).filter(([id]) => id === 'general' || (id === 'draft' ? hasDraft && captains : hasReplay)))
   const shown = $derived(!brief && tabs.some(([id]) => id === tab) ? tab : 'general')
   const lastMinute = $derived(Math.max(0, ...(match?.player_minute ?? []).map((r) => r.minute)))
   const minuteRow = $derived(new Map((match?.player_minute ?? []).map((r) => [`${r.player_slot}:${r.minute}`, r])))
@@ -524,8 +525,12 @@
         </tbody>
       </table>
     </div>
-    {#if brief && hasDraft}<Draft draft={match.draft} captains={match.game_mode === 2} {notes} />{/if}
+    {#if brief && hasDraft}<Draft draft={match.draft} {captains} {notes} />{/if}
     </div>
+    {#if !brief && hasDraft && !captains}
+      <h2>Pick order</h2>
+      <Draft draft={match.draft} captains={false} />
+    {/if}
     {#if hasReplay}
       {#if brief}
         <h2>Lead</h2>
@@ -567,7 +572,7 @@
       </p>
     {/if}
   {:else if shown === 'draft'}
-    <div class="draft"><Draft draft={match.draft} captains={match.game_mode === 2} /></div>
+    <div class="draft"><Draft draft={match.draft} {captains} /></div>
   {:else if shown === 'graphs'}
     <p class="filters">
       <span class="choice" role="group" aria-label="What the graph shows">
