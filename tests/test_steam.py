@@ -238,6 +238,22 @@ def test_load_env_reads_dotenv_and_keeps_variables_already_set(tmp_path, monkeyp
     load_env(tmp_path / "missing.env")  # no file: nothing happens
 
 
+def test_save_env_replaces_its_line_and_keeps_the_others(tmp_path, monkeypatch):
+    import os
+
+    from dotanalyst import save_env
+
+    env = tmp_path / ".env"
+    env.write_text("STEAM_ALT_USER=alt\nexport STEAM_API_KEY=old\n", encoding="utf-16")  # as PowerShell 5.1 writes it
+    monkeypatch.setenv("STEAM_API_KEY", "old")
+    save_env("STEAM_API_KEY", "new", env)
+    assert env.read_text(encoding="utf-8") == "STEAM_ALT_USER=alt\nSTEAM_API_KEY=new\n"
+    assert os.environ["STEAM_API_KEY"] == "new"
+    save_env("DA_D", "x", tmp_path / "fresh.env")  # no file yet: it is made
+    monkeypatch.delenv("DA_D")
+    assert (tmp_path / "fresh.env").read_text() == "DA_D=x\n"
+
+
 LEAGUE_PAGE, LEAGUE_DETAILS = load("league_history.json"), load("league_details.json")  # three games of league 9001
 LEAGUE_GAMES = LEAGUE_PAGE["result"]["matches"]
 # Steam says results_remaining 0 on a page that has more behind it: this game is only on the page after

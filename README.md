@@ -26,7 +26,7 @@ The setup is written for Windows; every command runs in PowerShell, in the repo 
    ```powershell
    Set-Content .env "STEAM_API_KEY=$(Read-Host 'Steam API key')"
    ```
-   `.env` is in `.gitignore`, so git never commits it. The commands and the server read it when it is there. Without it the site still runs and step 4 still works, but no new matches are fetched.
+   `.env` is in `.gitignore`, so git never commits it. The commands and the server read it when it is there. Without it the site still runs and step 4 still works, but no new matches are fetched, and the site asks for the key at the top of the page, saving it in `.env` itself.
 4. Fetch hero and item names:
    ```powershell
    uv run python -m dotanalyst sync-constants
@@ -42,6 +42,20 @@ The setup is written for Windows; every command runs in PowerShell, in the repo 
    ```powershell
    uv run uvicorn dotanalyst.api:app
    ```
+   Or as a desktop app in its own window, without a browser. It closes the server and the parser with the window, and refreshes the hero and item names at every start:
+   ```powershell
+   uv run python -m dotanalyst.app
+   ```
+
+### The Windows program
+
+`DotAnalyst.exe` bundles Python, the site and the parser with its Java runtime, so it needs nothing installed. Build it after steps 1, 2 and 5; it lands in `build\dist\DotAnalyst`:
+
+```powershell
+uv run pyinstaller packaging\dotanalyst.spec --noconfirm --distpath build\dist --workpath build\pyinstaller
+```
+
+The program keeps its database, `.env` and logs in `%LOCALAPPDATA%\DotAnalyst`, not in the repo folder. It cannot ask the second Steam account for replay salts (that needs Node.js), so it takes them from OpenDota.
 
 ## Adding players
 

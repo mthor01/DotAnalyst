@@ -1,5 +1,6 @@
 """Run with: uv run uvicorn dotanalyst.api:app (it reads .env when there is one)"""
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -11,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import derive, load_env, opendota, parser, poll, queries
+from . import derive, load_env, opendota, parser, poll, queries, save_env
 from .db import DATA, Ability, Account, Hero, Item, League, open_engine
 from .replay import ReplayError
 from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, store_avatars, team_logo
@@ -183,6 +184,21 @@ def queue(session: Db) -> dict:
 @app.get("/api/progress")
 def progress(session: Db) -> dict:
     return poll.progress(session)
+
+
+@app.get("/api/settings")
+def settings() -> dict:
+    return {"steam_key": bool(os.environ.get("STEAM_API_KEY"))}
+
+
+@app.post("/api/settings/steam-key")
+def set_steam_key(key: Annotated[str, Body(embed=True)]) -> dict:
+    """Save the Steam Web API key in .env, so the app needs no file edited by hand. The poller reads it each round."""
+    key = key.strip()
+    if not re.fullmatch(r"[0-9A-Fa-f]{32}", key):  # also keeps a line break out of .env
+        raise HTTPException(422, "a Steam Web API key is 32 letters and digits (0-9, A-F)")
+    save_env("STEAM_API_KEY", key.upper())
+    return settings()
 
 
 @app.post("/api/teams/refresh")

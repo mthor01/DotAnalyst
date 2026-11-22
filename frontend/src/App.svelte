@@ -112,6 +112,19 @@
   }
   const focus = (input: HTMLInputElement) => input.focus()
 
+  let steamKey = $state(true) // the server has a Steam Web API key; without one no new matches are fetched
+  let newKey = $state('')
+  let keyError = $state('')
+  get<{ steam_key: boolean }>('settings').then((s) => (steamKey = s.steam_key), () => {})
+  async function saveKey(event: SubmitEvent) {
+    event.preventDefault()
+    try {
+      steamKey = (await post<{ steam_key: boolean }>('settings/steam-key', { key: newKey })).steam_key
+    } catch (e) {
+      keyError = (e as Error).message
+    }
+  }
+
   let checking = $state(false)
   let checked = $state('') // what the last check found, or why it failed
   let version = $state(0) // goes up with every check; the page below is built anew, so it asks for its data again
@@ -176,6 +189,14 @@
       </button>
     </div>
   </header>
+  {#if !steamKey}
+    <form class="add" onsubmit={saveKey}>
+      <span>No new matches are fetched without a Steam Web API key. Get one at <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noreferrer">steamcommunity.com/dev/apikey</a>:</span>
+      <input bind:value={newKey} required aria-label="Steam Web API key" placeholder="Steam Web API key" size="34" />
+      <button class="action">Save</button>
+      <span class="error" role="alert">{keyError}</span>
+    </form>
+  {/if}
 
   <div class="layout" class:paneled={showFilters}>
   {#if showFilters}
