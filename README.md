@@ -49,11 +49,13 @@ The setup is written for Windows; every command runs in PowerShell, in the repo 
 
 ### The Windows program
 
-`DotAnalyst.exe` bundles Python, the site and the parser with its Java runtime, so it needs nothing installed. Build it after steps 1, 2 and 5; it lands in `build\dist\DotAnalyst`:
+`DotAnalyst-Setup.exe` installs DotAnalyst for the current user, without admin rights, with a Start menu entry. The program bundles Python, the site and the parser with its Java runtime, so it needs nothing else installed. To build the setup into `build\installer`, install [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) and run:
 
 ```powershell
-uv run pyinstaller packaging\dotanalyst.spec --noconfirm --distpath build\dist --workpath build\pyinstaller
+powershell -ExecutionPolicy Bypass -File packaging\build.ps1 -Version 0.1.0
 ```
+
+It builds the parser, the site and `build\dist\DotAnalyst\DotAnalyst.exe` (PyInstaller, `packaging\dotanalyst.spec`) first. A newer setup installs over a running DotAnalyst; uninstalling keeps the data.
 
 The program keeps its database, `.env` and logs in `%LOCALAPPDATA%\DotAnalyst`, not in the repo folder. It cannot ask the second Steam account for replay salts (that needs Node.js), so it takes them from OpenDota.
 
