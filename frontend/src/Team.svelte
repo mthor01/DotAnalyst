@@ -1,4 +1,5 @@
 <script lang="ts">
+  import About from './lib/About.svelte'
   import { RECENT_GAMES, clock, get, percent, sortedBy, type TeamDetail, type TeamHero } from './lib/api'
   import { heroIcon, heroName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
@@ -169,11 +170,7 @@
   </dl>
 
   <h2>Main stack</h2>
-  <p class="muted">
-    The five players seen most in their last {RECENT_GAMES} games; a tie goes to whoever played more lately. The bar
-    under a player fills one step per game of those. A name opens the player's profile here when the site tracks them,
-    else on OpenDota.
-  </p>
+  <p class="muted">The five players seen most in their last {RECENT_GAMES} games.<About>The five players seen most in their last {RECENT_GAMES} games; a tie goes to whoever played more lately. The bar under a player fills one step per game of those. A name opens the player's profile here when the site tracks them, else on OpenDota.</About></p>
   <ol class="lineup">
     {#each stack as p (p.account_id)}
       <li>
@@ -207,10 +204,7 @@
     <section>
       <h2>Wards placed</h2>
       {#if parsed.length}
-        <p class="muted">
-          Every ward their players placed in the {parsed.length} of their {games} games whose replay is parsed; their
-          usual matches are on each player's own map under Players.
-        </p>
+        <p class="muted">Every ward of their {parsed.length} parsed games.<About>Every ward their players placed in the {parsed.length} of their {games} games whose replay is parsed; their usual matches are on each player's own map under Players.</About></p>
         <WardHeat wards={teamWards} games={parsed} label="Heatmap of the wards the team placed in its tournament games" />
       {:else}
         <p class="muted">None of their games has a parsed replay yet, and wards are only in replays. Request the replays under "First moves".</p>
@@ -218,11 +212,7 @@
     </section>
     <section>
       <h2>First moves</h2>
-      <p class="muted">
-        Where their five heroes walked from the start of the pre-game to 0:30, in their last six games on one side. One
-        colour per game; the button above the map switches between Radiant and Dire, the buttons beside it switch games on
-        and off, the slider moves the clock.
-      </p>
+      <p class="muted">Their paths up to 0:30, last six games on one side.<About>Where their five heroes walked from the start of the pre-game to 0:30, in their last six games on one side. One colour per game; the button above the map switches between Radiant and Dire, the buttons beside it switch games on and off, the slider moves the clock.</About></p>
       <Openings games={team.games} onfetched={() => (fetched += 1)} />
     </section>
   </div>
@@ -235,10 +225,7 @@
   {/if}
 
   <h2>Lanes at 10:00</h2>
-  <p class="muted">
-    Their heroes in each lane against the enemy's there, at 10:00 of the parsed games where both sides had a hero in it.
-    The lead is theirs minus the enemy's, averaged over those games; the bar grows to the side ahead in net worth.
-  </p>
+  <p class="muted">Each lane at 10:00, their heroes against the enemy.<About>Their heroes in each lane against the enemy's there, at 10:00 of the parsed games where both sides had a hero in it. The lead is theirs minus the enemy's, averaged over those games; the bar grows to the side ahead in net worth.</About></p>
   <div class="lanes">
     {#each Object.entries(LANE_NAMES) as [key, title] (key)}
       {@const l = team.lanes[key as keyof typeof LANE_NAMES]}
@@ -264,11 +251,7 @@
   </div>
 
   <h2>First Tormentor</h2>
-  <p class="muted">
-    The first Tormentor of each of the {team.tormentors.games} games whose replay is parsed, by who took it. Time, heroes
-    dead and lead are averages over those games: the dead are the other side's, the lead is the taker's net worth minus
-    the other side's.
-  </p>
+  <p class="muted">First Tormentor of {team.tormentors.games} parsed games.<About>The first Tormentor of each of the {team.tormentors.games} games whose replay is parsed, by who took it. Time, heroes dead and lead are averages over those games: the dead are the other side's, the lead is the taker's net worth minus the other side's.</About></p>
   <div class="card">
     <table>
       <thead>
@@ -292,12 +275,7 @@
   </div>
 
   <h2>Wisdom runes</h2>
-  <p class="muted">
-    Every wisdom rune of their parsed games, from 7:00 on. They contested one when at least one of their heroes came within
-    ten cells of it between 20 seconds before it appeared and its pickup; heroes and the net worth lead are averages over
-    the ones they contested. Kills and deaths per game count the heroes that died within those ten cells from then
-    until 15 seconds after the pickup.
-  </p>
+  <p class="muted">Wisdom runes from 7:00 on.<About>Every wisdom rune of their parsed games, from 7:00 on. They contested one when at least one of their heroes came within ten cells of it between 20 seconds before it appeared and its pickup; heroes and the net worth lead are averages over the ones they contested. Kills and deaths per game count the heroes that died within those ten cells from then until 15 seconds after the pickup.</About></p>
   <div class="card">
     <table>
       <thead>
@@ -326,11 +304,7 @@
 
   {:else if tab === 'Draft'}
   <h2>Heroes in their drafts</h2>
-  <p class="muted">
-    A hero is open in a game when neither side banned it and the enemy team did not pick it. The percentages beside a
-    count are of their {games} games; the win rate is of the games they played the hero, and picked when open of the
-    games it was open. A hero banned against them often and picked nearly every time it is open is worth a ban.
-  </p>
+  <p class="muted">Open: not banned, not picked by the enemy.<About>A hero is open in a game when neither side banned it and the enemy team did not pick it. The percentages beside a count are of their {games} games; the win rate is of the games they played the hero, and picked when open of the games it was open. A hero banned against them often and picked nearly every time it is open is worth a ban.</About></p>
   <div class="card">
     <table>
       <thead>
@@ -362,11 +336,7 @@
   {/if}
 
   <h2>Roles in their draft</h2>
-  <p class="muted">
-    Which position the hero of each of their picks went on to play, in the {team.draft[0].reduce((a, b) => a + b, 0)} of
-    their games whose replay is parsed. In Captains Mode a team picks once in the first phase, three times in the second
-    and once in the last. The percentages are of the row.
-  </p>
+  <p class="muted">The position each pick went on to play.<About>Which position the hero of each of their picks went on to play, in the {team.draft[0].reduce((a, b) => a + b, 0)} of their games whose replay is parsed. In Captains Mode a team picks once in the first phase, three times in the second and once in the last. The percentages are of the row.</About></p>
   <div class="card">
     <table class="draft">
       <thead>
@@ -387,10 +357,7 @@
   </div>
   {:else if tab === 'Games'}
   <h2>Games</h2>
-  <p class="muted">
-    Click a game to unfold it: its draft, first Tormentor, scoreboard and, with a parsed replay, the lead and the lanes.
-    The date opens the game like any match; one without a replay has a button there that requests it.
-  </p>
+  <p class="muted">Click a game to unfold it, ↗ opens it.<About>Unfolded: its draft, first Tormentor, scoreboard and, with a parsed replay, the lead and the lanes. One without a replay has a button under Replay that requests it.</About></p>
   <div class="card">
     <table>
       <thead>
@@ -457,10 +424,7 @@
   </div>
   {:else}
   <h2>Players</h2>
-  <p class="muted">
-    Everyone who played a league game for them. Click a player for their heroes, with the averages of a game on each,
-    and for where they place their wards.
-  </p>
+  <p class="muted">Click a player for their heroes and wards.<About>Everyone who played a league game for them. Click a player for their heroes, with the averages of a game on each, and for where they place their wards.</About></p>
   {#each team.players as p (p.account_id)}
     <details class="card player">
       <summary>
@@ -494,10 +458,7 @@
           <h3>Wards placed</h3>
           {#if p.replays || p.usual_replays}
             <WardHeat wards={p.wards} games={p.parsed} label="Heatmap of the wards {p.name ?? p.account_id} placed" byGame />
-            <p class="muted">
-              From the {p.replays} of their {p.games} tournament games whose replay is parsed, and {p.usual_replays} of
-              their usual matches with a parsed replay.
-            </p>
+            <p class="muted">{p.replays} tournament and {p.usual_replays} usual replays.<About>From the {p.replays} of their {p.games} tournament games whose replay is parsed, and {p.usual_replays} of their usual matches with a parsed replay.</About></p>
           {:else}
             <p class="muted">
               None of their games has a parsed replay yet, and wards are only in replays. Request the replays under
@@ -514,10 +475,7 @@
           <h3>Their last {p.outside.length || ''} games outside the league</h3>
           {#if p.outside.length}
             <RoleWheel games={p.outside} none="Lane unknown" />
-            <p class="muted">
-              From OpenDota's list of their games, without league and lobby games, whatever the filters above. The lane
-              is OpenDota's, known only for the games it parsed.
-            </p>
+            <p class="muted">From OpenDota's list of their games.<About>From OpenDota's list of their games, without league and lobby games, whatever the filters above. The lane is OpenDota's, known only for the games it parsed.</About></p>
           {:else if p.outside_listed}
             <p class="muted">OpenDota lists no games of theirs outside the league; their match history may be private.</p>
           {:else}

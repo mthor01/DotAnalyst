@@ -1,4 +1,5 @@
 <script lang="ts">
+  import About from './lib/About.svelte'
   import { untrack } from 'svelte'
   import { METRICS, get, percent, queryFor, type Account, type MatchRow, type MetricAverage, type TeammateRow, type WardSpot } from './lib/api'
   import WardHeat from './lib/WardHeat.svelte'
@@ -101,10 +102,7 @@
           {/each}
         {/each}
       </div>
-      <p class="muted">
-        Green is the better of the two, red the worse. The replay numbers average each account's matches with a parsed
-        replay, the rest every match the filters keep; the games together count every stored match.
-      </p>
+      <p class="muted">Green is the better of the two, red the worse.<About>Green is the better of the two, red the worse. The replay numbers average each account's matches with a parsed replay, the rest every match the filters keep; the games together count every stored match.</About></p>
 
       <h2>Wards</h2>
       <div class="maps">
@@ -126,7 +124,7 @@
           </div>
         {/each}
       </div>
-      <p class="muted">Left the first player's wards, right the second's; the panel in the middle and a zoom on either map apply to both.</p>
+      <p class="muted">Left the first player's wards, right the second's.<About>Left the first player's wards, right the second's; the panel in the middle and a zoom on either map apply to both.</About></p>
     {/if}
   </div>
 {/if}

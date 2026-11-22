@@ -1,4 +1,5 @@
 <script lang="ts">
+  import About from './lib/About.svelte'
   import { GAME_MODES, LOBBY_TYPES, clock, get, post, type MatchDetail, type MatchPlayer } from './lib/api'
   import Chart, { type Ink } from './lib/Chart.svelte'
   import Draft from './lib/Draft.svelte'
@@ -577,10 +578,7 @@
           {/each}
         {/snippet}
       </MiniMap>
-      <p class="muted">
-        A hero is drawn on the lane where it spent most of the first ten minutes, not at an exact place. Hover a hero or
-        a building for its name.
-      </p>
+      <p class="muted">Each hero on the lane where it spent the first ten minutes.<About>A hero is drawn on the lane where it spent most of the first ten minutes, not at an exact place. Hover a hero or a building for its name.</About></p>
       {/if}
     {:else}
       <p class="muted">
@@ -613,9 +611,7 @@
       <Chart option={leadChart(leadOf(players, lastMinute))} height={320} label="Radiant's lead over Dire in net worth and in experience over time; above zero Radiant is ahead, below zero Dire" />
     </div>
     {:else}
-    <p class="muted">
-      {GRAPH_NOTES[graph]}Click a hero to take its line out of the chart, and again to put it back. Dire's lines are dashed.
-    </p>
+    <p class="muted">Dire's lines are dashed.<About>{GRAPH_NOTES[graph]}Click a hero to take its line out of the chart, and again to put it back.</About></p>
     <div class="pick">
       {#each teams as team, t}
         <div class={t ? 'dire' : 'radiant'} role="group" aria-label="{TEAMS[t]} heroes in the chart">
@@ -636,10 +632,7 @@
 
   {:else if shown === 'laning'}
     <h2>Laning, first {laneMinute} minutes</h2>
-    <p class="muted">
-      A hero's lane is where it spent most of that time. Each chart is the lane's Radiant heroes together against its Dire
-      heroes, all three on one scale.
-    </p>
+    <p class="muted">Each lane's Radiant heroes against its Dire heroes.<About>A hero's lane is where it spent most of that time. Each chart is the lane's Radiant heroes together against its Dire heroes, all three on one scale.</About></p>
     <div class="lanes">
       {#each lanes as { lane, sides, lead } (lane)}
         {@const now = lead?.[laneMinute]}
@@ -696,10 +689,7 @@
 
   {:else if shown === 'builds'}
     <h2>Item timeline</h2>
-    <p class="muted">
-      Each item sits at the time it was bought; hover one for its name and time. A part that went into a bigger item
-      within a minute is left out, so only the finished item shows. Consumables, wards and recipes are left out too.
-    </p>
+    <p class="muted">Items at the time they were bought.<About>Each item sits at the time it was bought; hover one for its name and time. A part that went into a bigger item within a minute is left out, so only the finished item shows. Consumables, wards and recipes are left out too.</About></p>
     <div class="card timeline" style:--step="{Math.max(timeX(300), 1)}px">
       <span></span>
       <span class="head">Before 0:00</span>
@@ -732,10 +722,7 @@
     </div>
 
     <h2>Skills and talents</h2>
-    <p class="muted">
-      Every skill point in the order it was spent, with the hero's level under it; hover one for the ability, its level
-      and the time. Talents are listed apart, each with the level it was taken at.
-    </p>
+    <p class="muted">Skill points in the order they were spent.<About>Every skill point in the order it was spent, with the hero's level under it; hover one for the ability, its level and the time. Talents are listed apart, each with the level it was taken at.</About></p>
     <div class="card">
       <table>
         <thead>
@@ -839,10 +826,7 @@
         </ul>
         <section>
           {#if !watching}
-            <p class="muted">
-              Choose a death to see the {REPLAY} seconds before it: every hero's position second by second, and the
-              wards standing at that moment. The list follows the part of the game chosen above.
-            </p>
+            <p class="muted">Choose a death to replay the {REPLAY} seconds before it.<About>Choose a death to see the {REPLAY} seconds before it: every hero's position second by second, and the wards standing at that moment. The list follows the part of the game chosen above.</About></p>
           {:else}
             <h3>{deathNote(watching)}</h3>
             <Playback
@@ -856,11 +840,7 @@
               wards={wardsAt}
               label="the {REPLAY} seconds before {name(watching.player_slot)} died"
             />
-            <p class="muted">
-              The hero with the white ring is the one that dies; a faded hero is dead, and one that
-              teleports or blinks jumps. Wards as on the map above: ● observer, ◆ sentry. ■ Towers, barracks and the
-              Ancient; an empty one has fallen.
-            </p>
+            <p class="muted">White ring: the hero that dies.<About>The hero with the white ring is the one that dies; a faded hero is dead, and one that teleports or blinks jumps. Wards as on the map above: ● observer, ◆ sentry. ■ Towers, barracks and the Ancient; an empty one has fallen.</About></p>
           {/if}
         </section>
       </div>
@@ -871,11 +851,7 @@
     {#if fights.length === 0}
       <p class="muted">No fight with three or more deaths after 10:00.</p>
     {:else}
-      <p class="muted">
-        Three or more deaths less than 15 seconds apart, from 10:00 on. Faded heroes neither dealt nor took hero damage
-        and did not die. The bar under the time is how much more net worth one team gained in the fight than the other.
-        Click a fight to see where it happened and what each hero did.
-      </p>
+      <p class="muted">Click a fight to see where it happened.<About>Three or more deaths less than 15 seconds apart, from 10:00 on. Faded heroes neither dealt nor took hero damage and did not die. The bar under the time is how much more net worth one team gained in the fight than the other. Click a fight to see where it happened and what each hero did.</About></p>
       <div class="card">
         <table class="fights">
           <thead>
@@ -985,10 +961,7 @@
                             wards={wardsAt}
                             label="during the fight at {when}"
                           />
-                          <p class="muted">
-                            A faded hero is dead, and one that teleports or blinks jumps. The wards are those
-                            standing at each moment: ● observer, ◆ sentry. ■ Towers, barracks and the Ancient; an empty one has fallen.
-                          </p>
+                          <p class="muted">● observer, ◆ sentry, ■ buildings.<About>A faded hero is dead, and one that teleports or blinks jumps. The wards are those standing at each moment: ● observer, ◆ sentry. ■ Towers, barracks and the Ancient; an empty one has fallen.</About></p>
                         </section>
                       {/if}
                     </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import About from './lib/About.svelte'
   import { TEAMMATE_GAMES, TEAMMATE_MATCHES, clock, get, percent, post, type Account, type MatchRow, type WardSpot } from './lib/api'
   import { heroIcon, heroName, heroPortrait } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
@@ -316,10 +317,7 @@
         </a>
       {/each}
     </div>
-    <p class="muted">
-      One column per match, the oldest on the left. The bar is the net worth lead of the player's lane at 10:00: up when
-      ahead, down when behind. A match without a parsed replay has no bar. The dot is the result.
-    </p>
+    <p class="muted">Lane net worth lead at 10:00, one column per match.<About>One column per match, the oldest on the left. The bar is the net worth lead of the player's lane at 10:00: up when ahead, down when behind. A match without a parsed replay has no bar. The dot is the result.</About></p>
   </section>
 
   {#each extremes as [title, games]}
@@ -355,15 +353,7 @@
       <p class="muted">No match with a parsed replay here.</p>
     {/if}
   {/each}
-  <p class="muted laning">
-    Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your
-    lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is
-    usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log
-    records it. Lotuses, pulls and twin gate trips count the whole match. With "You vs your mirror" the leads compare
-    you alone with the enemy whose position mirrors yours: 1 with 3, 2 with 2, 4 with 5. The best and worst lanes
-    are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of
-    both lanes, yours first; click a date to open the match.
-  </p>
+  <p class="muted laning">Averages over {laneMatches} parsed matches.<About>Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. Lotuses, pulls and twin gate trips count the whole match. With "You vs your mirror" the leads compare you alone with the enemy whose position mirrors yours: 1 with 3, 2 with 2, 4 with 5. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a date to open the match.</About></p>
   {:else}
   <section class="card vision">
     <div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import About from './lib/About.svelte'
   import { get, type QueuePlayer, type QueueStatus } from './lib/api'
   import Chart, { type Ink } from './lib/Chart.svelte'
 
@@ -95,9 +96,7 @@
   </div>
 
   <h2>Steps</h2>
-  <p class="muted">
-    Each step runs on its own, side by side with the others: it does all the work it finds, then looks again {status.loop_seconds} s later. Finished counts since the server started.
-  </p>
+  <p class="muted">Finished counts since the server started.<About>Each step runs on its own, side by side with the others: it does all the work it finds, then looks again {status.loop_seconds} s later. Finished counts since the server started.</About></p>
   <div class="card">
     <table class="steps">
       <thead><tr><th>Step</th><th>Activity</th><th>Planned</th><th>Finished</th></tr></thead>
@@ -151,16 +150,10 @@
       </tbody>
     </table>
   </div>
-  <p class="muted">
-    "none" counts every match never tried, also those older than {status.max_age_days} days, which the poller leaves alone.
-    "unavailable" is given up: Valve had no file for 14 days, or no longer has it.
-  </p>
+  <p class="muted">"unavailable" is given up.<About>"none" counts every match never tried, also those older than {status.max_age_days} days, which the poller leaves alone. "unavailable" is given up: Valve had no file for 14 days, or no longer has it.</About></p>
 
   <h2>Queue <span class="muted">{status.queue.length}</span></h2>
-  <p class="muted">
-    The downloads step takes every due one, one at a time: never tried first, then newest first. A match without a replay yet
-    waits {span(status.retry_seconds)} before its next try.
-  </p>
+  <p class="muted">Never tried first, then newest first.<About>The downloads step takes every due one, one at a time: never tried first, then newest first. A match without a replay yet waits {span(status.retry_seconds)} before its next try.</About></p>
   {#if status.queue.length === 0}
     <p class="muted">Nothing waiting: every replay the poller wants is parsed or given up.</p>
   {:else}
