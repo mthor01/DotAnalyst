@@ -27,6 +27,7 @@ LOTUS_REACH = 3  # cells: the game's 350 units, and a little more because positi
 LOTUS_EVERY, LOTUS_MOST = 180, 6  # a pool grows one lotus every three minutes and holds six
 LOTUS_GREAT, LOTUS_GREATER = 2100, 3600  # from 35:00 it grows great lotuses (worth three), from 60:00 greater (six)
 TREADS_STAT = {"belt_of_strength", "boots_of_elves", "robe"}
+ATTRIBUTES = "special_bonus_attributes"  # named like a talent, but a skill point
 PULL_GAP = 25  # seconds without a kill between lane creeps and neutral creeps that end a pull
 PULL_LEAD = 30  # how long before the first such kill the puller drew the camp
 GATE_CHANNEL = 4  # seconds a twin gate's channel takes; one that ends sooner was cancelled
@@ -257,22 +258,48 @@ def ability_upgrades(log: Log) -> list[dict]:
     """Every skill point in the order it was spent, talents (special_bonus_*) among them."""
     rows = []
     listed: dict[int, int] = {}  # slot -> the second the hero appeared
-    last: dict[int, tuple] = {}
+    own: dict[int, dict[str, int]] = {}  # slot -> the abilities listed then, in order: its own, talents among them
+    last: dict[int, tuple] = {}  # slot -> (second, level) of its last skill point, and its row
+    spent, talents = Counter(), Counter()
     for e in log.events:
         slot = log.hero_slot.get(e.get("targetname")) if e["type"] == "DOTA_ABILITY_LEVEL" else None
-        # at the second a hero appears the log lists all its abilities, the innate ones at level 1: not a build
-        if slot is None or e["time"] == listed.setdefault(slot, e["time"]) or e["abilitylevel"] < 1:
+        if slot is None:
             continue
-        # Shadow Fiend's three Shadowrazes (shadowraze1 to 3) level as one: one point, one row
-        point = e["time"], e["valuename"].rstrip("0123456789")
-        if last.get(slot) != point:
-            last[slot] = point
-            rows.append(
-                {
-                    "player_slot": log.player_slot[slot], "time": e["time"], "ability": e["valuename"],
-                    "level": e["abilitylevel"], "hero_level": log.at.get((e["time"], slot), {}).get("level"),
-                }  # fmt: skip
-            )
+        # at the second a hero appears the log lists all its abilities, the innate ones at level 1: not a build
+        if e["time"] == listed.setdefault(slot, e["time"]):
+            own.setdefault(slot, {}).setdefault(e["valuename"], len(own[slot]))
+            continue
+        # not its own: a spell Rubick stole, an outpost, a lamp, a twin gate
+        if e["abilitylevel"] < 1 or e["valuename"] not in own[slot]:
+            continue
+        level = log.at.get((e["time"], slot), {}).get("level") or 0
+        talent = e["valuename"].startswith("special_bonus_") and e["valuename"] != ATTRIBUTES
+        if talent:
+            talents[slot] += 1
+            level = max(level, 5 + 5 * talents[slot])  # a hero picks its nth talent at level 5 + 5n at the earliest
+        else:
+            # abilities that level with another (Onslaught Release, the three Shadowrazes) take no point of their own;
+            # the hero lists the main one first
+            point = e["time"], e["abilitylevel"]
+            if slot in last and last[slot][0] == point:
+                row = last[slot][1]
+                row["ability"] = min(row["ability"], e["valuename"], key=own[slot].__getitem__)
+                continue
+            # one point per hero level; more is an ability that Aghanim's Scepter or Shard gave. The interval's level
+            # can lag a level-up by a few seconds.
+            # shortcut: one bought while a point is unspent takes that point's place, rare; checking items would fix it
+            soon = [log.at[t, slot].get("level") or 0 for t in range(e["time"], e["time"] + 6) if (t, slot) in log.at]
+            if soon and spent[slot] >= max(soon):
+                continue
+            spent[slot] += 1
+            level = max(level, spent[slot])
+        row = {
+            "player_slot": log.player_slot[slot], "time": e["time"], "ability": e["valuename"],
+            "level": e["abilitylevel"], "hero_level": level or None,
+        }  # fmt: skip
+        rows.append(row)
+        if not talent:
+            last[slot] = point, row
     return rows
 
 

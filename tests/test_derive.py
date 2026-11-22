@@ -113,6 +113,11 @@ def test_skill_points(rows):
     fiend = [r for r in spent if r[0] == SHADOW_FIEND]
     assert len(fiend) == 14 and fiend[0][1:] == (-81, "nevermore_shadowraze1", 1, 1)
     assert [r[2] for r in fiend if r[1] == 108] == ["nevermore_shadowraze1"]
+    # Fire Spirits levels with its Launch; the point keeps the one the hero listed first
+    assert (PHOENIX, 743, "phoenix_fire_spirits", 4, 7) in spent
+    # no other point shares a hero, a second and a level, and nothing that is not the hero's own (twin gates, lamps)
+    assert len({r[:2] + r[3:4] for r in spent}) == len(spent)
+    assert not [r for r in spent if r[2].startswith(("ability_", "twin_gate"))]
 
 
 def test_deaths_are_the_scoreboard_deaths(rows):

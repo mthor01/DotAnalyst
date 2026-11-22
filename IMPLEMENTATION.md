@@ -138,11 +138,14 @@ Known limit: a part an ally bought is not found, so the part of the buyer stays 
 
 Read from: `DOTA_ABILITY_LEVEL` events.
 
-- At the second a hero appears, the log lists all its abilities. That list is skipped, as is any line with a level below 1.
-- Shadow Fiend's three Shadowrazes level together and count as one point.
-- An ability named `special_bonus_*` is a talent, except `special_bonus_attributes`, which is a point put into the attributes and shown as a skill point.
+- At the second a hero appears, the log lists all its abilities and talents, in slot order. That list is not a point spent, but it says which abilities are the hero's own. Any other ability is skipped: a spell Rubick stole, an outpost, a lamp, a twin gate. So is any line with a level below 1.
+- Abilities that level together, in the same second at the same level, are one point: the three Shadowrazes, Onslaught and its Release, Fire Spirits and their Launch. The point keeps the ability the hero listed first, the main one.
+- An ability named `special_bonus_*` is a talent, except `special_bonus_attributes`, which is a point put into the attributes and shown as a skill point. A talent costs no point of its own.
+- A hero gets one point per level. A point beyond the hero's level is an ability that Aghanim's Scepter or Shard gave (Rock Throw, Ice Spire, Fireball) and is skipped. The interval's level can lag a level-up by a few seconds, so the highest level of that second and the 5 after it counts.
 
-The hero's level beside each point is the level in the interval of that second.
+The hero's level beside each point is the level in the interval of that second, but at least the number of points spent so far; beside the nth talent, at least 5 + 5n.
+
+Known limit: an ability from Aghanim's or Shard that comes while the hero still has a point unspent takes that point's place in the list. Checking the items bought would fix it; it is rare.
 
 ### Buildings
 
