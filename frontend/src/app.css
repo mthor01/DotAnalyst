@@ -126,7 +126,7 @@ nav a[aria-current='page'] {
 /* the filter panel on the left of the profile, comparison and team pages; above the page on a narrow screen */
 .layout.paneled {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 240px;
   gap: 28px;
   align-items: start;
 }
@@ -138,6 +138,7 @@ nav a[aria-current='page'] {
   margin-bottom: 16px;
 }
 .panel {
+  order: 1; /* the filters stand right of the page; first in the markup, so keyboards still reach them first */
   position: sticky;
   top: 12px;
   display: grid;
@@ -186,6 +187,7 @@ nav a[aria-current='page'] {
     grid-template-columns: 1fr;
   }
   .panel {
+    order: 0; /* above the page when there is no room beside it */
     position: static;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   }
