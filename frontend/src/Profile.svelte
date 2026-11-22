@@ -55,9 +55,6 @@
   const heroes = $derived(tally(recent))
   const roles = $derived(recent.map((r) => ({ ...r, role: r.position })))
 
-  // ---- the strip: one column per match, oldest on the left
-  const strip = $derived([...recent].reverse())
-  const reach = $derived(Math.max(1000, ...recent.map((r) => Math.abs(r.lane_nw_diff ?? 0))))
   const signed = (n: number) => `${n > 0 ? '+' : ''}${Math.round(n).toLocaleString()}`
   const note = (r: MatchRow) =>
     `${heroName(r.hero_id)}, ${date(r.start_time)}: ${r.win ? 'won' : 'lost'}` +
@@ -81,6 +78,9 @@
   // a hero no longer among the matches shown (another role, fewer matches) falls back to every hero
   const onHero = $derived(heroes.some((h) => h.hero_id === laneHero))
   const laneGames = $derived(onHero ? recent.filter((r) => r.hero_id === laneHero) : recent)
+  // ---- the strip: one column per match, oldest on the left, of the hero picked for laning
+  const strip = $derived([...laneGames].reverse())
+  const reach = $derived(Math.max(1000, ...laneGames.map((r) => Math.abs(r.lane_nw_diff ?? 0))))
   const at10 = (key: keyof MatchRow) => mean(laneGames.map((r) => r[key] as number | null))
   const laneMatches = $derived(laneGames.filter((r) => r.xp_at_10 !== null).length)
   // the leads compare the whole lane, or you with the enemy in the mirrored position (see Mirror in IMPLEMENTATION.md)
@@ -247,27 +247,6 @@
     </section>
   </div>
 
-  <section class="card form">
-    <div class="strip" class:dense={recent.length > 25} class:packed={recent.length > 100}>
-      {#each strip as r (r.match_id)}
-        {@const lead = r.lane_nw_diff}
-        <a href="#match/{r.match_id}" title={note(r)} aria-label={note(r)}>
-          <img src={heroIcon(r.hero_id)} alt="" width="22" height="22" loading="lazy" />
-          <span class="lane">
-            {#if lead !== null}
-              <i class={lead < 0 ? 'behind' : 'ahead'} style:height="{Math.max(2, (50 * Math.abs(lead)) / reach)}%"></i>
-            {/if}
-          </span>
-          <i class="dot {r.win ? 'won' : 'lost'}"></i>
-        </a>
-      {/each}
-    </div>
-    <p class="muted">
-      One column per match, the oldest on the left. The bar is the net worth lead of the player's lane at 10:00: up when
-      ahead, down when behind. A match without a parsed replay has no bar. The dot is the result.
-    </p>
-  </section>
-
   <section class="card activity">
     <div class="calendar" role="img" aria-label="Games and win rate per day over the last 3 months: {active.length} days played">
       <div class="week">
@@ -322,6 +301,27 @@
       {/each}
     </dl>
   {/each}
+  <section class="card form">
+    <div class="strip" class:dense={laneGames.length > 25} class:packed={laneGames.length > 100}>
+      {#each strip as r (r.match_id)}
+        {@const nw = r.lane_nw_diff}
+        <a href="#match/{r.match_id}" title={note(r)} aria-label={note(r)}>
+          <img src={heroIcon(r.hero_id)} alt="" width="22" height="22" loading="lazy" />
+          <span class="lane">
+            {#if nw !== null}
+              <i class={nw < 0 ? 'behind' : 'ahead'} style:height="{Math.max(2, (50 * Math.abs(nw)) / reach)}%"></i>
+            {/if}
+          </span>
+          <i class="dot {r.win ? 'won' : 'lost'}"></i>
+        </a>
+      {/each}
+    </div>
+    <p class="muted">
+      One column per match, the oldest on the left. The bar is the net worth lead of the player's lane at 10:00: up when
+      ahead, down when behind. A match without a parsed replay has no bar. The dot is the result.
+    </p>
+  </section>
+
   {#each extremes as [title, games]}
     <h3 class="group">{title}</h3>
     {#if games.length}
