@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte'
   import { clock, get, type MatchPlayer } from './api'
   import { heroIcon, heroName } from './constants.svelte'
-  import MiniMap, { SIDES, mapX, mapY, viewOf } from './MiniMap.svelte'
+  import MiniMap, { mapX, mapY, viewOf } from './MiniMap.svelte'
 
   type Spot = { time: number; player_slot: number; x: number; y: number; alive: boolean }
   type Props = {
@@ -17,7 +17,7 @@
     points: { x: number | null; y: number | null }[]
     /** The hero the playback is about: ringed, kept in the picture all the way, and dead at the end. */
     follow?: number | null
-    /** Drawn under the heroes, unless the reader hides the wards. Gets the game second shown and the width of the
+    /** Drawn under the heroes. Gets the game second shown and the width of the
      *  picture in map cells. */
     wards: Snippet<[number, number]>
     label: string
@@ -91,13 +91,13 @@
 {:else if !spots}
   <p class="muted">Loading…</p>
 {:else}
-  <MiniMap label="Positions of the heroes at {clock(second)}, {label}" {view} {fallen} at={second} toggles={[SIDES]} layers={[{ wards: 'Wards shown', none: 'No wards' }]}>
-    {#snippet children(size, on)}
+  <MiniMap label="Positions of the heroes at {clock(second)}, {label}" {view} {fallen} at={second}>
+    {#snippet children(size)}
       {@const icon = size * 0.085}
-      {#if on.wards}{@render wards(second, size)}{/if}
+      {@render wards(second, size)}
       {#each cast as p (p.player_slot)}
         {@const team = p.player_slot < 128 ? 'radiant' : 'dire'}
-        {@const spot = on[team] ? place(tracks.get(p.player_slot) ?? [], at) : null}
+        {@const spot = place(tracks.get(p.player_slot) ?? [], at)}
         {#if spot}
           <g class={team} class:down={!spot.alive || (p.player_slot === follow && at >= length)} transform="translate({mapX(spot.x)} {mapY(spot.y)})">
             <title>{heroName(p.hero_id)}</title>

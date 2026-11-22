@@ -9,12 +9,11 @@
     games: { radiant: boolean; win: boolean | number; league?: boolean }[]
     label: string
     byGame?: boolean
-    /** Bindable, so that two heatmaps move as one: the timeline, the slider, and MiniMap's moved, chosen and flipped */
+    /** Bindable, so that two heatmaps move as one: the timeline, the slider, and MiniMap's moved and chosen */
     periods?: boolean[]
     share?: number
     moved?: { x: number; y: number; size: number } | null
     chosen?: string[]
-    flipped?: boolean[]
     /** Only the map with its counts, or only the controls and the legend (with a Reset view for the shared zoom) */
     only?: 'map' | 'controls'
   }
@@ -22,7 +21,7 @@
     wards, games, label, byGame = false, only,
     periods = $bindable([true, true, true, true, true]), // the stretches of the timeline (PERIODS) switched on
     share = $bindable(0), // percent: only squares warded in at least this share of the chosen games
-    moved = $bindable(null), chosen = $bindable([]), flipped = $bindable([]),
+    moved = $bindable(null), chosen = $bindable([]),
   }: Props = $props() // prettier-ignore
 
   const SQUARE = 2 // map cells to a side of the squares that tell, on hover, how many wards went there
@@ -127,7 +126,7 @@
   const count = (type: string) => wards.filter((w) => w.type === type).length
 </script>
 
-<MiniMap bind:moved bind:chosen bind:flipped {only} reset={only === 'controls'} label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
+<MiniMap bind:moved bind:chosen {only} reset={only === 'controls'} label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
   {#snippet children(_, on)}
     {@const of = tally(on)}
     {@const shown = common(shownOf(on), of)}

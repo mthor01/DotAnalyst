@@ -46,7 +46,7 @@
     return `${team} ${rest[1]} ${kind} barracks`
   }
 
-  /** Pairs for MiniMap's `toggles`: one button that switches between the two keys, in each key's colour (TINTS) */
+  /** Filters for MiniMap's `toggles`: buttons for both keys together or either alone, in each key's colour (TINTS) */
   export const SIDES = { radiant: 'Radiant', dire: 'Dire' }
   export const KINDS = { obs: 'Observers', sen: 'Sentries' }
   const TINTS: Record<string, string> = { radiant: 'var(--radiant)', dire: 'var(--dire)', obs: 'var(--series-4)', sen: 'var(--series-1)' }
@@ -67,8 +67,8 @@
     /** What the reader can show besides the buildings (always drawn): one dropdown per group, key -> the name of its option. The
      *  first option is chosen at first; the key '' shows every key of its group. */
     layers?: Record<string, string>[]
-    /** Pairs the reader switches between, key -> name: one button per pair, its first key shown at first (see
-     *  SIDES, KINDS). Only the key shown is on. */
+    /** Filters of keys, key -> name (see SIDES, KINDS): a row of buttons per filter, for all its keys together (at
+     *  first) or one alone. Their choices follow the dropdowns' in `chosen`. */
     toggles?: Record<string, string>[]
     /** More controls, in the row of the dropdowns */
     controls?: Snippet
@@ -78,16 +78,15 @@
      *  when the reader zooms, and which layers are shown. */
     children?: Snippet<[number, Record<string, boolean>]>
     /** Bindable, so that two maps can share them: where the reader took the picture (null: `view`), the option
-     *  picked in each dropdown, and the pairs switched to their second key. Only ever reassigned, never mutated. */
+     *  picked in each dropdown and each filter. Only ever reassigned, never mutated. */
     moved?: View | null
     chosen?: string[]
-    flipped?: boolean[]
     /** Only the picture, or only the row of controls: two maps bound together can share one row */
     only?: 'map' | 'controls'
   }
   let {
     label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = [], controls, reset = true, children, only,
-    moved = $bindable(null), chosen = $bindable([]), flipped = $bindable([]),
+    moved = $bindable(null), chosen = $bindable([]),
   }: Props = $props() // prettier-ignore
 
   const box = (v: View) => `${v.x} ${v.y} ${v.size} ${v.size}`
@@ -120,13 +119,13 @@
     grip = { x: e.clientX, y: e.clientY }
   }
 
-  const groups = $derived(layers)
+  const groups = $derived([...layers, ...toggles.map((t) => ({ '': 'Both', ...t }))])
   // an option no longer offered (another game list, say) falls back to the group's first
   const picked = $derived(groups.map((g, i) => (chosen[i] in g ? chosen[i] : Object.keys(g)[0])))
-  const on = $derived({
-    ...Object.fromEntries(groups.flatMap((g, i) => Object.keys(g).map((key) => [key, picked[i] === '' || picked[i] === key]))),
-    ...Object.fromEntries(toggles.flatMap((t, i) => Object.keys(t).map((key, k) => [key, k === +!!flipped[i]]))),
-  })
+  const on = $derived(
+    Object.fromEntries(groups.flatMap((g, i) => Object.keys(g).map((key) => [key, picked[i] === '' || picked[i] === key]))),
+  )
+  const choose = (i: number, key: string) => (chosen = picked.map((v, j) => (j === i ? key : v)))
 
   /** Side of a tower's square in cells: a share of the picture, but small enough on the whole map that a tier-3
    *  tower and the barracks behind it stay apart. */
@@ -148,17 +147,20 @@
   <p>
     <span class="controls">
       {@render controls?.()}
-      {#each toggles as pair, i}
-        {@const [[key, name], [, other]] = flipped[i] ? Object.entries(pair).reverse() : Object.entries(pair)}
-        <button class="toggle" style:--tint={TINTS[key]} aria-label="{name}, switch to {other}" title="Switch to {other}"
-          onclick={() => (flipped = toggles.map((_, j) => !!flipped[j] !== (i === j)))}><i></i>{name}</button>
-      {/each}
       {#each groups as group, i}
-        <select aria-label="What the map shows" value={picked[i]} onchange={(e) => (chosen = picked.map((v, j) => (j === i ? e.currentTarget.value : v)))}>
-          {#each Object.entries(group) as [key, name] (key)}
-            <option value={key}>{name}</option>
-          {/each}
-        </select>
+        {#if i < layers.length}
+          <select aria-label="What the map shows" value={picked[i]} onchange={(e) => choose(i, e.currentTarget.value)}>
+            {#each Object.entries(group) as [key, name] (key)}
+              <option value={key}>{name}</option>
+            {/each}
+          </select>
+        {:else}
+          <span class="choice" role="group" aria-label={Object.values(toggles[i - layers.length]).join(' or ')}>
+            {#each Object.entries(group) as [key, name] (key)}
+              <button aria-pressed={picked[i] === key} onclick={() => choose(i, key)}>{#if key}<i style:background={TINTS[key]}></i>{/if}{name}</button>
+            {/each}
+          </span>
+        {/if}
       {/each}
     </span>
     {#if reset}
@@ -224,27 +226,16 @@
   .controls :global(select) {
     margin-left: 0;
   }
-  /* the colour of the key shown fills the dot and edges the button. Global inside .controls so a map's own
-     controls snippet can use the same button */
-  .controls :global(.toggle) {
-    font: inherit;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 8.5em;
+  .choice button {
     padding: 3px 10px;
-    border: 1px solid var(--tint);
-    border-radius: 4px;
-    background: var(--raised);
-    color: var(--text);
-    cursor: pointer;
   }
-  .controls :global(.toggle i) {
+  /* the dot in the key's colour */
+  .choice i {
+    display: inline-block;
     width: 9px;
     height: 9px;
+    margin-right: 6px;
     border-radius: 50%;
-    background: var(--tint);
   }
   p button:disabled {
     color: var(--muted);

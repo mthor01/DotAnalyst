@@ -340,6 +340,7 @@
   const inPeriod = (time: number) => period === null || (Math.max(time, 0) >= period * 60 && time < (period + 10) * 60)
   const wardsShown = $derived((match?.wards ?? []).filter((w) => inPeriod(w.placed)))
   const deathsShown = $derived((match?.deaths ?? []).filter((d) => d.x !== null && inPeriod(d.time)))
+  let deathOf = $state<number | null>(null) // player slot of the hero whose deaths the map shows; null: every hero
   /** The buildings on both maps are those standing when the part of the game shown ends. */
   const periodEnd = $derived(period === null ? Infinity : (period + 10) * 60)
   const standing = (w: Ward, time: number) => w.placed <= time && (w.removed === null || w.removed > time)
@@ -775,8 +776,18 @@
           <span><i class="swatch dire"></i>red edge: a Dire hero died</span>
         </p>
         <MiniMap label="Map of the {deathsShown.length} hero deaths {period === null ? 'in this match' : `from minute ${period} to ${period + 10}`}" fallen={match.buildings} at={periodEnd} toggles={[SIDES]}>
+          {#snippet controls()}
+            <span class="choice victims" role="group" aria-label="Hero whose deaths are shown">
+              <button aria-pressed={deathOf === null} onclick={() => (deathOf = null)}>All</button>
+              {#each players as p (p.player_slot)}
+                <button aria-pressed={deathOf === p.player_slot} onclick={() => (deathOf = p.player_slot)} title={heroName(p.hero_id)}>
+                  <img src={heroIcon(p.hero_id)} alt={heroName(p.hero_id)} width="20" height="20" />
+                </button>
+              {/each}
+            </span>
+          {/snippet}
           {#snippet children(size, on)}
-            {#each deathsShown.filter((d) => on[teamOf(d.player_slot)]) as d}{@render heroMark(d, size * 0.043, deathNote(d))}{/each}
+            {#each deathsShown.filter((d) => on[teamOf(d.player_slot)] && (deathOf === null || d.player_slot === deathOf)) as d}{@render heroMark(d, size * 0.043, deathNote(d))}{/each}
           {/snippet}
         </MiniMap>
       </section>
@@ -1281,6 +1292,16 @@
   }
   .maps h3 {
     font-size: 15px;
+  }
+  .victims button {
+    padding: 2px 4px;
+  }
+  .victims img {
+    display: block;
+    border-radius: 2px;
+  }
+  .victims button[aria-pressed='false'] img {
+    opacity: 0.55;
   }
   .mark.radiant,
   .swatch.radiant {

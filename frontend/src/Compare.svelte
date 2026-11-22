@@ -11,7 +11,7 @@
   let sides = $state.raw<Side[]>([])
   let error = $state('')
   // what both ward maps show, so that every button, dropdown, slider and zoom moves the two together
-  let maps = $state({ periods: [true, true, true, true, true], share: 0, chosen: [] as string[], flipped: [] as boolean[], moved: null })
+  let maps = $state({ periods: [true, true, true, true, true], share: 0, chosen: [] as string[], moved: null })
 
   $effect(() => {
     let current = true
@@ -121,7 +121,6 @@
               bind:periods={maps.periods}
               bind:share={maps.share}
               bind:chosen={maps.chosen}
-              bind:flipped={maps.flipped}
               bind:moved={maps.moved}
             />
           </div>
