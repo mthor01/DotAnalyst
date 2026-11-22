@@ -22,6 +22,8 @@
   const wins = $derived(rows.filter((r) => r.win).length)
   let unfolded = $state<number[]>([])
   const unfold = (id: number) => (unfolded = unfolded.includes(id) ? unfolded.filter((o) => o !== id) : [...unfolded, id])
+  // a click anywhere on the row unfolds it, except on its links and buttons, which do their own thing
+  const unfoldRow = (e: MouseEvent, id: number) => !(e.target as Element).closest('a, button') && unfold(id)
 </script>
 
 {#if error}
@@ -46,16 +48,18 @@
           <th>Items</th>
           <th>Mode</th>
           <th>Replay</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {#each rows as r (r.match_id)}
           {@const open = unfolded.includes(r.match_id)}
-          <tr>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the arrow button is the keyboard way) -->
+          <tr class="folds" onclick={(e) => unfoldRow(e, r.match_id)}>
             <td>
               <button class="unfold" aria-expanded={open} aria-label="Details of the match on {date(r.start_time)}" onclick={() => unfold(r.match_id)}>{open ? '▾' : '▸'}</button>
             </td>
-            <td><a href="#match/{r.match_id}">{date(r.start_time)}</a></td>
+            <td>{date(r.start_time)}</td>
             <td><Hero id={r.hero_id} /></td>
             <td><span class="dot {r.win ? 'won' : 'lost'}"></span>{r.win ? 'Won' : 'Lost'}</td>
             <td class="num">{r.kills} / {r.deaths} / {r.assists}</td>
@@ -81,8 +85,9 @@
               {LOBBY_TYPES[r.lobby_type] ?? `Lobby ${r.lobby_type}`} {GAME_MODES[r.game_mode] ?? `Mode ${r.game_mode}`}
             </td>
             <td class="muted"><ReplaySign match_id={r.match_id} state={r.replay_state} start_time={r.start_time} /></td>
+            <td><a class="open" href="#match/{r.match_id}" title="Open the match" aria-label="Open the match on {date(r.start_time)}">↗</a></td>
           </tr>
-          {#if open}<tr class="more"><td colspan="12"><Match id={String(r.match_id)} brief draft={false} /></td></tr>{/if}
+          {#if open}<tr class="more"><td colspan="13"><Match id={String(r.match_id)} brief draft={false} /></td></tr>{/if}
         {/each}
       </tbody>
     </table>

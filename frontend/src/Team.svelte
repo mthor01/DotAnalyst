@@ -79,6 +79,8 @@
   )
   let unfolded = $state<number[]>([]) // the games whose row is open
   const unfold = (id: number) => (unfolded = unfolded.includes(id) ? unfolded.filter((o) => o !== id) : [...unfolded, id])
+  // a click anywhere on the row unfolds it, except on its links and buttons, which do their own thing
+  const unfoldRow = (e: MouseEvent, id: number) => !(e.target as Element).closest('a, button') && unfold(id)
   /** The parsed games where first blood is known */
   const bloods = $derived(team?.games.filter((g) => g.first_blood !== null) ?? [])
   const drew = $derived(bloods.filter((g) => g.first_blood).length)
@@ -386,7 +388,7 @@
   {:else if tab === 'Games'}
   <h2>Games</h2>
   <p class="muted">
-    The arrow unfolds a game: its draft, first Tormentor, scoreboard and, with a parsed replay, the lead and the lanes.
+    Click a game to unfold it: its draft, first Tormentor, scoreboard and, with a parsed replay, the lead and the lanes.
     The date opens the game like any match; one without a replay has a button there that requests it.
   </p>
   <div class="card">
@@ -403,18 +405,20 @@
           <th>Banned against them</th>
           <th>Banned by them</th>
           <th>Replay</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {#each team.games as g (g.match_id)}
           {@const open = unfolded.includes(g.match_id)}
-          <tr>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the arrow button is the keyboard way) -->
+          <tr class="folds" onclick={(e) => unfoldRow(e, g.match_id)}>
             <td>
               <button class="unfold" aria-expanded={open} aria-label="Details of the game on {date(g.start_time)}" onclick={() => unfold(g.match_id)}>
                 {open ? '▾' : '▸'}
               </button>
             </td>
-            <td><a href="#match/{g.match_id}">{date(g.start_time)}</a></td>
+            <td>{date(g.start_time)}</td>
             <td class="muted">{g.league}</td>
             <td>
               {#if g.opponent_id}
@@ -429,10 +433,11 @@
             <td>{@render icons(g.bans_against)}</td>
             <td>{@render icons(g.bans)}</td>
             <td class="muted"><ReplaySign match_id={g.match_id} state={g.replay_state} start_time={g.start_time} /></td>
+            <td><a class="open" href="#match/{g.match_id}" title="Open the game" aria-label="Open the game on {date(g.start_time)}">↗</a></td>
           </tr>
           {#if open}
             <tr class="more">
-              <td colspan="10">
+              <td colspan="11">
                 <Match id={String(g.match_id)} brief notes={g.radiant ? ['Them', 'Enemy'] : ['Enemy', 'Them']} />
                 <p>
                   {#if g.tormentor}
