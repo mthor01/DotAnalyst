@@ -117,12 +117,10 @@ def test_laning_at_ten(match):
 
 
 
-def test_match_totals(match):
-    # the last whole minute (15:00) of the 15:11 game: Legion Commander (slot 4) pulled once and ate three lotuses,
-    # Lich (slot 2) went through a twin gate once
-    assert [f(match, 4) for f in (metrics.lotuses, metrics.camps_pulled, metrics.twin_gates)] == [3, 1, 0]
-    assert metrics.twin_gates(match, 2) == 1
-    assert metrics.lotuses({**match, "player_minute": []}, 4) is None
+def test_lotuses_and_pulls_by_10(match):
+    # by 10:00 Legion Commander (slot 4) had pulled once and eaten two lotuses; the third came at 13:00
+    assert (metrics.lotuses_by_10(match, 4), metrics.camps_pulled_by_10(match, 4)) == (2, 1)
+    assert metrics.lotuses_by_10({**match, "player_minute": []}, 4) is None
 
 
 def test_kill_participation(match):

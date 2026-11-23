@@ -127,7 +127,7 @@ def _positions_in(session: Session, played) -> dict[tuple[int, int], int]:
 ROW_METRICS = (
     "lane_nw_diff", "obs_bought", "sen_bought", "wards_destroyed", "obs_lifetime", "lane_cs_diff", "last_hits_at_10",
     "denies_at_10", "net_worth_at_10", "xp_at_10", "damage_at_10", "damage_taken_at_10", "lane_damage_at_10",
-    "enemy_lane_damage_at_10", "kills_by_10", "deaths_by_10", "lotuses", "camps_pulled", "twin_gates",
+    "enemy_lane_damage_at_10", "kills_by_10", "deaths_by_10", "lotuses_by_10", "camps_pulled_by_10",
 )  # fmt: skip
 
 
@@ -158,13 +158,15 @@ MIRROR = {1: 3, 2: 2, 3: 1, 4: 5, 5: 4}  # the enemy position a position lanes a
 def _mirrors(session: Session, where: list, found: dict[tuple[int, int], int]) -> dict[tuple[int, int], dict]:
     """For each player in the matches `where` finds, by (match_id, player_slot): the enemy in the MIRROR position
     (`found` holds the positions) as `mirror_hero_id`, and the player's net worth and last hits at 10:00 minus that
-    enemy's as `mirror_nw_diff` and `mirror_cs_diff`, None without a parsed replay."""
-    nw, cs = aliased(Metric), aliased(Metric)
+    enemy's as `mirror_nw_diff` and `mirror_cs_diff`, and that enemy's hero damage by 10:00 as `mirror_damage_at_10`, None
+    without a parsed replay."""
+    nw, cs, dmg = aliased(Metric), aliased(Metric), aliased(Metric)
     at = lambda m, name: and_(m.match_id == OTHER.match_id, m.player_slot == OTHER.player_slot, m.name == name)  # noqa: E731
     rows = session.execute(
-        select(OTHER.match_id, OTHER.player_slot, OTHER.hero_id, nw.value.label("nw"), cs.value.label("cs"))
+        select(OTHER.match_id, OTHER.player_slot, OTHER.hero_id, nw.value.label("nw"), cs.value.label("cs"), dmg.value.label("dmg"))
         .outerjoin(nw, at(nw, "net_worth_at_10"))
         .outerjoin(cs, at(cs, "last_hits_at_10"))
+        .outerjoin(dmg, at(dmg, "damage_at_10"))
         .where(OTHER.match_id.in_(_mine(MatchPlayer.match_id).where(*where)))
     ).all()
     seat = {(r.match_id, r.player_slot < 128, found[r.match_id, r.player_slot]): r for r in rows}
@@ -176,6 +178,7 @@ def _mirrors(session: Session, where: list, found: dict[tuple[int, int], int]) -
             "mirror_hero_id": them and them.hero_id,
             "mirror_nw_diff": minus(me.nw, them and them.nw),
             "mirror_cs_diff": minus(me.cs, them and them.cs),
+            "mirror_damage_at_10": them and them.dmg,
         }
     return result
 

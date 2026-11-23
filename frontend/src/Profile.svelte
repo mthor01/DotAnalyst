@@ -84,32 +84,35 @@
   const reach = $derived(Math.max(1000, ...laneGames.map((r) => Math.abs(r.lane_nw_diff ?? 0))))
   const at10 = (key: keyof MatchRow) => mean(laneGames.map((r) => r[key] as number | null))
   const laneMatches = $derived(laneGames.filter((r) => r.xp_at_10 !== null).length)
-  // the leads compare the whole lane, or you with the enemy in the mirrored position (see Mirror in IMPLEMENTATION.md)
+  // the best and worst lanes rank by the whole lane's lead, or by yours over the enemy in the mirrored position
+  // (see Mirror in IMPLEMENTATION.md)
   let versus = $state<'lane' | 'mirror'>('lane')
   const VERSUS = { lane: 'Your lane vs theirs', mirror: 'You vs your mirror' }
   const lead = $derived(versus === 'lane'
-    ? { nw: 'lane_nw_diff', cs: 'lane_cs_diff', unit: 'your lane minus the enemy lane at 10:00' } as const
-    : { nw: 'mirror_nw_diff', cs: 'mirror_cs_diff', unit: 'you minus the enemy in your mirrored position at 10:00' } as const) // prettier-ignore
+    ? { nw: 'lane_nw_diff', cs: 'lane_cs_diff' } as const
+    : { nw: 'mirror_nw_diff', cs: 'mirror_cs_diff' } as const) // prettier-ignore
   const laning = $derived([
     ['By 10:00', [
-      ['Net worth lead', at10(lead.nw), lead.unit, 'signed'],
-      ['Last-hit lead', at10(lead.cs), lead.unit, 'signed'],
-      ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals at 10:00', ''],
-      ['Denies', at10('denies_at_10'), 'at 10:00', ''],
-      ['Net worth', at10('net_worth_at_10'), 'at 10:00', ''],
-      ['Experience', at10('xp_at_10'), 'at 10:00', ''],
-      ['Kills', at10('kills_by_10'), 'before 10:00', 'tenths'],
-      ['Deaths', at10('deaths_by_10'), 'before 10:00', 'tenths'],
+      ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals', ''],
+      ['Denies', at10('denies_at_10'), '', ''],
+      ['Net worth', at10('net_worth_at_10'), '', ''],
+      ['Experience', at10('xp_at_10'), '', ''],
+      ['Kills', at10('kills_by_10'), '', 'tenths'],
+      ['Deaths', at10('deaths_by_10'), '', 'tenths'],
+      ['Lotuses collected', at10('lotuses_by_10'), '', 'tenths'],
+      ['Camps pulled', at10('camps_pulled_by_10'), '', 'tenths'],
     ]],
-    ['Whole match', [
-      ['Lotuses collected', at10('lotuses'), 'per match', 'tenths'],
-      ['Camps pulled', at10('camps_pulled'), 'per match', 'tenths'],
-      ['Twin gate trips', at10('twin_gates'), 'per match', 'tenths'],
+    ['Your lane vs the enemy lane, by 10:00', [
+      ['Net worth lead', at10('lane_nw_diff'), 'your lane minus theirs', 'signed'],
+      ['Last-hit lead', at10('lane_cs_diff'), 'your lane minus theirs', 'signed'],
+      ['Your lane dealt', at10('lane_damage_at_10'), 'you and your lane partner, to enemy heroes', ''],
+      ['Enemy lane dealt', at10('enemy_lane_damage_at_10'), 'the heroes you laned against, to your side', ''],
     ]],
-    ['Damage to heroes before 10:00', [
+    ['You vs your mirror, by 10:00', [
+      ['Net worth lead', at10('mirror_nw_diff'), 'you minus the enemy in your mirrored position', 'signed'],
+      ['Last-hit lead', at10('mirror_cs_diff'), 'you minus the enemy in your mirrored position', 'signed'],
       ['You dealt', at10('damage_at_10'), 'to enemy heroes', ''],
-      ['Your lane dealt', at10('lane_damage_at_10'), 'you and your lane partner together', ''],
-      ['Enemy lane dealt', at10('enemy_lane_damage_at_10'), 'the heroes you laned against, to your lane', ''],
+      ['Your mirror dealt', at10('mirror_damage_at_10'), 'to any of your heroes', ''],
       ['You took', at10('damage_taken_at_10'), 'from all enemy heroes', ''],
     ]],
   ] as const) // prettier-ignore
@@ -285,11 +288,6 @@
       {#each heroes as h (h.hero_id)}<option value={h.hero_id}>{heroName(h.hero_id)} ({h.games})</option>{/each}
     </select>
   </label>
-  <div class="choice" role="group" aria-label="Whom the leads compare you with">
-    {#each Object.entries(VERSUS) as [id, title]}
-      <button aria-pressed={versus === id} onclick={() => (versus = id as typeof versus)}>{title}</button>
-    {/each}
-  </div>
   {#each laning as [title, stats]}
     <h3 class="group">{title}</h3>
     <dl class="card numbers">
@@ -327,6 +325,11 @@
     <p class="muted">Lane net worth lead at 10:00, one column per match.<About>One column per match, the oldest on the left. The bar is the net worth lead of the player's lane at 10:00: up when ahead, down when behind. A match without a parsed replay has no bar. The dot is the result.</About></p>
   </section>
 
+  <div class="choice rank" role="group" aria-label="Whom the best and worst lanes compare you with">
+    {#each Object.entries(VERSUS) as [id, title]}
+      <button aria-pressed={versus === id} onclick={() => (versus = id as typeof versus)}>{title}</button>
+    {/each}
+  </div>
   {#each extremes as [title, games]}
     <h3 class="group">{title}</h3>
     {#if games.length}
@@ -655,6 +658,9 @@
     object-fit: cover;
     border-radius: 3px;
     vertical-align: middle;
+  }
+  .rank {
+    margin-top: 20px;
   }
   .pick select {
     margin-left: 6px;

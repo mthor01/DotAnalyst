@@ -131,12 +131,13 @@ def test_matches_compare_with_the_mirrored_enemy(session):
             Metric(match_id=1, player_slot=0, name="last_hits_at_10", value=40),
             Metric(match_id=1, player_slot=128, name="net_worth_at_10", value=2500),
             Metric(match_id=1, player_slot=128, name="last_hits_at_10", value=50),
+            Metric(match_id=1, player_slot=128, name="damage_at_10", value=1200),
         ]
     )
     rows = {r["match_id"]: r for r in queries.matches(session, queries.conditions(ME))}
-    mirror = lambda r: (r["mirror_hero_id"], r["mirror_nw_diff"], r["mirror_cs_diff"])  # noqa: E731
-    assert mirror(rows[1]) == (6, 500, -10)
-    assert mirror(rows[2])[1:] == (None, None)  # no replay stats
+    mirror = lambda r: (r["mirror_hero_id"], r["mirror_nw_diff"], r["mirror_cs_diff"], r["mirror_damage_at_10"])  # noqa: E731
+    assert mirror(rows[1]) == (6, 500, -10, 1200)
+    assert mirror(rows[2])[1:] == (None, None, None)  # no replay stats
     assert queries.MIRROR == {1: 3, 3: 1, 2: 2, 4: 5, 5: 4}
 
 

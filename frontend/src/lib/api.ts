@@ -45,20 +45,20 @@ export type MatchRow = {
   enemy_lane_damage_at_10: number | null
   kills_by_10: number | null
   deaths_by_10: number | null
-  /** whole-match totals from the replay (lotuses collected, camps pulled, trips through a twin gate), null without one */
-  lotuses: number | null
-  camps_pulled: number | null
-  twin_gates: number | null
+  /** lotuses collected and camps pulled by 10:00, from the replay, null without one */
+  lotuses_by_10: number | null
+  camps_pulled_by_10: number | null
   /** the other heroes in the player's lane, empty without a replay or outside the three lanes */
   lane_allies: number[]
   lane_enemies: number[]
   party: boolean // queued with someone, see Solo or party in IMPLEMENTATION.md
   with_tracked: boolean
   position: 1 | 2 | 3 | 4 | 5 // from the lane and the farm, see IMPLEMENTATION.md
-  /** the enemy in the mirrored position (1-3, 2-2, 4-5), and net worth and last hits at 10:00 minus theirs */
+  /** the enemy in the mirrored position (1-3, 2-2, 4-5), net worth and last hits at 10:00 minus theirs, and their hero damage by 10:00 */
   mirror_hero_id: number | null
   mirror_nw_diff: number | null
   mirror_cs_diff: number | null
+  mirror_damage_at_10: number | null
 }
 
 export type HeroRow = {
