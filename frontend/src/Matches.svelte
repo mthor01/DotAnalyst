@@ -18,7 +18,7 @@
     return () => (current = false)
   })
 
-  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
+  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' })
   const wins = $derived(rows.filter((r) => r.win).length)
   let unfolded = $state<number[]>([])
   const unfold = (id: number) => (unfolded = unfolded.includes(id) ? unfolded.filter((o) => o !== id) : [...unfolded, id])

@@ -29,7 +29,7 @@
   }
 
   const date = (seconds: number | null) =>
-    seconds === null ? '' : new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
+    seconds === null ? '' : new Date(seconds * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' })
 </script>
 
 <div class="choice tabs" role="group" aria-label="Part of the tournaments page">

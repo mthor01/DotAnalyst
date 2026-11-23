@@ -34,7 +34,7 @@
   const sortBy = (column: number) =>
     (sort = { column, descending: sort.column === column ? !sort.descending : true })
   const most = $derived(Math.max(0, ...rows.map((r) => r.games)))
-  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
+  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' })
   let unfolded = $state<number[]>([])
   const unfold = (id: number) => (unfolded = unfolded.includes(id) ? unfolded.filter((o) => o !== id) : [...unfolded, id])
 </script>

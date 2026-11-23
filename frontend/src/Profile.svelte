@@ -51,7 +51,7 @@
   const EVEN = 500 // a lane within this much net worth at 10:00 counts as even
   const wins = $derived(recent.filter((r) => r.win).length)
   const share = (part: number) => `${percent(part, recent.length)}%`
-  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
+  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' })
 
   const heroes = $derived(tally(recent))
   const roles = $derived(recent.map((r) => ({ ...r, role: r.position })))
@@ -151,7 +151,7 @@
   }
   const dot = (games: number) => `${Math.max(5, 18 * Math.sqrt(games / busiest))}px`
   const dayNote = (d: { date: Date; games: number; wins: number }) =>
-    `${d.date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}: ${d.games || 'no'} ${d.games === 1 ? 'game' : 'games'}` +
+    `${d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}: ${d.games || 'no'} ${d.games === 1 ? 'game' : 'games'}` +
     (d.games ? `, ${d.wins} won (${percent(d.wins, d.games)}%)` : '')
 
   const laned = $derived(recent.filter((r) => r.lane_nw_diff !== null))
@@ -252,12 +252,12 @@
     <div class="calendar" role="img" aria-label="Games and win rate per day over the last 3 months: {active.length} days played">
       <div class="week">
         <span class="month"></span>
-        {#each weeks[0] as d}<span class="weekday">{d.date.toLocaleDateString(undefined, { weekday: 'short' })}</span>{/each}
+        {#each weeks[0] as d}<span class="weekday">{d.date.toLocaleDateString('en-GB', { weekday: 'short' })}</span>{/each}
       </div>
       {#each weeks as week}
         {@const first = week.find((d) => d.date.getDate() === 1)}
         <div class="week">
-          <span class="month">{first ? first.date.toLocaleDateString(undefined, { month: 'short' }) : ''}</span>
+          <span class="month">{first ? first.date.toLocaleDateString('en-GB', { month: 'short' }) : ''}</span>
           {#each week as d}
             <i title={dayNote(d)}>{#if d.games}<b style:background={tint(d)} style:width={dot(d.games)} style:height={dot(d.games)}></b>{/if}</i>
           {/each}

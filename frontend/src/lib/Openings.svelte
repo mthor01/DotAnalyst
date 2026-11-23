@@ -53,7 +53,7 @@
     })
     return d
   }
-  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 
   // ---- the replays that are not here yet: asked for one after the other, each about 15 seconds
   const missing = $derived(games.filter((g) => !g.replay))

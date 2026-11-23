@@ -11,7 +11,7 @@
     (e) => (error = e.message),
   )
 
-  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
+  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' })
   const shown = $derived(rows.filter((r) => (r.name ?? '').toLowerCase().includes(search.trim().toLowerCase())))
 </script>
 

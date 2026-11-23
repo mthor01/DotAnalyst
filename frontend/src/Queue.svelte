@@ -20,7 +20,7 @@
   const span = (s: number) =>
     s < 90 ? `${Math.round(s)} s` : s < 5400 ? `${Math.round(s / 60)} min` : s < 172800 ? `${Math.round(s / 3600)} h` : `${Math.round(s / 86400)} days`
   const ago = (t: number) => `${span(status!.now - t)} ago`
-  const date = (t: number) => new Date(t * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  const date = (t: number) => new Date(t * 1000).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
   // the downloads step takes every due match, in this order
   const next = (row: QueueStatus['queue'][number]) =>
     row.next_try > status!.now ? `in ${span(row.next_try - status!.now)}` : 'now'

@@ -24,7 +24,7 @@
     return () => (current = false)
   })
 
-  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(undefined, { dateStyle: 'medium' })
+  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' })
   const games = $derived(team?.games.length ?? 0)
   /** A count with its share of the team's games: 5 (17%) */
   const ofGames = (n: number) => (n ? `${n} (${percent(n, games)}%)` : '–')

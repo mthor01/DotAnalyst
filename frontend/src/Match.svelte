@@ -483,7 +483,7 @@
       <p class="muted">
         {LOBBY_TYPES[match.lobby_type] ?? `Lobby ${match.lobby_type}`}
         {GAME_MODES[match.game_mode] ?? `Mode ${match.game_mode}`},
-        {new Date(match.start_time * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+        {new Date(match.start_time * 1000).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
         <br />match {match.match_id}
       </p>
     </div>
