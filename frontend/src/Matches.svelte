@@ -32,7 +32,7 @@
   <p class="muted">
     {rows.length} matches{#if rows.length}, {wins} won ({Math.round((100 * wins) / rows.length)}%){/if}
   </p>
-  <div class="card">
+  <div class="card tall">
     <table>
       <thead>
         <tr>
