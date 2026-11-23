@@ -91,7 +91,7 @@
     ? { nw: 'lane_nw_diff', cs: 'lane_cs_diff', unit: 'your lane minus the enemy lane at 10:00' } as const
     : { nw: 'mirror_nw_diff', cs: 'mirror_cs_diff', unit: 'you minus the enemy in your mirrored position at 10:00' } as const) // prettier-ignore
   const laning = $derived([
-    ['General', [
+    ['By 10:00', [
       ['Net worth lead', at10(lead.nw), lead.unit, 'signed'],
       ['Last-hit lead', at10(lead.cs), lead.unit, 'signed'],
       ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals at 10:00', ''],
@@ -100,6 +100,8 @@
       ['Experience', at10('xp_at_10'), 'at 10:00', ''],
       ['Kills', at10('kills_by_10'), 'before 10:00', 'tenths'],
       ['Deaths', at10('deaths_by_10'), 'before 10:00', 'tenths'],
+    ]],
+    ['Whole match', [
       ['Lotuses collected', at10('lotuses'), 'per match', 'tenths'],
       ['Camps pulled', at10('camps_pulled'), 'per match', 'tenths'],
       ['Twin gate trips', at10('twin_gates'), 'per match', 'tenths'],
