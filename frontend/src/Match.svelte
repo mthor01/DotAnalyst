@@ -1126,6 +1126,11 @@
       justify-content: flex-start;
     }
   }
+  @media (max-width: 560px) {
+    .faceoff {
+      grid-template-columns: minmax(0, 1fr); /* each team gets the whole width, Radiant above Dire */
+    }
+  }
 
   /* the parts of a match, in the look of the site's own navigation */
   .tabs {

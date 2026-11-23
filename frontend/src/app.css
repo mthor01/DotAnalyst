@@ -182,9 +182,21 @@ nav a[aria-current='page'] {
   align-items: center;
   margin-top: 6px;
 }
+/* the button that folds the filters away; only a narrow screen has it */
+.panel .fold {
+  display: none;
+}
 @media (max-width: 900px) {
   .layout.paneled {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr); /* a bare 1fr would grow to the widest table and push the page sideways */
+  }
+  .panel .fold {
+    display: block;
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .panel.folded > :not(.fold) {
+    display: none;
   }
   .panel {
     order: 0; /* above the page when there is no room beside it */

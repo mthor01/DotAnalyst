@@ -97,6 +97,7 @@
   route()
 
   let adding = $state(false) // the Add profile form is open
+  let filtersOpen = $state(false) // on a narrow screen the filters fold behind a button, so the page shows first
   let newId = $state('')
   async function addProfile(event: SubmitEvent) {
     event.preventDefault()
@@ -202,7 +203,8 @@
   <div class="layout" class:paneled={showFilters}>
   {#if showFilters}
     <!-- every tab below takes all of these. A team page takes only the time and the season: its games are league games -->
-    <aside class="panel" aria-label="Filters">
+    <aside class="panel" class:folded={!filtersOpen} aria-label="Filters">
+      <button class="action fold" aria-expanded={filtersOpen} onclick={() => (filtersOpen = !filtersOpen)}>Filters {filtersOpen ? '▴' : '▾'}</button>
       {#if !league}
         <section>
           <h3>Matches</h3>
