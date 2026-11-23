@@ -127,10 +127,6 @@
         <span class="muted">{record(role.wins, role.games)}</span>
       </li>
     {/each}
-    <li class="muted key">
-      Outer ring: the heroes played there, green when winning at least half, red when losing more. Click a part of the
-      middle ring to see its heroes alone.
-    </li>
     {#if alone}<li><button class="action" onclick={() => show()}>Show all</button></li>{/if}
   </ul>
 </div>
@@ -203,10 +199,6 @@
   li .muted {
     display: block;
     padding-left: 16px;
-    font-size: 13px;
-  }
-  .key {
-    max-width: 24ch;
     font-size: 13px;
   }
 </style>
