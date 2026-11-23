@@ -551,9 +551,13 @@
     </div>
     {#if brief && hasDraft}<Draft draft={match.draft} {captains} {notes} />{/if}
     </div>
+    <!-- the pick order and the lane map stand side by side, each taking what it needs, and stack on a narrow screen -->
+    <div class="pair">
     {#if !brief && hasDraft && !captains}
-      <h2>Pick order</h2>
-      <Draft draft={match.draft} captains={false} />
+      <section>
+        <h2>Pick order</h2>
+        <Draft draft={match.draft} captains={false} />
+      </section>
     {/if}
     {#if hasReplay}
       {#if brief}
@@ -566,6 +570,7 @@
           <Chart option={leadChart(leadOf(players, lastMinute))} height={320} label="Radiant's lead over Dire in net worth and in experience over time; above zero Radiant is ahead, below zero Dire" />
         </div>
       {:else}
+      <section class="lanes">
       <h2>Lanes and buildings</h2>
       <p class="legend">
         <span>■ building standing at the end</span>
@@ -579,6 +584,7 @@
         {/snippet}
       </MiniMap>
       <p class="muted">Each hero on the lane where it spent the first ten minutes.<About>A hero is drawn on the lane where it spent most of the first ten minutes, not at an exact place. Hover a hero or a building for its name.</About></p>
+      </section>
       {/if}
     {:else}
       <p class="muted">
@@ -592,8 +598,9 @@
         <span class="muted" role="status">{asked}</span>
       </p>
     {/if}
+    </div>
   {:else if shown === 'draft'}
-    <div class="draft"><Draft draft={match.draft} {captains} /></div>
+    <div class="draft"><Draft draft={match.draft} {captains} wide /></div>
   {:else if shown === 'graphs'}
     <p class="filters">
       <span class="choice" role="group" aria-label="What the graph shows">
@@ -982,6 +989,19 @@
   .draft {
     margin: 16px 0;
   }
+  .pair {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    gap: 0 48px;
+  }
+  .pair > :not(section) {
+    flex-basis: 100%; /* the lead chart and the no-replay note keep the whole width */
+  }
+  .pair .lanes {
+    flex: 1 1 360px;
+    max-width: 520px;
+  }
   .beside {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1300,6 +1320,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 0 24px;
+    --map-max: 78vh; /* each map fills its column, as long as it still fits on the screen */
   }
   .maps h3 {
     font-size: 15px;

@@ -3,8 +3,9 @@
 
   type Turn = { hero_id: number; pick: boolean; radiant: boolean; n: number }
   /** captains: the draft as the game shows it: Radiant's heroes left, Dire's right, the turn numbers down the middle;
-   *  otherwise only the bans and the order of the picks. notes: a word under each side's name. */
-  let { draft, captains, notes }: { draft: { hero_id: number; pick: boolean; radiant: boolean }[]; captains: boolean; notes?: [string, string] } = $props()
+   *  otherwise only the bans and the order of the picks. notes: a word under each side's name. wide: a captains draft
+   *  laid out left to right, Radiant's turns above Dire's, for a page that has the whole width for it. */
+  let { draft, captains, notes, wide = false }: { draft: { hero_id: number; pick: boolean; radiant: boolean }[]; captains: boolean; notes?: [string, string]; wide?: boolean } = $props()
 
   const turns = $derived<Turn[]>(draft.map((d, i) => ({ ...d, n: i + 1 })))
   /** A turn shares its row with the next when that is the other side's turn of the same kind (both picks or both
@@ -20,7 +21,21 @@
   const what = (t: Turn) => `${t.n}. ${t.radiant ? 'Radiant' : 'Dire'} ${t.pick ? 'pick' : 'ban'}: ${heroName(t.hero_id)}`
 </script>
 
-{#if captains}
+{#if captains && wide}
+  <!-- one column per row of the tall layout: a turn and, when the other side answers in kind, its answer -->
+  <ol class="across" aria-label="Picks and bans in draft order" style="--turns: {rows.length}">
+    <li class="side radiant">Radiant</li>
+    <li class="side dire">Dire</li>
+    {#each rows as row, c}
+      {#each row as t}
+        <li class="turn" class:dire={!t.radiant} class:ban={!t.pick} style="grid-column: {c + 2}">
+          <img src={heroPortrait(t.hero_id)} alt={what(t)} title={what(t)} loading="lazy" />
+          <span>{t.n}</span>
+        </li>
+      {/each}
+    {/each}
+  </ol>
+{:else if captains}
   <div class="cm">
     <p class="sides">
       <b class="radiant">Radiant{#if notes}<small>{notes[0]}</small>{/if}</b>
@@ -77,6 +92,63 @@
       linear-gradient(270deg, color-mix(in srgb, var(--dire) 10%, transparent), transparent 40%),
       var(--surface);
   }
+  .across {
+    display: grid;
+    grid-template-columns: auto repeat(var(--turns), minmax(52px, 1fr));
+    gap: 6px 4px;
+    overflow-x: auto;
+    margin: 0;
+    padding: 12px 14px;
+    list-style: none;
+    border-radius: 6px;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--radiant) 16%, transparent), transparent 50%),
+      linear-gradient(0deg, color-mix(in srgb, var(--dire) 10%, transparent), transparent 50%),
+      var(--surface);
+  }
+  .across .side {
+    grid-column: 1;
+    align-self: center;
+    padding-right: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .across .radiant {
+    color: var(--radiant);
+  }
+  .across .dire {
+    grid-row: 2;
+    color: var(--text-2);
+  }
+  /* Radiant's hero over its number, Dire's number over its hero, so the numbers meet in the middle */
+  .turn {
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: end;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .turn.dire {
+    grid-row: 2;
+    flex-direction: column-reverse;
+  }
+  .turn img {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--axis);
+    border-radius: 3px;
+    background: #000;
+  }
+  .turn.ban img {
+    width: 75%;
+    filter: grayscale(1);
+    opacity: 0.55;
+  }
+
   .sides,
   .cm li {
     display: grid;

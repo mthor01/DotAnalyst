@@ -207,7 +207,7 @@
 
 <style>
   .map {
-    max-width: 520px;
+    max-width: var(--map-max, 520px);
   }
   p {
     display: flex;
