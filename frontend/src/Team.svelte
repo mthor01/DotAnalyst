@@ -364,13 +364,10 @@
         <tr>
           <th></th>
           <th>Date</th>
-          <th>Season</th>
           <th>Against</th>
           <th>Result</th>
-          <th>Their picks</th>
-          <th>Enemy picks</th>
-          <th>Banned against them</th>
-          <th>Banned by them</th>
+          <th>Picks <small class="muted">them / enemy</small></th>
+          <th>Bans <small class="muted">by them / by the enemy</small></th>
           <th>Replay</th>
           <th></th>
         </tr>
@@ -385,8 +382,7 @@
                 {open ? '▾' : '▸'}
               </button>
             </td>
-            <td>{date(g.start_time)}</td>
-            <td class="muted">{g.league}</td>
+            <td class="when">{date(g.start_time)}<small class="muted">{g.league}</small></td>
             <td>
               {#if g.opponent_id}
                 <a href="#team/{g.opponent_id}">{g.opponent || `Team ${g.opponent_id}`}</a>
@@ -395,16 +391,14 @@
               {/if}
             </td>
             <td><span class="dot {g.win ? 'won' : 'lost'}"></span>{g.win ? 'Won' : 'Lost'}</td>
-            <td>{@render icons(g.picks)}</td>
-            <td>{@render icons(g.picks_against)}</td>
-            <td>{@render icons(g.bans_against)}</td>
-            <td>{@render icons(g.bans)}</td>
+            <td class="sides">{@render icons(g.picks)}{@render icons(g.picks_against)}</td>
+            <td class="sides">{@render icons(g.bans)}{@render icons(g.bans_against)}</td>
             <td class="muted"><ReplaySign match_id={g.match_id} state={g.replay_state} start_time={g.start_time} /></td>
             <td><a class="open" href="#match/{g.match_id}" title="Open the game" aria-label="Open the game on {date(g.start_time)}">↗</a></td>
           </tr>
           {#if open}
             <tr class="more">
-              <td colspan="11">
+              <td colspan="8">
                 <Match id={String(g.match_id)} brief notes={g.radiant ? ['Them', 'Enemy'] : ['Enemy', 'Them']} />
                 <p>
                   {#if g.tormentor}
@@ -494,6 +488,16 @@
     display: flex;
     flex-wrap: wrap;
     gap: 3px;
+  }
+  /* their side on top, the enemy's below */
+  .sides .icons + .icons {
+    margin-top: 3px;
+    padding-top: 3px;
+    border-top: 1px solid var(--grid);
+  }
+  .when small {
+    display: block;
+    font-size: 11px;
   }
   td .icons {
     flex-wrap: nowrap; /* a game's five picks read as one row */

@@ -46,7 +46,6 @@
           <th class="num">LH / DN</th>
           <th class="num">Duration</th>
           <th>Items</th>
-          <th>Mode</th>
           <th>Replay</th>
           <th></th>
         </tr>
@@ -59,7 +58,10 @@
             <td>
               <button class="unfold" aria-expanded={open} aria-label="Details of the match on {date(r.start_time)}" onclick={() => unfold(r.match_id)}>{open ? '▾' : '▸'}</button>
             </td>
-            <td>{date(r.start_time)}</td>
+            <td class="when">
+              {date(r.start_time)}
+              <small class="muted">{LOBBY_TYPES[r.lobby_type] ?? `Lobby ${r.lobby_type}`} {GAME_MODES[r.game_mode] ?? `Mode ${r.game_mode}`}</small>
+            </td>
             <td><Hero id={r.hero_id} /></td>
             <td><span class="dot {r.win ? 'won' : 'lost'}"></span>{r.win ? 'Won' : 'Lost'}</td>
             <td class="num">{r.kills} / {r.deaths} / {r.assists}</td>
@@ -81,13 +83,10 @@
                 {/if}
               {/each}
             </td>
-            <td class="muted">
-              {LOBBY_TYPES[r.lobby_type] ?? `Lobby ${r.lobby_type}`} {GAME_MODES[r.game_mode] ?? `Mode ${r.game_mode}`}
-            </td>
             <td class="muted"><ReplaySign match_id={r.match_id} state={r.replay_state} start_time={r.start_time} /></td>
             <td><a class="open" href="#match/{r.match_id}" title="Open the match" aria-label="Open the match on {date(r.start_time)}">↗</a></td>
           </tr>
-          {#if open}<tr class="more"><td colspan="13"><Match id={String(r.match_id)} brief draft={false} /></td></tr>{/if}
+          {#if open}<tr class="more"><td colspan="12"><Match id={String(r.match_id)} brief draft={false} /></td></tr>{/if}
         {/each}
       </tbody>
     </table>
@@ -95,6 +94,19 @@
 {/if}
 
 <style>
+  /* four items a line: the row is two lines tall for the date and mode anyway */
+  .items {
+    width: 136px;
+    white-space: normal;
+    line-height: 0;
+  }
+  .items img {
+    margin: 1px 2px 1px 0;
+  }
+  .when small {
+    display: block;
+    font-size: 11px;
+  }
   .unfold {
     padding: 2px 6px;
     background: none;
