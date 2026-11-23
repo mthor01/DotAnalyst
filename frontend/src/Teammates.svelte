@@ -52,7 +52,7 @@
         <tbody>
           {#each teammates as t (t.account_id)}
             <tr>
-              <td>{t.label ?? t.account_id}</td>
+              <td><a href="#account/{t.account_id}">{t.label ?? t.account_id}</a></td>
               <td class="num">{t.games}</td>
               <td class="num">{t.wins}</td>
               <td class="num">{percent(t.wins, t.games)}%</td>
