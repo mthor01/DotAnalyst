@@ -250,6 +250,20 @@ input {
 .card.chart {
   padding: 14px;
 }
+/* a long table scrolls inside its card, so its header row stays in view (a sticky header can only
+   stick inside the nearest scrolling box, and the card already is one for wide tables) */
+.card.tall {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-bottom: 0;
+  box-shadow: inset 0 -1px 0 var(--grid); /* a collapsed border would stay behind when the row sticks */
+}
 table {
   width: 100%;
   border-collapse: collapse;

@@ -44,7 +44,7 @@
 {:else if rows.length === 0}
   <p class="muted">No matches for these filters.</p>
 {:else}
-  <div class="card">
+  <div class="card tall">
     <table>
       <thead>
         <tr>

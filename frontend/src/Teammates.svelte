@@ -68,7 +68,7 @@
     <label>At least <input type="number" min="1" bind:value={minGames} style="width: 4em" /> games in total</label>
     <span class="muted">{shown.length} of {matchups.length} heroes; win rates are always mine</span>
   </p>
-  <div class="card">
+  <div class="card tall">
     <table>
       <thead>
         <tr>

@@ -24,7 +24,7 @@
     <label>Team <input type="search" bind:value={search} placeholder="Name" /></label>
     <span class="muted">{shown.length} of {rows.length} teams of the tracked tournaments</span>
   </p>
-  <div class="card">
+  <div class="card tall">
     <table>
       <thead>
         <tr><th>Team</th><th class="num">Games</th><th class="num">Won</th><th>Last played</th></tr>

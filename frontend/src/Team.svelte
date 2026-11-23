@@ -358,7 +358,7 @@
   {:else if tab === 'Games'}
   <h2>Games</h2>
   <p class="muted">Click a game to unfold it, ↗ opens it.<About>Unfolded: its draft, first Tormentor, scoreboard and, with a parsed replay, the lead and the lanes. One without a replay has a button under Replay that requests it.</About></p>
-  <div class="card">
+  <div class="card tall">
     <table>
       <thead>
         <tr>
