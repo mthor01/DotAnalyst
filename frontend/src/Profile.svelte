@@ -304,6 +304,11 @@
   {/each}
   <section class="card form">
     <div class="strip" class:dense={laneGames.length > 25} class:packed={laneGames.length > 100}>
+      <!-- the scale: built like a column, so its labels line up with the bars -->
+      <span class="scale" aria-hidden="true">
+        <b></b>
+        <span class="lane"><small>+{(reach / 1000).toFixed(1)}k</small><small>0</small><small>−{(reach / 1000).toFixed(1)}k</small></span>
+      </span>
       {#each strip as r (r.match_id)}
         {@const nw = r.lane_nw_diff}
         <a href="#match/{r.match_id}" title={note(r)} aria-label={note(r)}>
@@ -496,6 +501,36 @@
   }
   .strip .dot {
     margin: 0;
+  }
+  .scale {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 6px 0 0;
+  }
+  .scale b {
+    height: 22px;
+  }
+  .strip.dense .scale b {
+    display: none;
+  }
+  .scale .lane {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    background: none;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+  }
+  /* the labels' middles on the top, the middle line and the bottom of the bars */
+  .scale small:first-child {
+    margin-top: -5px;
+  }
+  .scale small:last-child {
+    margin-bottom: -5px;
   }
   .strip.dense .dot {
     width: 5px;

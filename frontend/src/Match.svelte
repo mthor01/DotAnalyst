@@ -647,7 +647,7 @@
           <h3>{LANES[lane]}</h3>
           <div class="versus">
             <span class="heroes">{@render icons(sides[0])}</span>
-            <span class="tug" aria-hidden="true">
+            <span class="tug" aria-hidden="true" title="Net worth lead at {laneMinute}:00. A full bar is {laneBound / 1000}k, the top of the chart below">
               <span><i class="radiant" style:width="{now ? (100 * Math.max(now.net_worth, 0)) / laneBound : 0}%"></i></span>
               <span><i class="dire" style:width="{now ? (100 * Math.max(-now.net_worth, 0)) / laneBound : 0}%"></i></span>
             </span>
