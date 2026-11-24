@@ -76,9 +76,10 @@
   const heroes = $derived(tally(recent))
   const roles = $derived(recent.map((r) => ({ ...r, role: r.position })))
   const allRoles = $derived(everyRole.map((r) => ({ ...r, role: r.position })))
-  const FORM = 20 // results in the Form card
+  const FORM = 15 // results in the Form card
   let heroOpen = $state(0) // the hero a click in the Overview's table opens on the Heroes tab
-  const streak = $derived(recent.findIndex((r) => r.win !== recent[0].win) === -1 ? recent.length : recent.findIndex((r) => r.win !== recent[0].win))
+  const form = $derived(recent.slice(0, FORM).reverse())
+  const formWins = $derived(form.filter((r) => r.win).length)
 
   const signed = (n: number) => `${n > 0 ? '+' : ''}${Math.round(n).toLocaleString()}`
   const note = (r: MatchRow) =>
@@ -173,7 +174,7 @@
     const lean = Math.min(1, Math.abs((4 * d.wins) / d.games - 2)) // 0 at 50 %, 1 at 25 % or 75 % and beyond
     return `color-mix(in oklab, var(${d.wins * 2 < d.games ? '--dire' : '--radiant'}) ${100 * lean}%, var(--series-4))`
   }
-  const dot = (games: number) => `${games && Math.max(4, 13 * Math.sqrt(games / busiest))}px`
+  const dot = (games: number) => `${games && Math.max(30, 81 * Math.sqrt(games / busiest))}%` // of the day's square
   const dayNote = (d: { date: Date; games: number; wins: number }) =>
     `${d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}: ${d.games || 'no'} ${d.games === 1 ? 'game' : 'games'}` +
     (d.games ? `, ${d.wins} won (${percent(d.wins, d.games)}%)` : '')
@@ -282,10 +283,10 @@
   <section class="card activity">
     <h3>Activity</h3>
     <!-- too wide for a phone: it scrolls, and opens at its newest end -->
-    <div class="calendar" {@attach toNewest} role="img" aria-label="Games and win rate per day over the last 6 months: {active.length} days played">
+    <div class="calendar" {@attach toNewest} style:--weeks={weeks.length} role="img" aria-label="Games and win rate per day over the last 6 months: {active.length} days played">
       <div class="week">
         <span class="month"></span>
-        {#each weeks[0] as d}<span class="weekday">{d.date.toLocaleDateString('en-GB', { weekday: 'short' })}</span>{/each}
+        {#each weeks[0] as d, i}<span class="weekday">{i % 2 ? '' : d.date.toLocaleDateString('en-GB', { weekday: 'short' })}</span>{/each}
       </div>
       {#each weeks as week, w}
         {@const first = week.find((d) => d.date.getDate() === 1)}
@@ -300,15 +301,15 @@
     <p class="muted">{active.reduce((n, d) => n + d.games, 0)} games on {active.length} days in the last 6 months, at most {busiest} in one day.</p>
   </section>
   <section class="card results">
-    <h3>Form</h3>
-    <ol aria-label="The last {Math.min(FORM, recent.length)} results, oldest first">
-      {#each recent.slice(0, FORM).reverse() as r (r.match_id)}
-        <li><a href="#match/{r.match_id}" title={note(r)} class:won={r.win}>
+    <h3>Form <span class="tally"><b class="won">{formWins} W</b> <b class="lost">{form.length - formWins} L</b></span></h3>
+    <ol aria-label="The last {form.length} results, oldest first">
+      {#each form as r (r.match_id)}
+        <li><a href="#match/{r.match_id}" title={note(r)}>
           <img src={heroIcon(r.hero_id)} alt={note(r)} width="32" height="32" />
+          <span class="mark" class:won={r.win} aria-hidden="true">{r.win ? 'W' : 'L'}</span>
         </a></li>
       {/each}
     </ol>
-    <p class="muted">{recent[0].win ? 'Won' : 'Lost'} the last {streak === 1 ? 'one' : streak}.</p>
   </section>
   </div>
 
@@ -467,7 +468,7 @@
 
   .overview {
     display: grid;
-    grid-template-columns: minmax(300px, 5fr) 7fr;
+    grid-template-columns: minmax(300px, 9fr) minmax(0, 11fr);
     gap: 12px;
     margin-bottom: 12px;
   }
@@ -609,10 +610,10 @@
     border-bottom-color: var(--text);
   }
 
-  /* the activity as wide as its weeks, the form beside it */
+  /* the activity under the wheel and as wide, the form beside it under the heroes */
   .lower {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(300px, 9fr) minmax(0, 11fr);
     gap: 12px;
     margin-bottom: 12px;
   }
@@ -634,9 +635,13 @@
   }
   .activity {
     min-width: 0;
+    container-type: inline-size;
   }
+  /* a day's square shares the card's width with the others (16 px at most); below 7 px the calendar scrolls instead */
   .calendar {
+    --cell: max(7px, min(16px, (100cqi - 33px) / var(--weeks) - 3px));
     overflow-x: auto;
+    padding-bottom: 4px; /* room for the last weekday label when rows are thinner than its text */
     display: flex;
     gap: 3px;
   }
@@ -646,24 +651,26 @@
     gap: 3px;
   }
   .month {
-    width: 16px; /* the name runs over into the next weeks */
+    width: var(--cell); /* the name runs over into the next weeks */
     height: 18px;
     font-size: 12px;
     color: var(--muted);
     white-space: nowrap;
   }
+  /* every second day named: a label taller than its row spills into the unnamed one */
   .weekday {
-    height: 16px;
-    padding-right: 6px;
+    display: grid;
+    align-items: center;
+    width: 30px;
+    height: var(--cell);
     font-size: 11px;
-    line-height: 16px;
     color: var(--muted);
   }
   .week i {
     display: grid;
     place-items: center;
-    width: 16px;
-    height: 16px;
+    width: var(--cell);
+    height: var(--cell);
     background: var(--raised);
     border-radius: 3px;
   }
@@ -680,23 +687,31 @@
       transition: none;
     }
   }
-  /* ten heroes a row, a bar under each: green won, red lost */
+  .tally {
+    margin-left: 10px;
+    font-size: 15px;
+  }
+  .tally .won {
+    color: var(--radiant);
+  }
+  .tally .lost {
+    margin-left: 6px;
+    color: var(--dire);
+  }
+  /* one row of heroes, a W or L disc under each: green won, red lost */
   .results ol {
     display: grid;
-    grid-template-columns: repeat(10, minmax(0, 40px));
-    gap: 8px 6px;
+    grid-template-columns: repeat(15, minmax(0, 44px));
+    gap: 6px;
     margin: 0;
     padding: 0;
     list-style: none;
   }
   .results a {
-    display: block;
-    padding-bottom: 3px;
-    border-bottom: 4px solid var(--dire);
-    border-radius: 3px;
-  }
-  .results a.won {
-    border-bottom-color: var(--radiant);
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    text-decoration: none;
   }
   .results a:hover {
     filter: brightness(1.2);
@@ -706,6 +721,20 @@
     width: 100%;
     height: auto;
     border-radius: 3px;
+  }
+  .mark {
+    display: grid;
+    place-items: center;
+    width: min(20px, 100%);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 800;
+    color: #fff;
+    background: var(--dire);
+  }
+  .mark.won {
+    background: var(--radiant);
   }
 
   .vision {

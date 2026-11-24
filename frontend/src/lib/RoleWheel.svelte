@@ -63,7 +63,22 @@
   }
   const ICON = 15 // in the wheel's units; a slice shorter than this along its arc gets no hero icon
   const ICON_AT = 78
-  const fits = (share: number) => share * 2 * Math.PI * ICON_AT >= ICON + 2
+  const fits = (share: number, at = ICON_AT) => share * 2 * Math.PI * at >= ICON + 2
+  const GLYPH_AT = 46 // the middle ring's centre line
+  // each role's mark, a 12-unit minimap (Radiant's base bottom left) with its lane drawn; supports add a plus
+  const LANE: Record<string, string> = { safe: 'M-3 3H3V-3', mid: 'M-3 3L3-3', off: 'M-3 3V-3H3' }
+  const GLYPHS = new Map<Role, { lane?: string; plus?: [number, number] }>([
+    [1, { lane: LANE.safe }],
+    [2, { lane: LANE.mid }],
+    [3, { lane: LANE.off }],
+    [4, { lane: LANE.off, plus: [1, 1] }],
+    [5, { lane: LANE.safe, plus: [-1, -1] }],
+    ['safe', { lane: LANE.safe }],
+    ['mid', { lane: LANE.mid }],
+    ['off', { lane: LANE.off }],
+    ['jungle', {}],
+    ['none', {}],
+  ])
   const SLIVER = 5 // in the wheel's units: a hero slice narrower than this at the outer edge reads as a gap
 
   // ---- the roles picked fill the whole middle ring, the others shrink to nothing; none picked shows every role at its share
@@ -128,9 +143,8 @@
   })
 </script>
 
-<div class="roles">
-  <div class="wheel">
-  <svg viewBox="-100 -100 200 200" role="group" aria-label="Roles and heroes of the last {games.length} matches; click a part of the middle ring to see it alone; the lists beside it have the numbers">
+<div class="wheel">
+  <svg viewBox="-100 -100 200 200" role="group" aria-label="Roles and heroes of the last {games.length} matches; click a part of the middle ring to see it alone; each part and hero names its numbers on hover">
     {#each wheel as role (role.id)}
       <path
         class="role"
@@ -144,6 +158,17 @@
       >
         <title>{role.title}: {record(role.wins, role.games)}</title>
       </path>
+      {#if fits(role.to - role.from, GLYPH_AT)}
+        {@const turn = (role.from + role.to) / 2}
+        {@const g = GLYPHS.get(role.id)!}
+        <g class="glyph" transform="translate({GLYPH_AT * Math.sin(2 * Math.PI * turn)} {-GLYPH_AT * Math.cos(2 * Math.PI * turn)}) scale(1.3)">
+          <rect x="-6" y="-6" width="12" height="12" rx="2" />
+          {#if g.lane}<path class="lane" d={g.lane} />{/if}
+          {#if g.plus}<path class="lane" d="M{g.plus[0] - 2.2} {g.plus[1]}h4.4M{g.plus[0]} {g.plus[1] - 2.2}v4.4" />{/if}
+          {#if role.id === 'jungle'}<path class="lane" d="M-3 1l2-4 2 4zM0 4l2-4 2 4z" />{/if}
+          {#if role.id === 'none'}<text class="unknown" y="3.5">?</text>{/if}
+        </g>
+      {/if}
     {/each}
     <!-- fades out and back in around a move's half way, where the ring switches to the picked roles' heroes -->
     <g style:opacity={Math.abs(2 * move.current - 1)}>
@@ -169,28 +194,13 @@ ${heroName(t.hero_id)}: ${record(t.wins, t.games)}`).join('')}</title>
     <text class="unit" y="15">{alone ? (GROUPS[leg.after.join()] ?? short(ROLES.get(leg.after[0])!.title)) : 'matches'}</text>
   </svg>
   {#if alone}<button class="action" onclick={() => pick([])}>Show all roles</button>{/if}
-  </div>
-  <ul>
-    {#each wheel as role (role.id)}
-      <li>
-        <i class="swatch" style:background="var(--{role.color})"></i>{role.title}
-        <span class="muted">{record(role.wins, role.games)}</span>
-      </li>
-    {/each}
-  </ul>
 </div>
 
 <style>
-  .roles {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 12px 24px;
-  }
   .wheel {
-    flex: 0 1 270px;
-    min-width: 200px;
+    width: 100%;
+    max-width: 380px;
+    margin: 0 auto;
     display: grid;
     justify-items: center;
     gap: 8px;
@@ -249,17 +259,25 @@ ${heroName(t.hero_id)}: ${record(t.wins, t.games)}`).join('')}</title>
     font-size: 8px;
     fill: var(--muted);
   }
-  ul {
-    flex: 0 1 170px;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 8px;
+  /* cut out of the role's colour; clicks go through to the slice under it */
+  .glyph {
+    pointer-events: none;
+    fill: none;
+    stroke: var(--surface);
   }
-  li .muted {
-    display: block;
-    padding-left: 16px;
-    font-size: 13px;
+  .glyph rect {
+    stroke-width: 0.8;
+    stroke-opacity: 0.55;
+  }
+  .glyph .lane {
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .glyph .unknown {
+    font-size: 9px;
+    font-weight: 800;
+    fill: var(--surface);
+    stroke: none;
   }
 </style>
