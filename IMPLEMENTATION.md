@@ -190,6 +190,7 @@ One function each in `dotanalyst/metrics.py`, stored per player and match in `me
 | `wards_destroyed` | Enemy wards of either kind the player destroyed |
 | `obs_lifetime` | Mean seconds the player's observers stood. One still standing at the end is left out |
 | `camps_pulled_by_10` | Camps pulled before 10:00: the player's number in the 10:00 minute row. No value in a match shorter than 10 minutes. Lotuses collected (`player_minute.lotuses`) and twin gate trips (`player_minute.twin_gates`) are stored but not a metric |
+| `camps_stacked` | Camps stacked in the whole match: the player's replay count (see Camps stacked) in the last whole minute row, so a stack in the final partial minute is missed. No value without a minute row |
 | `fight_participation` | Share of the match's teamfights the player took part in |
 | `kill_participation` | (kills + assists) / kills of the team, from the scoreboard |
 | `deaths_outside_fights` | Deaths outside every fight window |
@@ -407,6 +408,10 @@ Consumables, wards and recipes are left out (`UNLISTED` in `Match.svelte`). A pa
 ### Draft (match page)
 
 The match's `picks_bans` from Steam's answer, in draft order, so it is there with or without a parsed replay, and missing in modes without a draft (no picks or bans recorded). Only Captains Mode gets a Draft tab; other modes show the pick order on the General tab, under the scoreboard. In Captains Mode it is drawn as the game draws it: Radiant's heroes on the left, Dire's on the right, the turn numbers down the middle, bans smaller and grey. A turn shares its row with the next when the next is the other side's and of the same kind (two bans, or two picks), as the game pairs them. In other modes it is only the bans and the picks numbered in the order they were made, each with a bar in its side's colour. An unfolded game on the team page shows the same draft right of the scoreboard, with "Them" and "Enemy" under the side names; the two boxes are made as tall as the taller one and the draft spreads its rows over that height.
+
+### General (Profile)
+
+`Profile.svelte`, the General tab: one tile per row of the Player comparison, for the profile's account alone, with the same numbers worked out the same way (`ROWS`, exported from `Compare.svelte`): matches, win rate, kills, deaths, assists, gold and experience per minute over the filtered matches, the number of parsed ones, then every metric's mean (`metric-averages`) over the parsed matches that have it, camps stacked among them, with that count under the tile. A new metric with a label in `METRICS` (`api.ts`) shows up here and in the comparison at once.
 
 ### Ward numbers (Profile)
 

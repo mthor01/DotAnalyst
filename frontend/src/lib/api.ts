@@ -250,6 +250,7 @@ export const METRICS: { name: string; label: string; show: (v: number) => string
   { name: 'kill_participation', label: 'Kill participation', show: share },
   { name: 'fight_participation', label: 'Teamfights taken part in', show: share },
   { name: 'deaths_outside_fights', label: 'Deaths outside teamfights', show: count },
+  { name: 'camps_stacked', label: 'Camps stacked', show: count },
   { name: 'obs_placed', label: 'Observers placed', show: count },
   { name: 'sen_placed', label: 'Sentries placed', show: count },
   { name: 'obs_bought', label: 'Observers bought', show: count },

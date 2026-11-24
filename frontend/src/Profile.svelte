@@ -1,6 +1,7 @@
 <script lang="ts">
   import About from './lib/About.svelte'
-  import { TEAMMATE_GAMES, TEAMMATE_MATCHES, clock, get, percent, post, type Account, type MatchRow, type WardSpot } from './lib/api'
+  import { TEAMMATE_GAMES, TEAMMATE_MATCHES, clock, get, percent, post, type Account, type MatchRow, type MetricAverage, type WardSpot } from './lib/api'
+  import { ROWS } from './Compare.svelte'
   import { heroIcon, heroName, heroPortrait } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
   import Matches from './Matches.svelte'
@@ -30,17 +31,19 @@
     }
     tracking = false
   }
-  const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding', teammates: 'Teammates' }
+  const TABS = { overview: 'Overview', general: 'General', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding', teammates: 'Teammates' }
   const shown = $derived<keyof typeof TABS>(tab in TABS ? (tab as keyof typeof TABS) : 'overview')
   // the server narrows to every filter, the role, the queue and the number of matches among them; newest first
   let recent = $state<MatchRow[]>([])
   let wards = $state.raw<WardSpot[]>([]) // of the same matches
+  let averages = $state.raw<Record<string, MetricAverage>>({}) // the metrics' averages over the same matches
   let error = $state('')
 
   $effect(() => {
     let current = true
-    Promise.all([get<MatchRow[]>('matches', query), get<typeof wards>('wards', query)]).then(
-      ([found, placed]) => current && ((recent = found), (wards = placed), (error = '')),
+    Promise.all([get<MatchRow[]>('matches', query), get<typeof wards>('wards', query), get<MetricAverage[]>('metric-averages', query)]).then(
+      ([found, placed, m]) =>
+        current && ((recent = found), (wards = placed), (averages = Object.fromEntries(m.map((r) => [r.name, r]))), (error = '')),
       (e) => current && (error = e.message),
     )
     return () => (current = false)
@@ -278,6 +281,20 @@
       </p>
     </div>
   </section>
+
+  {:else if shown === 'general'}
+  {@const side = { matches: recent, wards, averages }}
+  <p class="muted laning">Your averages over the filtered matches, the same numbers the Player comparison shows; the replay stats come from the parsed ones.</p>
+  <dl class="card numbers">
+    {#each ROWS as row (row.label)}
+      {@const value = row.of(side)}
+      <div>
+        <dt>{row.label}</dt>
+        <dd>{value === undefined ? '–' : row.show(value)}</dd>
+        <dd class="muted">{row.title?.(side) ?? ''}</dd>
+      </div>
+    {/each}
+  </dl>
 
   {:else if shown === 'laning'}
   <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches{onHero ? ` on ${heroName(laneHero)}` : ''} with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. With "You vs your mirror" the leads compare you alone with the enemy whose position mirrors yours: 1 with 3, 2 with 2, 4 with 5. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a date to open the match.</About></p>

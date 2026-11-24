@@ -1,14 +1,42 @@
+<script module lang="ts">
+  import { METRICS, type MatchRow, type MetricAverage, type WardSpot } from './lib/api'
+
+  export type Side = { matches: MatchRow[]; wards: WardSpot[]; averages: Record<string, MetricAverage> }
+  const mean = (rows: MatchRow[], value: (r: MatchRow) => number) =>
+    rows.length ? rows.reduce((sum, r) => sum + value(r), 0) / rows.length : undefined
+  const fixed = (digits: number) => (v: number) => v.toFixed(digits)
+  /** The rows of the comparison: `lower` when less is better, `count` when neither is (only how much was seen) */
+  export type Row = { label: string; of: (s: Side) => number | undefined; show: (v: number) => string; lower?: boolean; count?: boolean; title?: (s: Side) => string }
+  export const ROWS: Row[] = [
+    { label: 'Matches', of: (s) => s.matches.length, show: String, count: true },
+    { label: 'Win rate', of: (s) => mean(s.matches, (r) => r.win), show: (v) => `${Math.round(100 * v)}%` },
+    { label: 'Kills', of: (s) => mean(s.matches, (r) => r.kills), show: fixed(1) },
+    { label: 'Deaths', of: (s) => mean(s.matches, (r) => r.deaths), show: fixed(1), lower: true },
+    { label: 'Assists', of: (s) => mean(s.matches, (r) => r.assists), show: fixed(1) },
+    { label: 'Gold per minute', of: (s) => mean(s.matches, (r) => r.gold_per_min), show: fixed(0) },
+    { label: 'Experience per minute', of: (s) => mean(s.matches, (r) => r.xp_per_min), show: fixed(0) },
+    // every parsed match of an account has a kill participation, so its count is the number of parsed matches
+    { label: 'Parsed matches', of: (s) => s.averages.kill_participation?.matches ?? 0, show: String, count: true },
+    ...METRICS.map((m) => ({
+      label: m.label,
+      of: (s: Side) => s.averages[m.name]?.average,
+      show: m.show,
+      lower: m.name === 'deaths_outside_fights',
+      title: (s: Side) => `${s.averages[m.name]?.matches ?? 0} parsed matches`,
+    })),
+  ] // prettier-ignore
+</script>
+
 <script lang="ts">
   import About from './lib/About.svelte'
   import { untrack } from 'svelte'
-  import { METRICS, get, percent, queryFor, type Account, type MatchRow, type MetricAverage, type TeammateRow, type WardSpot } from './lib/api'
+  import { get, percent, queryFor, type Account, type TeammateRow } from './lib/api'
   import WardHeat from './lib/WardHeat.svelte'
 
   let { query, accounts }: { query: string; accounts: Account[] } = $props()
   // the two accounts compared, the first two tracked ones at first
   let chosen = $state(untrack(() => [accounts[0]?.account_id, accounts[1]?.account_id ?? accounts[0]?.account_id]))
   let together = $state<TeammateRow | undefined>()
-  type Side = { matches: MatchRow[]; wards: WardSpot[]; averages: Record<string, MetricAverage> }
   let sides = $state.raw<Side[]>([])
   let error = $state('')
   // what both ward maps show, so that every button, dropdown, slider and zoom moves the two together
@@ -32,29 +60,6 @@
   })
 
   const account = (id: number | undefined) => accounts.find((a) => a.account_id === id)
-  const mean = (rows: MatchRow[], value: (r: MatchRow) => number) =>
-    rows.length ? rows.reduce((sum, r) => sum + value(r), 0) / rows.length : undefined
-  const fixed = (digits: number) => (v: number) => v.toFixed(digits)
-  /** The rows of the comparison: `lower` when less is better, `count` when neither is (only how much was seen) */
-  type Row = { label: string; of: (s: Side) => number | undefined; show: (v: number) => string; lower?: boolean; count?: boolean; title?: (s: Side) => string }
-  const ROWS: Row[] = [
-    { label: 'Matches', of: (s) => s.matches.length, show: String, count: true },
-    { label: 'Win rate', of: (s) => mean(s.matches, (r) => r.win), show: (v) => `${Math.round(100 * v)}%` },
-    { label: 'Kills', of: (s) => mean(s.matches, (r) => r.kills), show: fixed(1) },
-    { label: 'Deaths', of: (s) => mean(s.matches, (r) => r.deaths), show: fixed(1), lower: true },
-    { label: 'Assists', of: (s) => mean(s.matches, (r) => r.assists), show: fixed(1) },
-    { label: 'Gold per minute', of: (s) => mean(s.matches, (r) => r.gold_per_min), show: fixed(0) },
-    { label: 'Experience per minute', of: (s) => mean(s.matches, (r) => r.xp_per_min), show: fixed(0) },
-    // every parsed match of an account has a kill participation, so its count is the number of parsed matches
-    { label: 'Parsed matches', of: (s) => s.averages.kill_participation?.matches ?? 0, show: String, count: true },
-    ...METRICS.map((m) => ({
-      label: m.label,
-      of: (s: Side) => s.averages[m.name]?.average,
-      show: m.show,
-      lower: m.name === 'deaths_outside_fights',
-      title: (s: Side) => `${s.averages[m.name]?.matches ?? 0} parsed matches`,
-    })),
-  ] // prettier-ignore
   /** 'better', 'worse' or '' for side i of a row: equal values, a missing one and counts are neither */
   function verdict(row: Row, i: number) {
     const [a, b] = sides.map(row.of)

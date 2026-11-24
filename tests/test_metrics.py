@@ -147,3 +147,9 @@ def test_every_metric_is_stored_and_served(session):
 
     derive_match(session, MATCH_ID, FIXTURES)  # again: rows are replaced, not added
     assert dict(session.execute(select(Metric.name, func.count()).group_by(Metric.name)).all()) == count
+
+
+def test_camps_stacked(match):
+    # the replay's own interval count at 15:00, the last whole minute of the 15:11 match
+    assert [metrics.camps_stacked(match, s) for s in (DAWNBREAKER, LUNA, PHOENIX)] == [2, 1, 8]
+    assert metrics.camps_stacked({**match, "player_minute": []}, PHOENIX) is None
