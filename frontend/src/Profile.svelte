@@ -228,19 +228,16 @@
     <div>
       <dt>Win rate</dt>
       <dd>{share(wins)}</dd>
-      <dd class="muted">{wins} won, {recent.length - wins} lost</dd>
     </div>
-    <div>
+    <div title="Even is within {EVEN} net worth at 10:00">
       <dt>Lanes won, even, lost</dt>
       <dd><span class="good">{lanes.won}</span> – {lanes.even} – <span class="bad">{lanes.lost}</span></dd>
-      <dd class="muted">even is within {EVEN} net worth at 10:00</dd>
     </div>
     <div>
       <dt>K / D / A</dt>
       {#if kda.every((v) => v !== null)}
         {@const [k, d, a] = kda as number[]}
         <dd>{k.toFixed(1)} / {d.toFixed(1)} / {a.toFixed(1)}</dd>
-        <dd class="muted">{((k + a) / (d || 1)).toFixed(1)} kills and assists per death</dd>
       {:else}
         <dd>–</dd>
       {/if}
@@ -248,7 +245,6 @@
     <div>
       <dt>With tracked players</dt>
       <dd>{share(recent.filter((r) => r.with_tracked).length)}</dd>
-      <dd class="muted">another tracked account on the team</dd>
     </div>
   </dl>
   <div class="overview">
@@ -293,7 +289,7 @@
         <div class="week" style:--w={w}>
           <span class="month">{first ? first.date.toLocaleDateString('en-GB', { month: 'short' }) : ''}</span>
           {#each week as d}
-            <i title={dayNote(d)}><b style:background={d.games ? tint(d) : 'transparent'} style:width={dot(d.games)} style:height={dot(d.games)}></b></i>
+            <i title={dayNote(d)}><b style:background={d.games ? tint(d) : 'transparent'} style:width={dot(d.games)}></b></i>
           {/each}
         </div>
       {/each}
@@ -637,9 +633,11 @@
     min-width: 0;
     container-type: inline-size;
   }
-  /* a day's square shares the card's width with the others (16 px at most); below 7 px the calendar scrolls instead */
+  /* a day's cell shares the card's width with the others (16 px at most); below 7 px the calendar scrolls instead.
+     Rows are taller than the cells are wide, so the 6 months fill more of the card's height */
   .calendar {
     --cell: max(7px, min(16px, (100cqi - 33px) / var(--weeks) - 3px));
+    --row: calc(var(--cell) * 1.45);
     overflow-x: auto;
     padding-bottom: 4px; /* room for the last weekday label when rows are thinner than its text */
     display: flex;
@@ -662,7 +660,7 @@
     display: grid;
     align-items: center;
     width: 30px;
-    height: var(--cell);
+    height: var(--row);
     font-size: 11px;
     color: var(--muted);
   }
@@ -670,14 +668,15 @@
     display: grid;
     place-items: center;
     width: var(--cell);
-    height: var(--cell);
+    height: var(--row);
     background: var(--raised);
     border-radius: 3px;
   }
   /* a change of filters grows, shrinks and recolours the circles, one week after the other from the left */
   .week b {
+    aspect-ratio: 1;
     border-radius: 50%;
-    transition-property: width, height, background-color;
+    transition-property: width, background-color;
     transition-duration: 0.45s;
     transition-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
     transition-delay: calc(var(--w) * 12ms);
@@ -698,19 +697,23 @@
     margin-left: 6px;
     color: var(--dire);
   }
-  /* one row of heroes, a W or L disc under each: green won, red lost */
+  /* one row of heroes, a W or L disc under each: green won, red lost; the row sits in the middle of the card's height */
+  .results {
+    display: flex;
+    flex-direction: column;
+  }
   .results ol {
     display: grid;
-    grid-template-columns: repeat(15, minmax(0, 44px));
-    gap: 6px;
-    margin: 0;
+    grid-template-columns: repeat(15, minmax(0, 48px));
+    gap: 5px;
+    margin: auto 0;
     padding: 0;
     list-style: none;
   }
   .results a {
     display: grid;
     justify-items: center;
-    gap: 5px;
+    gap: 7px;
     text-decoration: none;
   }
   .results a:hover {
@@ -725,10 +728,10 @@
   .mark {
     display: grid;
     place-items: center;
-    width: min(20px, 100%);
+    width: min(24px, 100%);
     aspect-ratio: 1;
     border-radius: 50%;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 800;
     color: #fff;
     background: var(--dire);
