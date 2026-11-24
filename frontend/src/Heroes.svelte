@@ -1,12 +1,14 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { get, sortedBy, type HeroRow, type MatchRow } from './lib/api'
   import { heroName, heroPortrait } from './lib/constants.svelte'
   import Count from './lib/Count.svelte'
   import WinRate from './lib/WinRate.svelte'
   import Matches from './Matches.svelte'
 
-  /** `matches` are the profile's matches for the same query, newest first: a hero unfolds into them, as on the Matches tab */
-  let { query, matches }: { query: string; matches: MatchRow[] } = $props()
+  /** `matches` are the profile's matches for the same query, newest first: a hero unfolds into them, as on the Matches tab.
+   *  `open` is a hero unfolded from the start (one clicked on the Overview), 0 for none. */
+  let { query, matches, open = 0 }: { query: string; matches: MatchRow[]; open?: number } = $props()
   let rows = $state<HeroRow[]>([])
   let error = $state('')
 
@@ -34,7 +36,7 @@
   const sortBy = (column: number) =>
     (sort = { column, descending: sort.column === column ? !sort.descending : true })
   const most = $derived(Math.max(0, ...rows.map((r) => r.games)))
-  let unfolded = $state<number[]>([])
+  let unfolded = $state<number[]>(untrack(() => (open ? [open] : [])))
   const unfold = (id: number) => (unfolded = unfolded.includes(id) ? unfolded.filter((o) => o !== id) : [...unfolded, id])
 </script>
 

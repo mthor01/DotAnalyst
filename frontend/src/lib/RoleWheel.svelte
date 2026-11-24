@@ -54,16 +54,6 @@
     ['jungle', { title: 'Jungle', color: 'series-3' }],
     ['none', { title: none, color: 'axis' }],
   ])
-  /** Each role's share of the games. `from` and `to` are turns. */
-  const wheel = $derived.by(() => {
-    let at = 0
-    return [...ROLES.keys()].flatMap((id) => {
-      const mine = games.filter((g) => g.role === id)
-      if (!mine.length) return []
-      const from = at
-      return [{ id, ...ROLES.get(id)!, games: mine.length, wins: mine.filter((g) => g.win).length, from, to: (at += mine.length / games.length) }]
-    })
-  })
   const point = (r: number, turn: number) => `${r * Math.sin(2 * Math.PI * turn)} ${-r * Math.cos(2 * Math.PI * turn)}`
   /** A ring segment between two radii, clockwise from the top. */
   function segment(inner: number, outer: number, from: number, to: number): string {
@@ -76,38 +66,54 @@
   const fits = (share: number) => share * 2 * Math.PI * ICON_AT >= ICON + 2
   const SLIVER = 5 // in the wheel's units: a hero slice narrower than this at the outer edge reads as a gap
 
-  // ---- the roles picked fill the whole wheel: 0 shows all roles, 1 the picked ones alone (next to each other in ROLES)
+  // ---- the roles picked fill the whole middle ring, the others shrink to nothing; none picked shows every role at its share
   let own = $state<Role[]>([]) // what a click picked, when no one outside keeps it (team pages)
   const chosen = $derived(onpick ? picked : own)
   const pick = (roles: Role[]) => (onpick ? onpick(roles) : (own = roles))
-  let focus = $state<Role[]>([]) // kept while the wheel widens back, so it unfolds the way it folded
-  const zoom = new Tween(0, { easing: cubicInOut })
-  const duration = () => (prefersReducedMotion.current ? 0 : 700)
+  const KEYS = [...ROLES.keys()]
+  /** Each role's share of the middle ring with `roles` picked, in the order of ROLES; picked roles without games show all. */
+  function sizes(roles: Role[]): number[] {
+    const counts = KEYS.map((id) => (roles.length && !roles.includes(id) ? 0 : games.filter((g) => g.role === id).length))
+    const sum = counts.reduce((a, b) => a + b, 0)
+    return roles.length && !sum ? sizes([]) : counts.map((n) => n / (sum || 1))
+  }
+  // a pick moves every role's share in a straight line from where it is drawn now to its share with the new pick, so
+  // the old pick folds while the new one unfolds; `before` is the pick whose heroes the outer ring shows until half way
+  let leg = $state({ from: [] as number[], before: [] as Role[], after: [] as Role[] })
+  const move = new Tween(1, { easing: cubicInOut })
+  const weights = $derived.by(() => {
+    const to = sizes(leg.after)
+    return leg.from.length ? to.map((w, i) => leg.from[i] + move.current * (w - leg.from[i])) : to
+  })
   $effect(() => {
     const next = chosen
-    untrack(async () => {
-      // from one pick to another the wheel first turns back to all roles; a newer pick aborts the tween, so this never resumes
-      if (zoom.target && focus.join() !== next.join()) await zoom.set(0, { duration: duration() })
-      if (next.length) focus = next
-      zoom.set(next.length ? 1 : 0, { duration: duration() })
+    untrack(() => {
+      if (next.join() === leg.after.join()) return
+      leg = { from: weights, before: move.current > 0.5 ? leg.after : leg.before, after: next }
+      move.set(0, { duration: 0 })
+      move.set(1, { duration: prefersReducedMotion.current ? 0 : 700 })
     })
   })
-  const alone = $derived(zoom.target === 1 && focus.length > 0)
-  const span = $derived.by(() => {
-    const parts = wheel.filter((r) => focus.includes(r.id))
-    return parts.length ? { from: parts[0].from, to: parts.at(-1)!.to } : undefined
+  /** Each role with games, its slice of the middle ring as drawn now; `from` and `to` are turns. */
+  const wheel = $derived.by(() => {
+    let at = 0
+    return KEYS.flatMap((id, i) => {
+      const mine = games.filter((g) => g.role === id)
+      if (!mine.length) return []
+      const from = at
+      return [{ id, ...ROLES.get(id)!, games: mine.length, wins: mine.filter((g) => g.win).length, from, to: (at += weights[i]) }]
+    })
   })
-  /** Where a turn of the full wheel is drawn: `zoom` of the way to its place once the focused roles fill the ring. */
-  function turn(t: number) {
-    if (!span) return t
-    return t + zoom.current * (Math.min(1, Math.max(0, (t - span.from) / (span.to - span.from))) - t)
-  }
-  const focusGames = $derived(zoomed.filter((g) => focus.includes(g.role)))
+  const alone = $derived(leg.after.length > 0)
+  const focusGames = $derived(zoomed.filter((g) => leg.after.includes(g.role)))
   const GROUPS: Record<string, string> = { '1,2,3': 'cores', '4,5': 'supports' }
+  /** What fits in the wheel's hole: "Pos 4 (soft support)" → "soft support", "Safe lane" → "safe lane". */
+  const short = (title: string) => (title.match(/\((.*)\)/)?.[1] ?? title).toLowerCase()
 
-  // ---- the outer ring: each hero once over all roles, or over the focused role once the wheel has turned past half way.
+  // ---- the outer ring: each hero once over all roles, or over the picked ones; it switches half way through a move.
   // Heroes thinner than SLIVER merge into one grey "+N" slice at the end, `others`, when there are at least two.
-  const ringGames = $derived(zoom.current > 0.5 && focus.length ? focusGames : games)
+  const ringRoles = $derived(move.current > 0.5 ? leg.after : leg.before)
+  const ringGames = $derived(ringRoles.length ? zoomed.filter((g) => ringRoles.includes(g.role)) : games)
   const ring = $derived.by(() => {
     const all = tally(ringGames)
     const small = all.filter((t) => (t.games / ringGames.length) * 2 * Math.PI * 97 < SLIVER)
@@ -123,12 +129,13 @@
 </script>
 
 <div class="roles">
+  <div class="wheel">
   <svg viewBox="-100 -100 200 200" role="group" aria-label="Roles and heroes of the last {games.length} matches; click a part of the middle ring to see it alone; the lists beside it have the numbers">
     {#each wheel as role (role.id)}
       <path
         class="role"
         class:pick={!alone}
-        d={segment(36, 56, turn(role.from), turn(role.to))}
+        d={segment(36, 56, role.from, role.to)}
         style:fill="var(--{role.color})"
         role="button"
         tabindex={alone ? -1 : 0}
@@ -138,8 +145,8 @@
         <title>{role.title}: {record(role.wins, role.games)}</title>
       </path>
     {/each}
-    <!-- fades out and back in around the turn's half way, where the ring switches to the focused role's heroes -->
-    <g style:opacity={Math.abs(2 * zoom.current - 1)}>
+    <!-- fades out and back in around a move's half way, where the ring switches to the picked roles' heroes -->
+    <g style:opacity={Math.abs(2 * move.current - 1)}>
       {#each ring as s (s.hero_id)}
         {@const middle = (s.from + s.to) / 2}
         {@const x = ICON_AT * Math.sin(2 * Math.PI * middle)}
@@ -159,8 +166,10 @@ ${heroName(t.hero_id)}: ${record(t.wins, t.games)}`).join('')}</title>
       {/each}
     </g>
     <text class="count" y="2">{alone ? focusGames.length : games.length}</text>
-    <text class="unit" y="15">{alone ? (GROUPS[focus.join()] ?? ROLES.get(focus[0])!.title.toLowerCase()) : 'matches'}</text>
+    <text class="unit" y="15">{alone ? (GROUPS[leg.after.join()] ?? short(ROLES.get(leg.after[0])!.title)) : 'matches'}</text>
   </svg>
+  {#if alone}<button class="action" onclick={() => pick([])}>Show all roles</button>{/if}
+  </div>
   <ul>
     {#each wheel as role (role.id)}
       <li>
@@ -168,7 +177,6 @@ ${heroName(t.hero_id)}: ${record(t.wins, t.games)}`).join('')}</title>
         <span class="muted">{record(role.wins, role.games)}</span>
       </li>
     {/each}
-    {#if alone}<li><button class="action" onclick={() => pick([])}>Show all</button></li>{/if}
   </ul>
 </div>
 
@@ -180,9 +188,15 @@ ${heroName(t.hero_id)}: ${record(t.wins, t.games)}`).join('')}</title>
     justify-content: center;
     gap: 12px 24px;
   }
-  .roles svg {
+  .wheel {
     flex: 0 1 270px;
     min-width: 200px;
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+  }
+  .wheel svg {
+    width: 100%;
   }
   .role,
   .slice path {

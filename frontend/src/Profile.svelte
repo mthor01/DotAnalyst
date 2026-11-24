@@ -76,7 +76,8 @@
   const heroes = $derived(tally(recent))
   const roles = $derived(recent.map((r) => ({ ...r, role: r.position })))
   const allRoles = $derived(everyRole.map((r) => ({ ...r, role: r.position })))
-  const FORM = 10 // results in the Form card
+  const FORM = 20 // results in the Form card
+  let heroOpen = $state(0) // the hero a click in the Overview's table opens on the Heroes tab
   const streak = $derived(recent.findIndex((r) => r.win !== recent[0].win) === -1 ? recent.length : recent.findIndex((r) => r.win !== recent[0].win))
 
   const signed = (n: number) => `${n > 0 ? '+' : ''}${Math.round(n).toLocaleString()}`
@@ -85,6 +86,7 @@
     (r.lane_nw_diff === null ? '' : `, lane ${signed(r.lane_nw_diff)} net worth at 10:00`)
 
   const parsed = $derived(recent.filter((r) => r.replay_state === 'parsed').length)
+  const kda = $derived([mean(recent.map((r) => r.kills)), mean(recent.map((r) => r.deaths)), mean(recent.map((r) => r.assists))])
   /** The mean of a replay stat over the matches that have it, null with none */
   function mean(values: (number | null)[]) {
     const known = values.filter((v) => v !== null)
@@ -145,6 +147,12 @@
       return m.set(key, { games: day.games + 1, wins: day.wins + r.win })
     }, new Map<string, { games: number; wins: number }>()),
   )
+  /** Keeps a scrolled calendar at its newest end whenever its size changes: first layout, a phone turned. */
+  function toNewest(el: HTMLElement) {
+    const watch = new ResizeObserver(() => (el.scrollLeft = el.scrollWidth))
+    watch.observe(el)
+    return () => watch.disconnect()
+  }
   const weeks = $derived.by(() => {
     const day = new Date()
     day.setHours(0, 0, 0, 0)
@@ -165,7 +173,7 @@
     const lean = Math.min(1, Math.abs((4 * d.wins) / d.games - 2)) // 0 at 50 %, 1 at 25 % or 75 % and beyond
     return `color-mix(in oklab, var(${d.wins * 2 < d.games ? '--dire' : '--radiant'}) ${100 * lean}%, var(--series-4))`
   }
-  const dot = (games: number) => `${games && Math.max(5, 18 * Math.sqrt(games / busiest))}px`
+  const dot = (games: number) => `${games && Math.max(4, 13 * Math.sqrt(games / busiest))}px`
   const dayNote = (d: { date: Date; games: number; wins: number }) =>
     `${d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}: ${d.games || 'no'} ${d.games === 1 ? 'game' : 'games'}` +
     (d.games ? `, ${d.wins} won (${percent(d.wins, d.games)}%)` : '')
@@ -204,14 +212,14 @@
 
   <div class="tabs" role="tablist" aria-label="Profile">
     {#each Object.entries(TABS) as [id, title]}
-      <button role="tab" aria-selected={shown === id} onclick={() => (location.hash = id === 'overview' ? 'profile' : `profile/${id}`)}>{title}</button>
+      <button role="tab" aria-selected={shown === id} onclick={() => ((heroOpen = 0), (location.hash = id === 'overview' ? 'profile' : `profile/${id}`))}>{title}</button>
     {/each}
   </div>
 
   {#if shown === 'matches'}
     <Matches {query} />
   {:else if shown === 'heroes'}
-    <Heroes {query} matches={recent} />
+    <Heroes {query} matches={recent} open={heroOpen} />
   {:else if shown === 'teammates'}
     <Teammates {query} />
   {:else if shown === 'overview'}
@@ -227,11 +235,14 @@
       <dd class="muted">even is within {EVEN} net worth at 10:00</dd>
     </div>
     <div>
-      <dt>Form</dt>
-      <dd class="form" aria-label="The last {Math.min(FORM, recent.length)} results, newest last">
-        {#each recent.slice(0, FORM).reverse() as r (r.match_id)}<i class:won={r.win} title={note(r)}></i>{/each}
-      </dd>
-      <dd class="muted">{recent[0].win ? 'won' : 'lost'} the last {streak === 1 ? 'one' : streak}</dd>
+      <dt>K / D / A</dt>
+      {#if kda.every((v) => v !== null)}
+        {@const [k, d, a] = kda as number[]}
+        <dd>{k.toFixed(1)} / {d.toFixed(1)} / {a.toFixed(1)}</dd>
+        <dd class="muted">{((k + a) / (d || 1)).toFixed(1)} kills and assists per death</dd>
+      {:else}
+        <dd>–</dd>
+      {/if}
     </div>
     <div>
       <dt>With tracked players</dt>
@@ -251,8 +262,12 @@
         </thead>
         <tbody>
           {#each heroes.slice(0, TOP_HEROES) as h (h.hero_id)}
-            <tr>
-              <td><img class="icon" src={heroPortrait(h.hero_id)} alt={heroName(h.hero_id)} title={heroName(h.hero_id)} width="44" height="25" loading="lazy" /></td>
+            <tr class="open" onclick={() => ((heroOpen = h.hero_id), (location.hash = 'profile/heroes'))}>
+              <td>
+                <a href="#profile/heroes" onclick={() => (heroOpen = h.hero_id)} aria-label="{heroName(h.hero_id)} on the Heroes tab">
+                  <img class="icon" src={heroPortrait(h.hero_id)} alt={heroName(h.hero_id)} title={heroName(h.hero_id)} width="44" height="25" loading="lazy" />
+                </a>
+              </td>
               <td><Count games={h.games} max={heroes[0].games} /></td>
               <td><WinRate wins={h.wins} games={h.games} /></td>
               <td class="num">{(h.kills / h.games).toFixed(1)} / {(h.deaths / h.games).toFixed(1)} / {(h.assists / h.games).toFixed(1)}</td>
@@ -260,14 +275,14 @@
           {/each}
         </tbody>
       </table>
-      {#if heroes.length > TOP_HEROES}
-        <p class="muted more">The {TOP_HEROES} most played of {heroes.length} heroes. The Heroes tab has them all.</p>
-      {/if}
     </section>
   </div>
 
+  <div class="lower">
   <section class="card activity">
-    <div class="calendar" role="img" aria-label="Games and win rate per day over the last 6 months: {active.length} days played">
+    <h3>Activity</h3>
+    <!-- too wide for a phone: it scrolls, and opens at its newest end -->
+    <div class="calendar" {@attach toNewest} role="img" aria-label="Games and win rate per day over the last 6 months: {active.length} days played">
       <div class="week">
         <span class="month"></span>
         {#each weeks[0] as d}<span class="weekday">{d.date.toLocaleDateString('en-GB', { weekday: 'short' })}</span>{/each}
@@ -282,11 +297,20 @@
         </div>
       {/each}
     </div>
-    <div class="muted">
-      <h3>Activity</h3>
-      <p>{active.reduce((n, d) => n + d.games, 0)} games on {active.length} days in the last 6 months, at most {busiest} in one day.</p>
-    </div>
+    <p class="muted">{active.reduce((n, d) => n + d.games, 0)} games on {active.length} days in the last 6 months, at most {busiest} in one day.</p>
   </section>
+  <section class="card results">
+    <h3>Form</h3>
+    <ol aria-label="The last {Math.min(FORM, recent.length)} results, oldest first">
+      {#each recent.slice(0, FORM).reverse() as r (r.match_id)}
+        <li><a href="#match/{r.match_id}" title={note(r)} class:won={r.win}>
+          <img src={heroIcon(r.hero_id)} alt={note(r)} width="32" height="32" />
+        </a></li>
+      {/each}
+    </ol>
+    <p class="muted">{recent[0].win ? 'Won' : 'Lost'} the last {streak === 1 ? 'one' : streak}.</p>
+  </section>
+  </div>
 
   {:else if shown === 'general'}
   {@const side = { matches: recent, wards, averages }}
@@ -462,10 +486,11 @@
     object-fit: cover;
     border-radius: 3px;
   }
-  .more {
-    margin: 0;
-    padding: 8px 12px;
-    font-size: 13px;
+  tr.open {
+    cursor: pointer;
+  }
+  tr.open:hover {
+    background: var(--raised);
   }
 
   .form {
@@ -584,22 +609,34 @@
     border-bottom-color: var(--text);
   }
 
-  .activity {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 32px;
-    padding: 16px 18px;
+  /* the activity as wide as its weeks, the form beside it */
+  .lower {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
     margin-bottom: 12px;
   }
-  .activity h3 {
-    margin: 0 0 8px;
-    color: var(--text);
+  @media (max-width: 900px) {
+    .lower {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
-  .activity p {
-    max-width: 52ch;
-    margin: 0;
+  .activity,
+  .results {
+    padding: 14px 18px;
+  }
+  .lower h3 {
+    margin: 0 0 8px;
+  }
+  .lower p {
+    margin: 8px 0 0;
+    font-size: 13px;
+  }
+  .activity {
+    min-width: 0;
   }
   .calendar {
+    overflow-x: auto;
     display: flex;
     gap: 3px;
   }
@@ -609,24 +646,24 @@
     gap: 3px;
   }
   .month {
-    width: 22px; /* the name runs over into the next weeks */
+    width: 16px; /* the name runs over into the next weeks */
     height: 18px;
     font-size: 12px;
     color: var(--muted);
     white-space: nowrap;
   }
   .weekday {
-    height: 22px;
+    height: 16px;
     padding-right: 6px;
-    font-size: 12px;
-    line-height: 22px;
+    font-size: 11px;
+    line-height: 16px;
     color: var(--muted);
   }
   .week i {
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
+    width: 16px;
+    height: 16px;
     background: var(--raised);
     border-radius: 3px;
   }
@@ -643,20 +680,32 @@
       transition: none;
     }
   }
-  .form {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-    height: 1.2em;
+  /* ten heroes a row, a bar under each: green won, red lost */
+  .results ol {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 40px));
+    gap: 8px 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
-  .form i {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--dire);
+  .results a {
+    display: block;
+    padding-bottom: 3px;
+    border-bottom: 4px solid var(--dire);
+    border-radius: 3px;
   }
-  .form i.won {
-    background: var(--radiant);
+  .results a.won {
+    border-bottom-color: var(--radiant);
+  }
+  .results a:hover {
+    filter: brightness(1.2);
+  }
+  .results img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 3px;
   }
 
   .vision {
