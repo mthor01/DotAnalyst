@@ -721,11 +721,11 @@
     min-width: 0;
     container-type: inline-size;
   }
-  /* a day's cell shares the card's width with the others (16 px at most); below 7 px the calendar scrolls instead.
-     Rows are taller than the cells are wide, so the 6 months fill more of the card's height */
+  /* the weeks share the card's whole width in square days (the page's max width keeps them near 20 px);
+     below 7 px the calendar scrolls instead */
   .calendar {
-    --cell: max(7px, min(16px, (100cqi - 33px) / var(--weeks) - 3px));
-    --row: calc(var(--cell) * 1.45);
+    --cell: max(7px, (100cqi - 33px) / var(--weeks) - 3px);
+    --row: var(--cell);
     overflow-x: auto;
     padding-bottom: 4px; /* room for the last weekday label when rows are thinner than its text */
     display: flex;
