@@ -1,5 +1,6 @@
 <script lang="ts">
   import { GAME_MODES, LOBBY_TYPES, get, post, type Account } from './lib/api'
+  import { MARKS } from './lib/RoleWheel.svelte'
   import { constants, loadConstants } from './lib/constants.svelte'
   import Match from './Match.svelte'
   import Compare from './Compare.svelte'
@@ -232,8 +233,10 @@
         <section>
           <h3>Role</h3>
           <div class="choice roles" role="group" aria-label="Role">
-            {#each ROLES as [short, long], i}
-              <button aria-pressed={own.role === i} title={long} aria-label={long} onclick={() => (own.role = i)}>{short}</button>
+            {#each ROLES as [short, long, positions], i}
+              <button aria-pressed={own.role === i} title={long} aria-label={long} onclick={() => (own.role = i)}>
+                {#if positions.length === 1}<img src="/roles/{MARKS.get(positions[0])}.png" alt="" width="20" height="20" />{:else}{short}{/if}
+              </button>
             {/each}
           </div>
         </section>
