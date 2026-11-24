@@ -99,7 +99,6 @@
       ['Experience', at10('xp_at_10'), '', ''],
       ['Kills', at10('kills_by_10'), '', 'tenths'],
       ['Deaths', at10('deaths_by_10'), '', 'tenths'],
-      ['Lotuses collected', at10('lotuses_by_10'), '', 'tenths'],
       ['Camps pulled', at10('camps_pulled_by_10'), '', 'tenths'],
     ]],
     ['Your lane vs the enemy lane, by 10:00', [
@@ -281,6 +280,7 @@
   </section>
 
   {:else if shown === 'laning'}
+  <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches{onHero ? ` on ${heroName(laneHero)}` : ''} with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. With "You vs your mirror" the leads compare you alone with the enemy whose position mirrors yours: 1 with 3, 2 with 2, 4 with 5. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a date to open the match.</About></p>
   <label class="pick">
     Hero
     <select value={onHero ? laneHero : 0} onchange={(e) => (laneHero = +e.currentTarget.value)}>
@@ -363,7 +363,6 @@
       <p class="muted">No match with a parsed replay here.</p>
     {/if}
   {/each}
-  <p class="muted laning">Averages over {laneMatches} parsed matches.<About>Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. Lotuses, pulls and twin gate trips count the whole match. With "You vs your mirror" the leads compare you alone with the enemy whose position mirrors yours: 1 with 3, 2 with 2, 4 with 5. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a date to open the match.</About></p>
   {:else}
   <section class="card vision">
     <div>

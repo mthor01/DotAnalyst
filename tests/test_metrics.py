@@ -117,10 +117,10 @@ def test_laning_at_ten(match):
 
 
 
-def test_lotuses_and_pulls_by_10(match):
-    # by 10:00 Legion Commander (slot 4) had pulled once and eaten two lotuses; the third came at 13:00
-    assert (metrics.lotuses_by_10(match, 4), metrics.camps_pulled_by_10(match, 4)) == (2, 1)
-    assert metrics.lotuses_by_10({**match, "player_minute": []}, 4) is None
+def test_pulls_by_10(match):
+    # by 10:00 Legion Commander (slot 4) had pulled once
+    assert metrics.camps_pulled_by_10(match, 4) == 1
+    assert metrics.camps_pulled_by_10({**match, "player_minute": []}, 4) is None
 
 
 def test_kill_participation(match):

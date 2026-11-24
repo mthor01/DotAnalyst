@@ -45,8 +45,7 @@ export type MatchRow = {
   enemy_lane_damage_at_10: number | null
   kills_by_10: number | null
   deaths_by_10: number | null
-  /** lotuses collected and camps pulled by 10:00, from the replay, null without one */
-  lotuses_by_10: number | null
+  /** camps pulled by 10:00, from the replay, null without one */
   camps_pulled_by_10: number | null
   /** the other heroes in the player's lane, empty without a replay or outside the three lanes */
   lane_allies: number[]
