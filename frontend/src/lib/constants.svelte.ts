@@ -38,3 +38,4 @@ export function itemIcon(id: number): string | undefined {
   const name = constants.items[id]
   return name && `${CDN}/items/${name}.png`
 }
+export const itemName = (id: number) => constants.items[id]?.replaceAll('_', ' ') ?? `Item ${id}`

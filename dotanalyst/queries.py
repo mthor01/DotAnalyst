@@ -212,23 +212,6 @@ def matches(session: Session, where: list) -> list[dict]:
     return rows
 
 
-def heroes(session: Session, where: list) -> list[dict]:
-    p = MatchPlayer
-    games = func.count().label("games")
-    return _rows(
-        session,
-        _mine(
-            p.hero_id, games, func.sum(WON).label("wins"),
-            func.avg(p.kills).label("kills"), func.avg(p.deaths).label("deaths"),
-            func.avg(p.assists).label("assists"), func.avg(p.gold_per_min).label("gold_per_min"),
-            func.avg(p.xp_per_min).label("xp_per_min"),
-        )
-        .where(*where)
-        .group_by(p.hero_id)
-        .order_by(games.desc(), p.hero_id),
-    )
-
-
 def teammates(session: Session, where: list) -> list[dict]:
     """Games and wins on the same team as each other tracked account."""
     games = func.count().label("games")

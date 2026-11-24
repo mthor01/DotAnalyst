@@ -137,16 +137,6 @@ def test_filters(session):
     assert found(league_id=9003) == []
 
 
-def test_heroes_counts_and_averages(session):
-    rows = {r["hero_id"]: r for r in queries.heroes(session, queries.conditions(ME))}
-    assert set(rows) == {1, 6}
-    assert (rows[1]["games"], rows[1]["wins"]) == (2, 1)
-    assert (rows[6]["games"], rows[6]["wins"]) == (1, 0)
-    assert rows[1]["kills"] == TEMPLATE["players"][0]["kills"]  # same template player in both games
-    assert rows[6]["gold_per_min"] == TEMPLATE["players"][5]["gold_per_min"]
-    assert [r["hero_id"] for r in queries.heroes(session, queries.conditions(ME))] == [1, 6]  # most played first
-
-
 def test_teammates_counts_only_same_team_and_tracked(session):
     rows = queries.teammates(session, queries.conditions(ME))
     assert rows == [{"account_id": FRIEND, "label": "friend", "games": 2, "wins": 1}]
@@ -520,8 +510,7 @@ def test_last_keeps_the_newest_matches_of_the_other_filters(session):
     newest = lambda last, **shared: queries.narrowed(session, queries.conditions(ME, **shared), last=last)
     assert ids(queries.matches(session, newest(2))) == [3, 2]
     assert ids(queries.matches(session, newest(1, game_mode=22))) == [2]
-    # match 3 is the newest: hero 1, lost, the friend on my team
-    assert [(r["hero_id"], r["games"], r["wins"]) for r in queries.heroes(session, newest(1))] == [(1, 1, 0)]
+    # match 3 is the newest: lost, the friend on my team
     assert queries.teammates(session, newest(1)) == [{"account_id": FRIEND, "label": "friend", "games": 1, "wins": 0}]
     assert {r["hero_id"] for r in queries.matchups(session, newest(1))} == set(range(2, 11))
 

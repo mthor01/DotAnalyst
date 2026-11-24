@@ -302,7 +302,7 @@
   {#if shown === 'matches'}
     <Matches {query} />
   {:else if shown === 'heroes'}
-    <Heroes {query} matches={recent} open={heroOpen} />
+    <Heroes matches={recent} open={heroOpen} />
   {:else if shown === 'teammates'}
     <Teammates {query} />
   {:else if shown === 'overview'}

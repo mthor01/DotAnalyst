@@ -367,6 +367,15 @@ th button {
 th[aria-sort] {
   color: var(--text);
 }
+/* a sortable header: its arrow keeps its room when hidden, so the header does not shift on a click */
+th button:hover {
+  color: var(--text);
+}
+th .arrow {
+  display: inline-block;
+  width: 0.8em;
+  margin-left: 2px;
+}
 .muted {
   color: var(--muted);
 }

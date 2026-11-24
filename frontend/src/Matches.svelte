@@ -1,6 +1,6 @@
 <script lang="ts">
   import { GAME_MODES, LOBBY_TYPES, clock, get, type MatchRow } from './lib/api'
-  import { constants, itemIcon } from './lib/constants.svelte'
+  import { itemIcon, itemName } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import ReplaySign from './lib/ReplaySign.svelte'
   import { MARKS } from './lib/RoleWheel.svelte'
@@ -47,7 +47,9 @@
   let limit = $derived.by(() => (rows, PAGE))
   const shown = $derived(sorted.slice(0, limit))
 
-  // ---- in date order the rows fall under a header per day, with the day's wins and losses (of all its matches)
+  // ---- in date order the rows fall under a header per day, with the day's wins and losses (of all its matches);
+  //      a hero's matches on the Heroes tab are too few and spread out for days, so each row shows its date there
+  const byDay = $derived(sort.key === 'date' && !given)
   const dayOf = (seconds: number) => new Date(seconds * 1000).toDateString()
   const days = $derived.by(() => {
     const found = new Map<string, { won: number; lost: number }>()
@@ -67,8 +69,6 @@
   }
   const time = (seconds: number) => new Date(seconds * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' })
-
-  const itemName = (id: number) => constants.items[id]?.replaceAll('_', ' ') ?? `Item ${id}`
 
   let unfolded = $state<number[]>([])
   const unfold = (id: number) => (unfolded = unfolded.includes(id) ? unfolded.filter((o) => o !== id) : [...unfolded, id])
@@ -93,7 +93,7 @@
       <thead>
         <tr>
           <th></th>
-          {@render header(sort.key === 'date' ? 'Time' : 'Date', 'date', false)}
+          {@render header(byDay ? 'Time' : 'Date', 'date', false)}
           <th>Hero</th>
           <th>Party</th>
           <th>Result</th>
@@ -111,7 +111,7 @@
         {#each shown as r, i (r.match_id)}
           {@const open = unfolded.includes(r.match_id)}
           {@const result = r.win ? 'won' : 'lost'}
-          {#if sort.key === 'date' && (i === 0 || dayOf(r.start_time) !== dayOf(shown[i - 1].start_time))}
+          {#if byDay && (i === 0 || dayOf(r.start_time) !== dayOf(shown[i - 1].start_time))}
             {@const tally = days.get(dayOf(r.start_time))!}
             <tr class="day">
               <th colspan={COLUMNS} scope="rowgroup">
@@ -131,7 +131,7 @@
               >
             </td>
             <td class="when">
-              {sort.key === 'date' ? time(r.start_time) : date(r.start_time)}
+              {byDay ? time(r.start_time) : date(r.start_time)}
               <small class="muted">{LOBBY_TYPES[r.lobby_type] ?? `Lobby ${r.lobby_type}`} {GAME_MODES[r.game_mode] ?? `Mode ${r.game_mode}`}</small>
             </td>
             <td class="hero">
@@ -265,14 +265,6 @@
   th,
   td {
     padding-inline: 8px;
-  }
-  .sort:hover {
-    color: var(--text);
-  }
-  .arrow {
-    display: inline-block;
-    width: 0.8em;
-    margin-left: 2px;
   }
   .unfold {
     padding: 2px 6px;

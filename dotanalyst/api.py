@@ -157,11 +157,6 @@ def metric_averages(session: Db, where: Where) -> list[dict]:
     return queries.metric_averages(session, where)
 
 
-@app.get("/api/heroes")
-def heroes(session: Db, where: Where) -> list[dict]:
-    return queries.heroes(session, where)
-
-
 @app.get("/api/wards")
 def wards(session: Db, where: Where) -> list[dict]:
     return queries.wards(session, where)
