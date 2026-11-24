@@ -5,14 +5,17 @@
   import ReplaySign from './lib/ReplaySign.svelte'
   import Match from './Match.svelte'
 
-  let { query }: { query: string } = $props()
-  let rows = $state<MatchRow[]>([])
+  /** `given` shows those matches instead of fetching the query's (a hero's on the Heroes tab) */
+  let { query = '', given }: { query?: string; given?: MatchRow[] } = $props()
+  let fetched = $state<MatchRow[]>([])
+  const rows = $derived(given ?? fetched)
   let error = $state('')
 
   $effect(() => {
+    if (given) return
     let current = true // a slower, older request must not overwrite a newer one
     get<MatchRow[]>('matches', query).then(
-      (found) => current && ((rows = found), (error = '')),
+      (found) => current && ((fetched = found), (error = '')),
       (e) => current && (error = e.message),
     )
     return () => (current = false)
@@ -29,9 +32,11 @@
 {#if error}
   <p class="error" role="alert">{error}</p>
 {:else}
-  <p class="muted">
-    {rows.length} matches{#if rows.length}, {wins} won ({Math.round((100 * wins) / rows.length)}%){/if}
-  </p>
+  {#if !given}
+    <p class="muted">
+      {rows.length} matches{#if rows.length}, {wins} won ({Math.round((100 * wins) / rows.length)}%){/if}
+    </p>
+  {/if}
   <div class="card tall">
     <table>
       <thead>

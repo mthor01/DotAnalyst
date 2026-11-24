@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { clock, get, sortedBy, type HeroRow, type MatchRow } from './lib/api'
+  import { get, sortedBy, type HeroRow, type MatchRow } from './lib/api'
   import { heroName, heroPortrait } from './lib/constants.svelte'
   import Count from './lib/Count.svelte'
   import WinRate from './lib/WinRate.svelte'
+  import Matches from './Matches.svelte'
 
-  /** `matches` are the profile's matches for the same query, newest first: a hero unfolds into its latest ones */
+  /** `matches` are the profile's matches for the same query, newest first: a hero unfolds into them, as on the Matches tab */
   let { query, matches }: { query: string; matches: MatchRow[] } = $props()
-  const LATEST = 20
   let rows = $state<HeroRow[]>([])
   let error = $state('')
 
@@ -34,7 +34,6 @@
   const sortBy = (column: number) =>
     (sort = { column, descending: sort.column === column ? !sort.descending : true })
   const most = $derived(Math.max(0, ...rows.map((r) => r.games)))
-  const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' })
   let unfolded = $state<number[]>([])
   const unfold = (id: number) => (unfolded = unfolded.includes(id) ? unfolded.filter((o) => o !== id) : [...unfolded, id])
 </script>
@@ -62,7 +61,7 @@
           {@const open = unfolded.includes(r.hero_id)}
           <tr>
             <td>
-              <button class="unfold" aria-expanded={open} aria-label="Latest matches on {heroName(r.hero_id)}" onclick={() => unfold(r.hero_id)}>{open ? '▾' : '▸'}</button>
+              <button class="unfold" aria-expanded={open} aria-label="Matches on {heroName(r.hero_id)}" onclick={() => unfold(r.hero_id)}>{open ? '▾' : '▸'}</button>
             </td>
             <td class="hero"><img src={heroPortrait(r.hero_id)} alt={heroName(r.hero_id)} title={heroName(r.hero_id)} width="44" height="25" loading="lazy" /></td>
             {#each COLUMNS as [, , text], i}
@@ -72,29 +71,8 @@
             {/each}
           </tr>
           {#if open}
-            {@const latest = matches.filter((m) => m.hero_id === r.hero_id).slice(0, LATEST)}
             <tr class="more">
-              <td colspan={COLUMNS.length + 2}>
-                <table>
-                  <thead>
-                    <tr><th>Date</th><th>Result</th><th class="num">K / D / A</th><th class="num">GPM</th><th class="num">XPM</th><th class="num">LH / DN</th><th class="num">Duration</th></tr>
-                  </thead>
-                  <tbody>
-                    {#each latest as m (m.match_id)}
-                      <tr>
-                        <td><a href="#match/{m.match_id}">{date(m.start_time)}</a></td>
-                        <td><span class="dot {m.win ? 'won' : 'lost'}"></span>{m.win ? 'Won' : 'Lost'}</td>
-                        <td class="num">{m.kills} / {m.deaths} / {m.assists}</td>
-                        <td class="num">{m.gold_per_min}</td>
-                        <td class="num">{m.xp_per_min}</td>
-                        <td class="num">{m.last_hits} / {m.denies}</td>
-                        <td class="num">{clock(m.duration)}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-                {#if r.games > LATEST}<p class="muted">The latest {LATEST} of {r.games} matches.</p>{/if}
-              </td>
+              <td colspan={COLUMNS.length + 2}><Matches given={matches.filter((m) => m.hero_id === r.hero_id)} /></td>
             </tr>
           {/if}
         {/each}
