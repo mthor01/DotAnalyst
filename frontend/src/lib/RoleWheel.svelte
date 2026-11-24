@@ -29,10 +29,18 @@
 <script lang="ts">
   import { cubicInOut } from 'svelte/easing'
   import { prefersReducedMotion, Tween } from 'svelte/motion'
+  import { untrack } from 'svelte'
   import { heroIcon, heroName } from './constants.svelte'
 
-  /** `none` names the games without a known lane. */
-  let { games, none }: { games: Game[]; none: string } = $props()
+  /** `none` names the games without a known lane. With `onpick` the roles shown alone are kept outside, as `picked`: a click
+   *  in the middle ring asks for them and the wheel turns once `picked` changes; `zoomed` then has those roles' games. */
+  let {
+    games,
+    none,
+    zoomed = games,
+    picked = [],
+    onpick,
+  }: { games: Game[]; none: string; zoomed?: Game[]; picked?: Role[]; onpick?: (roles: Role[]) => void } = $props()
 
   const ROLES = new Map<Role, { title: string; color: string }>([
     [1, { title: 'Pos 1 (carry)', color: 'series-1' }],
@@ -68,24 +76,38 @@
   const fits = (share: number) => share * 2 * Math.PI * ICON_AT >= ICON + 2
   const SLIVER = 5 // in the wheel's units: a hero slice narrower than this at the outer edge reads as a gap
 
-  // ---- a lane clicked in the middle ring fills the whole wheel: 0 shows all lanes, 1 that lane alone
-  let focus = $state<Role>() // kept while the wheel widens back, so it unfolds the way it folded
+  // ---- the roles picked fill the whole wheel: 0 shows all roles, 1 the picked ones alone (next to each other in ROLES)
+  let own = $state<Role[]>([]) // what a click picked, when no one outside keeps it (team pages)
+  const chosen = $derived(onpick ? picked : own)
+  const pick = (roles: Role[]) => (onpick ? onpick(roles) : (own = roles))
+  let focus = $state<Role[]>([]) // kept while the wheel widens back, so it unfolds the way it folded
   const zoom = new Tween(0, { easing: cubicInOut })
-  const show = (id?: Role) => {
-    if (id) focus = id
-    zoom.set(id ? 1 : 0, { duration: prefersReducedMotion.current ? 0 : 700 })
-  }
-  const alone = $derived(zoom.target === 1 ? wheel.find((r) => r.id === focus) : undefined)
-  /** Where a turn of the full wheel is drawn: `zoom` of the way to its place once the focused lane fills the ring. */
+  const duration = () => (prefersReducedMotion.current ? 0 : 700)
+  $effect(() => {
+    const next = chosen
+    untrack(async () => {
+      // from one pick to another the wheel first turns back to all roles; a newer pick aborts the tween, so this never resumes
+      if (zoom.target && focus.join() !== next.join()) await zoom.set(0, { duration: duration() })
+      if (next.length) focus = next
+      zoom.set(next.length ? 1 : 0, { duration: duration() })
+    })
+  })
+  const alone = $derived(zoom.target === 1 && focus.length > 0)
+  const span = $derived.by(() => {
+    const parts = wheel.filter((r) => focus.includes(r.id))
+    return parts.length ? { from: parts[0].from, to: parts.at(-1)!.to } : undefined
+  })
+  /** Where a turn of the full wheel is drawn: `zoom` of the way to its place once the focused roles fill the ring. */
   function turn(t: number) {
-    const r = wheel.find((r) => r.id === focus)
-    if (!r) return t
-    return t + zoom.current * (Math.min(1, Math.max(0, (t - r.from) / (r.to - r.from))) - t)
+    if (!span) return t
+    return t + zoom.current * (Math.min(1, Math.max(0, (t - span.from) / (span.to - span.from))) - t)
   }
+  const focusGames = $derived(zoomed.filter((g) => focus.includes(g.role)))
+  const GROUPS: Record<string, string> = { '1,2,3': 'cores', '4,5': 'supports' }
 
   // ---- the outer ring: each hero once over all roles, or over the focused role once the wheel has turned past half way.
   // Heroes thinner than SLIVER merge into one grey "+N" slice at the end, `others`, when there are at least two.
-  const ringGames = $derived(zoom.current > 0.5 && focus ? games.filter((g) => g.role === focus) : games)
+  const ringGames = $derived(zoom.current > 0.5 && focus.length ? focusGames : games)
   const ring = $derived.by(() => {
     const all = tally(ringGames)
     const small = all.filter((t) => (t.games / ringGames.length) * 2 * Math.PI * 97 < SLIVER)
@@ -110,8 +132,8 @@
         style:fill="var(--{role.color})"
         role="button"
         tabindex={alone ? -1 : 0}
-        onclick={() => !alone && show(role.id)}
-        onkeydown={(e) => !alone && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), show(role.id))}
+        onclick={() => !alone && pick([role.id])}
+        onkeydown={(e) => !alone && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), pick([role.id]))}
       >
         <title>{role.title}: {record(role.wins, role.games)}</title>
       </path>
@@ -136,8 +158,8 @@ ${heroName(t.hero_id)}: ${record(t.wins, t.games)}`).join('')}</title>
         </g>
       {/each}
     </g>
-    <text class="count" y="2">{alone ? alone.games : games.length}</text>
-    <text class="unit" y="15">{alone ? alone.title.toLowerCase() : 'matches'}</text>
+    <text class="count" y="2">{alone ? focusGames.length : games.length}</text>
+    <text class="unit" y="15">{alone ? (GROUPS[focus.join()] ?? ROLES.get(focus[0])!.title.toLowerCase()) : 'matches'}</text>
   </svg>
   <ul>
     {#each wheel as role (role.id)}
@@ -146,7 +168,7 @@ ${heroName(t.hero_id)}: ${record(t.wins, t.games)}`).join('')}</title>
         <span class="muted">{record(role.wins, role.games)}</span>
       </li>
     {/each}
-    {#if alone}<li><button class="action" onclick={() => show()}>Show all</button></li>{/if}
+    {#if alone}<li><button class="action" onclick={() => pick([])}>Show all</button></li>{/if}
   </ul>
 </div>
 

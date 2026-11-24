@@ -35,7 +35,7 @@
   // the player's own filters, sent as position, party and last; the league pages have none of them
   const SIZES = [25, 100, 500, 0] // 0: every match
   /** The role picker: a short name, a long one and the positions it takes in (see Position 1–5 in IMPLEMENTATION.md) */
-  const ROLES: [string, string, number[]][] = [
+  const ROLES: [string, string, (1 | 2 | 3 | 4 | 5)[]][] = [
     ['All', 'Every role', []],
     ['1', 'Pos 1 (carry)', [1]],
     ['2', 'Pos 2 (mid)', [2]],
@@ -283,7 +283,13 @@
   {:else if !filters.account_id}
     <p class="muted">No tracked accounts yet. Add one with Add profile above, by its friend id or Steam id.</p>
   {:else if page === 'profile'}
-    <Profile {query} tab={profileTab} ontracked={loadAccounts} account={accounts.find((a) => String(a.account_id) === filters.account_id)} />
+    <Profile
+      {query}
+      tab={profileTab}
+      ontracked={loadAccounts}
+      positions={ROLES[own.role][2]}
+      onpositions={(p) => (own.role = Math.max(0, ROLES.findIndex(([, , r]) => r.join() === p.join())))}
+      account={accounts.find((a) => String(a.account_id) === filters.account_id)} />
   {:else}
     <Compare {query} {accounts} />
   {/if}

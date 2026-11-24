@@ -16,7 +16,16 @@
     account,
     tab,
     ontracked,
-  }: { query: string; account: Account | undefined; tab: string; ontracked: () => void } = $props()
+    positions,
+    onpositions,
+  }: {
+    query: string
+    account: Account | undefined
+    tab: string
+    ontracked: () => void
+    positions: (1 | 2 | 3 | 4 | 5)[] // the Role filter's
+    onpositions: (positions: (1 | 2 | 3 | 4 | 5)[]) => void
+  } = $props()
 
   let tracking = $state(false)
   let tracked = $state('') // what the last "Add teammates" did
@@ -48,6 +57,14 @@
     )
     return () => (current = false)
   })
+  // the same matches over every role, for the role wheel to turn from all roles to the picked ones; the main fetch reports errors
+  let everyRole = $state.raw<MatchRow[]>([])
+  const roleless = $derived(new URLSearchParams([...new URLSearchParams(query)].filter(([k]) => k !== 'position')).toString())
+  $effect(() => {
+    let current = true
+    get<MatchRow[]>('matches', roleless).then((found) => current && (everyRole = found), () => {})
+    return () => (current = false)
+  })
 
   const TOP_HEROES = 10
   const LANES = 5 // matches in the best and in the worst lanes
@@ -58,6 +75,9 @@
 
   const heroes = $derived(tally(recent))
   const roles = $derived(recent.map((r) => ({ ...r, role: r.position })))
+  const allRoles = $derived(everyRole.map((r) => ({ ...r, role: r.position })))
+  const FORM = 10 // results in the Form card
+  const streak = $derived(recent.findIndex((r) => r.win !== recent[0].win) === -1 ? recent.length : recent.findIndex((r) => r.win !== recent[0].win))
 
   const signed = (n: number) => `${n > 0 ? '+' : ''}${Math.round(n).toLocaleString()}`
   const note = (r: MatchRow) =>
@@ -116,7 +136,7 @@
   const shownStat = (value: number | null, kind: string) =>
     value === null ? '–' : kind === 'signed' ? signed(value) : kind === 'tenths' ? value.toFixed(1) : Math.round(value).toLocaleString()
 
-  // ---- activity: games per day over the last 3 months, one column per week from Monday
+  // ---- activity: games per day over the last 6 months, one column per week from Monday
   const dayOf = (d: Date) => d.toLocaleDateString('en-CA')
   const perDay = $derived(
     recent.reduce((m, r) => {
@@ -128,7 +148,7 @@
   const weeks = $derived.by(() => {
     const day = new Date()
     day.setHours(0, 0, 0, 0)
-    day.setMonth(day.getMonth() - 3)
+    day.setMonth(day.getMonth() - 6)
     day.setDate(day.getDate() - ((day.getDay() + 6) % 7)) // back to that week's Monday
     const found: { date: Date; games: number; wins: number }[][] = []
     for (const now = new Date(); day <= now; day.setDate(day.getDate() + 1)) {
@@ -145,7 +165,7 @@
     const lean = Math.min(1, Math.abs((4 * d.wins) / d.games - 2)) // 0 at 50 %, 1 at 25 % or 75 % and beyond
     return `color-mix(in oklab, var(${d.wins * 2 < d.games ? '--dire' : '--radiant'}) ${100 * lean}%, var(--series-4))`
   }
-  const dot = (games: number) => `${Math.max(5, 18 * Math.sqrt(games / busiest))}px`
+  const dot = (games: number) => `${games && Math.max(5, 18 * Math.sqrt(games / busiest))}px`
   const dayNote = (d: { date: Date; games: number; wins: number }) =>
     `${d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}: ${d.games || 'no'} ${d.games === 1 ? 'game' : 'games'}` +
     (d.games ? `, ${d.wins} won (${percent(d.wins, d.games)}%)` : '')
@@ -207,9 +227,11 @@
       <dd class="muted">even is within {EVEN} net worth at 10:00</dd>
     </div>
     <div>
-      <dt>Ranked</dt>
-      <dd>{share(recent.filter((r) => r.lobby_type === 7).length)}</dd>
-      <dd class="muted">of these matches</dd>
+      <dt>Form</dt>
+      <dd class="form" aria-label="The last {Math.min(FORM, recent.length)} results, newest last">
+        {#each recent.slice(0, FORM).reverse() as r (r.match_id)}<i class:won={r.win} title={note(r)}></i>{/each}
+      </dd>
+      <dd class="muted">{recent[0].win ? 'won' : 'lost'} the last {streak === 1 ? 'one' : streak}</dd>
     </div>
     <div>
       <dt>With tracked players</dt>
@@ -219,7 +241,7 @@
   </dl>
   <div class="overview">
     <section class="card roles">
-      <RoleWheel games={roles} none="No replay" />
+      <RoleWheel games={allRoles} zoomed={roles} picked={positions} onpick={(p) => onpositions(p as typeof positions)} none="No replay" />
     </section>
 
     <section class="card">
@@ -245,29 +267,24 @@
   </div>
 
   <section class="card activity">
-    <div class="calendar" role="img" aria-label="Games and win rate per day over the last 3 months: {active.length} days played">
+    <div class="calendar" role="img" aria-label="Games and win rate per day over the last 6 months: {active.length} days played">
       <div class="week">
         <span class="month"></span>
         {#each weeks[0] as d}<span class="weekday">{d.date.toLocaleDateString('en-GB', { weekday: 'short' })}</span>{/each}
       </div>
-      {#each weeks as week}
+      {#each weeks as week, w}
         {@const first = week.find((d) => d.date.getDate() === 1)}
-        <div class="week">
+        <div class="week" style:--w={w}>
           <span class="month">{first ? first.date.toLocaleDateString('en-GB', { month: 'short' }) : ''}</span>
           {#each week as d}
-            <i title={dayNote(d)}>{#if d.games}<b style:background={tint(d)} style:width={dot(d.games)} style:height={dot(d.games)}></b>{/if}</i>
+            <i title={dayNote(d)}><b style:background={d.games ? tint(d) : 'transparent'} style:width={dot(d.games)} style:height={dot(d.games)}></b></i>
           {/each}
         </div>
       {/each}
     </div>
     <div class="muted">
       <h3>Activity</h3>
-      <p>
-        {active.reduce((n, d) => n + d.games, 0)} games on {active.length} days in the last 3 months, at most {busiest}
-        in one day. One square per day, a column per week from Monday. The bigger the circle, the more games that day; its
-        colour is the day's win rate: yellow at half, the redder the more were lost, full red at 25 % or less, the greener the
-        more were won, full green at 75 % or more.
-      </p>
+      <p>{active.reduce((n, d) => n + d.games, 0)} games on {active.length} days in the last 6 months, at most {busiest} in one day.</p>
     </div>
   </section>
 
@@ -613,8 +630,33 @@
     background: var(--raised);
     border-radius: 3px;
   }
+  /* a change of filters grows, shrinks and recolours the circles, one week after the other from the left */
   .week b {
     border-radius: 50%;
+    transition-property: width, height, background-color;
+    transition-duration: 0.45s;
+    transition-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+    transition-delay: calc(var(--w) * 12ms);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .week b {
+      transition: none;
+    }
+  }
+  .form {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    height: 1.2em;
+  }
+  .form i {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--dire);
+  }
+  .form i.won {
+    background: var(--radiant);
   }
 
   .vision {
