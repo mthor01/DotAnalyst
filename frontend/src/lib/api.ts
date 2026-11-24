@@ -33,8 +33,9 @@ export type MatchRow = {
   wards_destroyed: number | null
   obs_lifetime: number | null
   /** the laning numbers at 10:00 (kills and deaths before it), see dotanalyst/metrics.py; null without a replay, in
-   *  a match that ended before 10:00, and (lane_cs_diff and the two lane damages) outside the three lanes */
+   *  a match that ended before 10:00, and (lane_cs_diff, lane_dn_diff and the two lane damages) outside the three lanes */
   lane_cs_diff: number | null
+  lane_dn_diff: number | null
   last_hits_at_10: number | null
   denies_at_10: number | null
   net_worth_at_10: number | null
@@ -53,11 +54,6 @@ export type MatchRow = {
   party: boolean // queued with someone, see Solo or party in IMPLEMENTATION.md
   with_tracked: boolean
   position: 1 | 2 | 3 | 4 | 5 // from the lane and the farm, see IMPLEMENTATION.md
-  /** the enemy in the mirrored position (1-3, 2-2, 4-5), net worth and last hits at 10:00 minus theirs, and their hero damage by 10:00 */
-  mirror_hero_id: number | null
-  mirror_nw_diff: number | null
-  mirror_cs_diff: number | null
-  mirror_damage_at_10: number | null
 }
 
 export type HeroRow = {
@@ -247,6 +243,7 @@ const count = (v: number) => v.toFixed(2)
 export const METRICS: { name: string; label: string; show: (v: number) => string }[] = [
   { name: 'lane_cs_diff', label: 'Lane last hits at 10:00 vs enemy lane', show: signed(1) },
   { name: 'lane_nw_diff', label: 'Lane net worth at 10:00 vs enemy lane', show: signed(0) },
+  { name: 'lane_dn_diff', label: 'Lane denies at 10:00 vs enemy lane', show: signed(1) },
   { name: 'kill_participation', label: 'Kill participation', show: share },
   { name: 'fight_participation', label: 'Teamfights taken part in', show: share },
   { name: 'deaths_outside_fights', label: 'Deaths outside teamfights', show: count },

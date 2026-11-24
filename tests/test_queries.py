@@ -122,25 +122,6 @@ def test_matches_carry_lane_allies(session):
     assert (me["lane_allies"], sorted(me["lane_enemies"])) == ([2], [6, 7])  # myself and the top laner left out
 
 
-def test_matches_compare_with_the_mirrored_enemy(session):
-    session.add_all(
-        [
-            Lane(match_id=1, player_slot=0, lane="mid"),  # me, position 2
-            Lane(match_id=1, player_slot=128, lane="mid"),  # hero 6, the enemy position 2
-            Metric(match_id=1, player_slot=0, name="net_worth_at_10", value=3000),
-            Metric(match_id=1, player_slot=0, name="last_hits_at_10", value=40),
-            Metric(match_id=1, player_slot=128, name="net_worth_at_10", value=2500),
-            Metric(match_id=1, player_slot=128, name="last_hits_at_10", value=50),
-            Metric(match_id=1, player_slot=128, name="damage_at_10", value=1200),
-        ]
-    )
-    rows = {r["match_id"]: r for r in queries.matches(session, queries.conditions(ME))}
-    mirror = lambda r: (r["mirror_hero_id"], r["mirror_nw_diff"], r["mirror_cs_diff"], r["mirror_damage_at_10"])  # noqa: E731
-    assert mirror(rows[1]) == (6, 500, -10, 1200)
-    assert mirror(rows[2])[1:] == (None, None, None)  # no replay stats
-    assert queries.MIRROR == {1: 3, 3: 1, 2: 2, 4: 5, 5: 4}
-
-
 def test_filters(session):
     def found(**filters):
         return ids(queries.matches(session, queries.conditions(ME, **filters)))

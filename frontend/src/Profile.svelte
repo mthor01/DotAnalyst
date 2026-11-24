@@ -87,13 +87,6 @@
   const reach = $derived(Math.max(1000, ...laneGames.map((r) => Math.abs(r.lane_nw_diff ?? 0))))
   const at10 = (key: keyof MatchRow) => mean(laneGames.map((r) => r[key] as number | null))
   const laneMatches = $derived(laneGames.filter((r) => r.xp_at_10 !== null).length)
-  // the best and worst lanes rank by the whole lane's lead, or by yours over the enemy in the mirrored position
-  // (see Mirror in IMPLEMENTATION.md)
-  let versus = $state<'lane' | 'mirror'>('lane')
-  const VERSUS = { lane: 'Your lane vs theirs', mirror: 'You vs your mirror' }
-  const lead = $derived(versus === 'lane'
-    ? { nw: 'lane_nw_diff', cs: 'lane_cs_diff' } as const
-    : { nw: 'mirror_nw_diff', cs: 'mirror_cs_diff' } as const) // prettier-ignore
   const laning = $derived([
     ['By 10:00', [
       ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals', ''],
@@ -103,24 +96,20 @@
       ['Kills', at10('kills_by_10'), '', 'tenths'],
       ['Deaths', at10('deaths_by_10'), '', 'tenths'],
       ['Camps pulled', at10('camps_pulled_by_10'), '', 'tenths'],
+      ['Damage dealt', at10('damage_at_10'), 'to enemy heroes', ''],
+      ['Damage taken', at10('damage_taken_at_10'), 'from enemy heroes', ''],
     ]],
     ['Your lane vs the enemy lane, by 10:00', [
       ['Net worth lead', at10('lane_nw_diff'), 'your lane minus theirs', 'signed'],
       ['Last-hit lead', at10('lane_cs_diff'), 'your lane minus theirs', 'signed'],
+      ['Deny lead', at10('lane_dn_diff'), 'your lane minus theirs', 'signed'],
       ['Your lane dealt', at10('lane_damage_at_10'), 'you and your lane partner, to enemy heroes', ''],
       ['Enemy lane dealt', at10('enemy_lane_damage_at_10'), 'the heroes you laned against, to your side', ''],
-    ]],
-    ['You vs your mirror, by 10:00', [
-      ['Net worth lead', at10('mirror_nw_diff'), 'you minus the enemy in your mirrored position', 'signed'],
-      ['Last-hit lead', at10('mirror_cs_diff'), 'you minus the enemy in your mirrored position', 'signed'],
-      ['You dealt', at10('damage_at_10'), 'to enemy heroes', ''],
-      ['Your mirror dealt', at10('mirror_damage_at_10'), 'to any of your heroes', ''],
-      ['You took', at10('damage_taken_at_10'), 'from all enemy heroes', ''],
     ]],
   ] as const) // prettier-ignore
   // the matches with the biggest and smallest net worth lead; with few matches each list takes its half, so none is in both
   const extremes = $derived.by(() => {
-    const ranked = laneGames.filter((r) => r[lead.nw] !== null).sort((a, b) => b[lead.nw]! - a[lead.nw]!)
+    const ranked = laneGames.filter((r) => r.lane_nw_diff !== null).sort((a, b) => b.lane_nw_diff! - a.lane_nw_diff!)
     const best = ranked.slice(0, Math.min(LANES, Math.ceil(ranked.length / 2)))
     return [['Best lanes', best], ['Worst lanes', ranked.slice(best.length).reverse().slice(0, LANES)]] as const
   })
@@ -297,7 +286,7 @@
   </dl>
 
   {:else if shown === 'laning'}
-  <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches{onHero ? ` on ${heroName(laneHero)}` : ''} with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. With "You vs your mirror" the leads compare you alone with the enemy whose position mirrors yours: 1 with 3, 2 with 2, 4 with 5. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a date to open the match.</About></p>
+  <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches{onHero ? ` on ${heroName(laneHero)}` : ''} with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a date to open the match.</About></p>
   <label class="pick">
     Hero
     <select value={onHero ? laneHero : 0} onchange={(e) => (laneHero = +e.currentTarget.value)}>
@@ -342,11 +331,6 @@
     <p class="muted">Lane net worth lead at 10:00, one column per match.<About>One column per match, the oldest on the left. The bar is the net worth lead of the player's lane at 10:00: up when ahead, down when behind. A match without a parsed replay has no bar. The dot is the result.</About></p>
   </section>
 
-  <div class="choice rank" role="group" aria-label="Whom the best and worst lanes compare you with">
-    {#each Object.entries(VERSUS) as [id, title]}
-      <button aria-pressed={versus === id} onclick={() => (versus = id as typeof versus)}>{title}</button>
-    {/each}
-  </div>
   {#each extremes as [title, games]}
     <h3 class="group">{title}</h3>
     {#if games.length}
@@ -357,11 +341,11 @@
           </thead>
           <tbody>
             {#each games as r (r.match_id)}
-              {@const nw = r[lead.nw]}
-              {@const cs = r[lead.cs]}
+              {@const nw = r.lane_nw_diff}
+              {@const cs = r.lane_cs_diff}
               <tr>
                 <td><a href="#match/{r.match_id}">{date(r.start_time)}</a></td>
-                <!-- the whole lane on both sides, whichever lead is picked: you first, then your lane partners -->
+                <!-- the whole lane on both sides: you first, then your lane partners -->
                 {#each [[r.hero_id, ...r.lane_allies], r.lane_enemies] as side}
                   <td class="laners">
                     {#each side as hero}<img src={heroPortrait(hero)} alt={heroName(hero)} title={heroName(hero)} width="64" height="36" loading="lazy" />{/each}
@@ -674,9 +658,6 @@
     object-fit: cover;
     border-radius: 3px;
     vertical-align: middle;
-  }
-  .rank {
-    margin-top: 20px;
   }
   .pick select {
     margin-left: 6px;

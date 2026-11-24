@@ -41,6 +41,11 @@ def lane_nw_diff(match: dict, slot: int) -> int | None:
     return _lane_diff(match, slot, "net_worth")
 
 
+def lane_dn_diff(match: dict, slot: int) -> int | None:
+    """Denies of the player's lane at 10:00 minus the enemy lane's."""
+    return _lane_diff(match, slot, "denies")
+
+
 def last_hits_at_10(match: dict, slot: int) -> int | None:
     return _ten(match, slot, "last_hits")
 
@@ -159,7 +164,7 @@ def deaths_outside_fights(match: dict, slot: int) -> int:
 
 
 METRICS = (
-    lane_cs_diff, lane_nw_diff, last_hits_at_10, denies_at_10, net_worth_at_10, xp_at_10, damage_at_10,
+    lane_cs_diff, lane_nw_diff, lane_dn_diff, last_hits_at_10, denies_at_10, net_worth_at_10, xp_at_10, damage_at_10,
     damage_taken_at_10, lane_damage_at_10, enemy_lane_damage_at_10, kills_by_10, deaths_by_10, camps_pulled_by_10,
     camps_stacked, obs_placed, sen_placed, obs_bought, sen_bought, wards_destroyed, obs_lifetime,
     fight_participation, kill_participation, deaths_outside_fights,

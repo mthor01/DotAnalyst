@@ -58,8 +58,11 @@ def test_lane_differences(match):
     assert metrics.lane_nw_diff(match, PHOENIX) == (2276 + 3138) - (5312 + 2460)
     # bottom: Luna 32 and Lich 5 against Pudge 6 and Pangolier 49
     assert metrics.lane_cs_diff(match, LUNA) == metrics.lane_cs_diff(match, LICH) == (32 + 5) - (6 + 49)
+    denies = lambda *slots: sum(metrics.denies_at_10(match, s) for s in slots)  # noqa: E731
+    assert metrics.lane_dn_diff(match, DAWNBREAKER) == denies(DAWNBREAKER) - denies(SHADOW_FIEND)
     jungler = {**match, "lanes": [{"player_slot": DAWNBREAKER, "lane": "jungle"}]}
     assert metrics.lane_cs_diff(jungler, DAWNBREAKER) is None
+    assert metrics.lane_dn_diff(jungler, DAWNBREAKER) is None
 
 
 def test_wards_placed(match):
