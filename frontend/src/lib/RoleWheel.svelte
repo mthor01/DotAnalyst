@@ -46,15 +46,14 @@
     ['jungle', { title: 'Jungle', color: 'series-3' }],
     ['none', { title: none, color: 'axis' }],
   ])
-  /** Each role's share of the games, and inside it the heroes played there. `from` and `to` are turns. */
+  /** Each role's share of the games. `from` and `to` are turns. */
   const wheel = $derived.by(() => {
     let at = 0
     return [...ROLES.keys()].flatMap((id) => {
       const mine = games.filter((g) => g.role === id)
       if (!mine.length) return []
       const from = at
-      const slices = tally(mine).map((t) => ({ ...t, from: at, to: (at += t.games / games.length) }))
-      return [{ id, ...ROLES.get(id)!, games: mine.length, wins: mine.filter((g) => g.win).length, from, to: at, slices }]
+      return [{ id, ...ROLES.get(id)!, games: mine.length, wins: mine.filter((g) => g.win).length, from, to: (at += mine.length / games.length) }]
     })
   })
   const point = (r: number, turn: number) => `${r * Math.sin(2 * Math.PI * turn)} ${-r * Math.cos(2 * Math.PI * turn)}`
@@ -66,6 +65,8 @@
   }
   const ICON = 15 // in the wheel's units; a slice shorter than this along its arc gets no hero icon
   const ICON_AT = 78
+  const fits = (share: number) => share * 2 * Math.PI * ICON_AT >= ICON + 2
+  const SLIVER = 5 // in the wheel's units: a hero slice narrower than this at the outer edge reads as a gap
 
   // ---- a lane clicked in the middle ring fills the whole wheel: 0 shows all lanes, 1 that lane alone
   let focus = $state<Role>() // kept while the wheel widens back, so it unfolds the way it folded
@@ -81,6 +82,22 @@
     if (!r) return t
     return t + zoom.current * (Math.min(1, Math.max(0, (t - r.from) / (r.to - r.from))) - t)
   }
+
+  // ---- the outer ring: each hero once over all roles, or over the focused role once the wheel has turned past half way.
+  // Heroes thinner than SLIVER merge into one grey "+N" slice at the end, `others`, when there are at least two.
+  const ringGames = $derived(zoom.current > 0.5 && focus ? games.filter((g) => g.role === focus) : games)
+  const ring = $derived.by(() => {
+    const all = tally(ringGames)
+    const small = all.filter((t) => (t.games / ringGames.length) * 2 * Math.PI * 97 < SLIVER)
+    const others = small.length > 1 ? small : []
+    let at = 0
+    const slice = (hero_id: number, games: number, wins: number, others: Tally[]) =>
+      ({ hero_id, games, wins, others, from: at, to: (at += games / ringGames.length) })
+    return [
+      ...all.filter((t) => !others.includes(t)).map((t) => slice(t.hero_id, t.games, t.wins, [])),
+      ...(others.length ? [slice(0, others.reduce((n, t) => n + t.games, 0), others.reduce((n, t) => n + t.wins, 0), others)] : []),
+    ]
+  })
 </script>
 
 <div class="roles">
@@ -98,25 +115,27 @@
       >
         <title>{role.title}: {record(role.wins, role.games)}</title>
       </path>
-      {#each role.slices as s (s.hero_id)}
-        {@const from = turn(s.from)}
-        {@const to = turn(s.to)}
-        {@const middle = (from + to) / 2}
+    {/each}
+    <!-- fades out and back in around the turn's half way, where the ring switches to the focused role's heroes -->
+    <g style:opacity={Math.abs(2 * zoom.current - 1)}>
+      {#each ring as s (s.hero_id)}
+        {@const middle = (s.from + s.to) / 2}
+        {@const x = ICON_AT * Math.sin(2 * Math.PI * middle)}
+        {@const y = -ICON_AT * Math.cos(2 * Math.PI * middle)}
         <g class="slice">
-          <title>{heroName(s.hero_id)}, {role.title.toLowerCase()}: {record(s.wins, s.games)}</title>
-          <path d={segment(59, 97, from, to)} class:winning={s.wins * 2 >= s.games} class:losing={s.wins * 2 < s.games} />
-          {#if (to - from) * 2 * Math.PI * ICON_AT >= ICON + 2}
-            <image
-              href={heroIcon(s.hero_id)}
-              x={ICON_AT * Math.sin(2 * Math.PI * middle) - ICON / 2}
-              y={-ICON_AT * Math.cos(2 * Math.PI * middle) - ICON / 2}
-              width={ICON}
-              height={ICON}
-            />
+          {#if s.others.length}
+            <title>{s.others.length} heroes with few matches: {record(s.wins, s.games)}{s.others.map((t) => `
+${heroName(t.hero_id)}: ${record(t.wins, t.games)}`).join('')}</title>
+            <path d={segment(59, 97, s.from, s.to)} />
+            {#if fits(s.to - s.from)}<text class="others" {x} y={y + 3}>+{s.others.length}</text>{/if}
+          {:else}
+            <title>{heroName(s.hero_id)}: {record(s.wins, s.games)}</title>
+            <path d={segment(59, 97, s.from, s.to)} class:winning={s.wins * 2 >= s.games} class:losing={s.wins * 2 < s.games} />
+            {#if fits(s.to - s.from)}<image href={heroIcon(s.hero_id)} x={x - ICON / 2} y={y - ICON / 2} width={ICON} height={ICON} />{/if}
           {/if}
         </g>
       {/each}
-    {/each}
+    </g>
     <text class="count" y="2">{alone ? alone.games : games.length}</text>
     <text class="unit" y="15">{alone ? alone.title.toLowerCase() : 'matches'}</text>
   </svg>
@@ -158,7 +177,7 @@
     outline: none;
     stroke: var(--text);
   }
-  /* a hero's slice is tinted by its win rate: green from half up, red below */
+  /* a hero's slice is tinted by its win rate: green from half up, red below; the others slice stays grey */
   .slice path {
     fill: var(--muted);
     fill-opacity: 0.25;
@@ -172,8 +191,14 @@
   .slice:hover path {
     fill-opacity: 0.5;
   }
-  .slice image {
+  .slice image,
+  .others {
     pointer-events: none;
+  }
+  .others {
+    font-size: 9px;
+    font-weight: 700;
+    fill: var(--muted);
   }
   text {
     text-anchor: middle;
