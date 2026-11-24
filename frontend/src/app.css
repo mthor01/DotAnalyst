@@ -344,7 +344,8 @@ a.open {
   font-size: 16px;
   text-decoration: none;
 }
-tbody tr:hover td {
+/* only the row's own cells: an unfolded row (.more) holds whole tables, whose rows light up on their own */
+tbody tr:not(.more):hover > td {
   background: var(--raised);
 }
 th {
