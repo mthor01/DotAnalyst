@@ -56,10 +56,13 @@ export type MatchRow = {
   /** the other heroes in the player's lane, empty without a replay or outside the three lanes */
   lane_allies: number[]
   lane_enemies: number[]
-  party: boolean // queued with someone, see Solo or party in IMPLEMENTATION.md
+  party_size: number // 1 queued alone; see Solo or party in IMPLEMENTATION.md (a guess counts only regular teammates)
   with_tracked: boolean
   position: 1 | 2 | 3 | 4 | 5 // from the lane and the farm, see IMPLEMENTATION.md
 }
+
+/** A lane within this much net worth at 10:00 counts as even */
+export const EVEN = 500
 
 export type HeroRow = {
   hero_id: number

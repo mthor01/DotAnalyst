@@ -77,15 +77,15 @@ def test_matches_newest_first_with_result(session):
 
 
 def test_matches_tell_solo_from_party(session):
-    party = lambda: {r["match_id"]: r["party"] for r in queries.matches(session, queries.conditions(ME))}
-    assert not any(party().values())  # the friend was on my team twice only
+    party = lambda: {r["match_id"]: r["party_size"] for r in queries.matches(session, queries.conditions(ME))}
+    assert set(party().values()) == {1}  # the friend was on my team twice only
     for i in range(3):
         store_match(session, make_match(10 + i, (5, 1 + i), True, {0: ME, 1: FRIEND}))
     store_match(session, make_match(20, (5, 9), True, {0: ME}))
     session.execute(update(MatchPlayer).where(MatchPlayer.match_id == 11, MatchPlayer.player_slot == 0).values(party_size=1))
-    session.execute(update(MatchPlayer).where(MatchPlayer.match_id == 20, MatchPlayer.player_slot == 0).values(party_size=2))
-    # five matches with the friend now; OpenDota's word wins where stored: solo in 11, a party of anonymous players in 20
-    assert party() == {1: True, 2: False, 3: True, 10: True, 11: False, 12: True, 20: True}
+    session.execute(update(MatchPlayer).where(MatchPlayer.match_id == 20, MatchPlayer.player_slot == 0).values(party_size=3))
+    # five matches with the friend now, a party of 2; OpenDota's word wins where stored: solo in 11, 3 anonymous players in 20
+    assert party() == {1: 2, 2: 1, 3: 2, 10: 2, 11: 1, 12: 2, 20: 3}
 
 
 def test_matches_carry_side_lane_and_company(session):
@@ -530,7 +530,7 @@ def test_narrowed_keeps_the_role_and_queue_the_rows_show(session):
     rows = queries.matches(session, queries.conditions(ME))
     for position in ([1], [2, 3], [4, 5], [rows[1]["position"]]):
         for party in (None, True, False):
-            expected = [r["match_id"] for r in rows if r["position"] in position and party in (None, r["party"])]
+            expected = [r["match_id"] for r in rows if r["position"] in position and party in (None, r["party_size"] > 1)]
             assert ids(queries.matches(session, queries.narrowed(session, queries.conditions(ME), position, party))) == expected
     # the role first, then the newest of what is left
     position = [rows[1]["position"]]

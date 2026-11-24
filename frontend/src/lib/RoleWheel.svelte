@@ -23,6 +23,12 @@
     return [...found.values()].sort((a, b) => b.games - a.games || b.wins - a.wins)
   }
 
+  // the role icons in public/roles; the lanes on team pages borrow their position's
+  export const MARKS = new Map<Role, string>([
+    [1, 'carry'], [2, 'mid'], [3, 'offlane'], [4, 'soft-support'], [5, 'hard-support'],
+    ['safe', 'carry'], ['mid', 'mid'], ['off', 'offlane'],
+  ])
+
   const record = (wins: number, games: number) => `${games} ${games === 1 ? 'match' : 'matches'}, ${percent(wins, games)}% won`
 </script>
 
@@ -68,11 +74,6 @@
   /** A role icon's size in a part `share` long: 16 at most, less where the part's arc at the icon's inner edge is
    *  shorter; under 6 the part gets none. */
   const glyph = (share: number) => Math.min(16, share * 2 * Math.PI * 38 - 2)
-  // the role icons in public/roles; the lanes on team pages borrow their position's
-  const MARKS = new Map<Role, string>([
-    [1, 'carry'], [2, 'mid'], [3, 'offlane'], [4, 'soft-support'], [5, 'hard-support'],
-    ['safe', 'carry'], ['mid', 'mid'], ['off', 'offlane'],
-  ])
   const SLIVER = 5 // in the wheel's units: a hero slice narrower than this at the outer edge reads as a gap
 
   // ---- the roles picked fill the whole middle ring, the others shrink to nothing; none picked shows every role at its share

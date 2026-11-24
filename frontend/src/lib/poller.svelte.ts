@@ -12,8 +12,12 @@ export function follow(seconds = 3): () => void {
 }
 
 /** What a game list shows in its Replay column. `state` is null for a league game not stored as a match yet. */
-export function replaySign(match_id: number, state: string | null, start_time: number): 'parsed' | 'working' | 'waiting' | 'none' {
-  if (state === 'parsed') return 'parsed'
+export function replaySign(
+  match_id: number,
+  state: string | null,
+  start_time: number,
+): 'parsed' | 'working' | 'waiting' | 'failed' | 'unavailable' | 'none' {
+  if (state === 'parsed' || state === 'failed' || state === 'unavailable') return state
   const now = progress.now
   if (now?.working.includes(match_id)) return 'working'
   // the poller's own rule (poll.wanted): asked for by hand, or recent enough that Valve may still have it

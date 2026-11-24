@@ -153,10 +153,11 @@ def _laners(session: Session, where: list) -> dict[tuple[int, int], tuple[list[i
     }
 
 
-def _parties(session: Session, where: list) -> set[int]:
-    """The matches `where` finds in which the player queued with someone: OpenDota's party size above 1 where it is
-    stored, otherwise a teammate who was on the player's team in at least PARTY_TOGETHER stored matches."""
-    known = {r.match_id: r.party_size > 1 for r in session.execute(
+def _parties(session: Session, where: list) -> dict[int, int]:
+    """The matches `where` finds in which the player queued with someone, with the party's size: OpenDota's party size
+    where it is stored, otherwise 1 + the teammates who were on the player's team in at least PARTY_TOGETHER stored
+    matches (a floor: hidden accounts don't count). Solo matches are left out."""
+    known = {r.match_id: r.party_size for r in session.execute(
         _mine(MatchPlayer.match_id, MatchPlayer.party_size).where(*where, MatchPlayer.party_size.is_not(None))
     )}  # fmt: skip
     beside = and_(
@@ -170,14 +171,14 @@ def _parties(session: Session, where: list) -> set[int]:
             .where(MatchPlayer.account_id.in_({me for _, me, _ in seen}))
         ).scalars()
     )  # shortcut: counts teammates of every account `where` names together, right while it names one
-    guessed = {match_id for match_id, _, mate in seen if together[mate] >= PARTY_TOGETHER}
-    return {m for m, party in known.items() if party} | (guessed - known.keys())
+    guessed = Counter(match_id for match_id, _, mate in seen if together[mate] >= PARTY_TOGETHER)
+    return {m: 1 + mates for m, mates in guessed.items() if m not in known} | {m: n for m, n in known.items() if n > 1}
 
 
 def matches(session: Session, where: list) -> list[dict]:
     """The account's matches, newest first. `lane` and the ROW_METRICS are None without a parsed replay; `position`
-    is 1-5, see positions; `lane_allies` and `lane_enemies` the other heroes in the player's lane, see _laners; `party` whether
-    the player queued with someone, see _parties."""
+    is 1-5, see positions; `lane_allies` and `lane_enemies` the other heroes in the player's lane, see _laners; `party_size`
+    1 when the player queued alone, see _parties."""
     p = MatchPlayer
     joined = {name: aliased(Metric) for name in ROW_METRICS}
     with_tracked = (
@@ -206,7 +207,7 @@ def matches(session: Session, where: list) -> list[dict]:
     found, laners, parties = _positions(session, where), _laners(session, where), _parties(session, where)
     for r in rows:
         key = r["match_id"], r.pop("player_slot")
-        r["position"], r["party"] = found[key], r["match_id"] in parties
+        r["position"], r["party_size"] = found[key], parties.get(r["match_id"], 1)
         r["lane_allies"], r["lane_enemies"] = laners.get(key, ([], []))
     return rows
 

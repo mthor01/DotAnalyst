@@ -1,6 +1,6 @@
 <script lang="ts">
   import About from './lib/About.svelte'
-  import { TEAMMATE_GAMES, TEAMMATE_MATCHES, clock, get, percent, post, type Account, type MatchRow, type WardSpot } from './lib/api'
+  import { EVEN, TEAMMATE_GAMES, TEAMMATE_MATCHES, clock, get, percent, post, type Account, type MatchRow, type WardSpot } from './lib/api'
   import { heroIcon, heroName, heroPortrait } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
   import Matches from './Matches.svelte'
@@ -84,7 +84,6 @@
 
   const TOP_HEROES = 10
   const LANES = 5 // matches in the best and in the worst lanes
-  const EVEN = 500 // a lane within this much net worth at 10:00 counts as even
   const wins = $derived(recent.filter((r) => r.win).length)
   const share = (part: number) => `${percent(part, recent.length)}%`
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' })

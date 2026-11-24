@@ -6,16 +6,26 @@
 </script>
 
 {#if sign === 'parsed'}
-  Parsed
+  <span class="parsed" title="The replay is parsed: the match has its full stats">✓ Parsed</span>
 {:else if sign === 'working'}
   <span class="working" title="The replay is being downloaded and parsed right now"><span class="spinner" aria-hidden="true"></span>Parsing…</span>
 {:else if sign === 'waiting'}
-  <span title="The poller still means to get this replay">⏳ Waiting</span>
+  <span title="The poller still means to get this replay">⏳ Queued</span>
+{:else if sign === 'failed'}
+  <span class="failed" title="The replay was downloaded, but the parser's output was incomplete">✕ Failed</span>
+{:else if sign === 'unavailable'}
+  <span title="Valve no longer had the replay when it was asked for">Expired</span>
 {:else}
-  –
+  <span title="Too old for the poller to fetch on its own; the match page can still ask for it">Not fetched</span>
 {/if}
 
 <style>
+  .parsed {
+    color: var(--good);
+  }
+  .failed {
+    color: var(--critical);
+  }
   .working {
     color: var(--series-1);
     white-space: nowrap;
