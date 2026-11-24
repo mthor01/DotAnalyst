@@ -48,6 +48,13 @@ export type MatchRow = {
   deaths_by_10: number | null
   /** camps pulled by 10:00, from the replay, null without one */
   camps_pulled_by_10: number | null
+  /** whole-match replay stats, null without a replay: see dotanalyst/metrics.py; the two participations are 0-1 shares */
+  camps_stacked: number | null
+  obs_placed: number | null
+  sen_placed: number | null
+  kill_participation: number | null
+  fight_participation: number | null
+  deaths_outside_fights: number | null
   /** the other heroes in the player's lane, empty without a replay or outside the three lanes */
   lane_allies: number[]
   lane_enemies: number[]

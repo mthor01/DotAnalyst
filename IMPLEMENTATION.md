@@ -415,7 +415,12 @@ The match's `picks_bans` from Steam's answer, in draft order, so it is there wit
 
 ### General (Profile)
 
-`Profile.svelte`, the General tab: one tile per row of the Player comparison, for the profile's account alone, with the same numbers worked out the same way (`ROWS`, exported from `Compare.svelte`): matches, win rate, kills, deaths, assists, gold and experience per minute over the filtered matches, the number of parsed ones, then every metric's mean (`metric-averages`) over the parsed matches that have it, camps stacked among them, with that count under the tile. A new metric with a label in `METRICS` (`api.ts`) shows up here and in the comparison at once.
+`Profile.svelte`, the General tab (`SECTIONS`): the profile's averages over the filtered matches, in six cards: Results (matches, win rate, parsed matches), Combat (kills, deaths, assists), Economy (gold and experience per minute, camps stacked), Laning at 10:00 (last hit, net worth and deny difference to the enemy lane), Fights (kill participation, teamfights taken part in, deaths outside teamfights) and Vision (observers and sentries placed / bought, enemy wards destroyed, observer lifetime). The numbers are worked out in the page from the match rows (`/api/matches`), which carry the replay metrics as fields (`ROW_METRICS` in `queries.py`); a replay stat is the mean over the matches that have it, so only parsed ones count. The tab no longer shares `ROWS` with the Player comparison.
+
+- **Formats:** counts with one decimal, gold and experience whole, shares as whole percents, the lifetime as m:ss; the lane differences are signed and green above 0, red below.
+- **Hover:** how many matches the number is over, their median and the best and worst single game (for stats that are neither better high nor low: the most and fewest), and the same stat over the matches before.
+- **Rough numbers:** a stat over fewer than 10 matches (`FEW`) is dimmed, says so on hover and gets no trend. This mostly hits metrics added after most replays were parsed, until `recompute` fills them.
+- **Trend:** the same number of matches as shown, under the same filters, from before the oldest one shown (`date_to` the day before it, `last` = that count). A ▲/▼ with the difference shows under the number when the two round differently and both sides have at least 10 matches with the stat; green when it got better, red when worse, grey for neutral stats; for the placed / bought pairs it follows the placed number. Known limit: the API filters by whole days, so other matches on the day of the oldest one shown are in neither set.
 
 ### Ward numbers (Profile)
 

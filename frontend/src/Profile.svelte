@@ -1,7 +1,6 @@
 <script lang="ts">
   import About from './lib/About.svelte'
-  import { TEAMMATE_GAMES, TEAMMATE_MATCHES, clock, get, percent, post, type Account, type MatchRow, type MetricAverage, type WardSpot } from './lib/api'
-  import { ROWS } from './Compare.svelte'
+  import { TEAMMATE_GAMES, TEAMMATE_MATCHES, clock, get, percent, post, type Account, type MatchRow, type WardSpot } from './lib/api'
   import { heroIcon, heroName, heroPortrait } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
   import Matches from './Matches.svelte'
@@ -45,16 +44,31 @@
   // the server narrows to every filter, the role, the queue and the number of matches among them; newest first
   let recent = $state<MatchRow[]>([])
   let wards = $state.raw<WardSpot[]>([]) // of the same matches
-  let averages = $state.raw<Record<string, MetricAverage>>({}) // the metrics' averages over the same matches
   let error = $state('')
 
   $effect(() => {
     let current = true
-    Promise.all([get<MatchRow[]>('matches', query), get<typeof wards>('wards', query), get<MetricAverage[]>('metric-averages', query)]).then(
-      ([found, placed, m]) =>
-        current && ((recent = found), (wards = placed), (averages = Object.fromEntries(m.map((r) => [r.name, r]))), (error = '')),
+    Promise.all([get<MatchRow[]>('matches', query), get<typeof wards>('wards', query)]).then(
+      ([found, placed]) => current && ((recent = found), (wards = placed), (error = '')),
       (e) => current && (error = e.message),
     )
+    return () => (current = false)
+  })
+  // the General tab's trend: as many matches as shown, under the same filters, from before the oldest one shown
+  let before = $state.raw<MatchRow[]>([])
+  $effect(() => {
+    const oldest = recent.at(-1)
+    before = []
+    if (shown !== 'general' || !oldest) return
+    let current = true
+    const params = new URLSearchParams(query)
+    const day = new Date(oldest.start_time * 1000)
+    day.setDate(day.getDate() - 1)
+    // shortcut: the API filters by whole days, so earlier matches on the oldest one's day are left out of both sets; a start_time bound if that matters
+    params.delete('date_from')
+    params.set('date_to', day.toLocaleDateString('en-CA'))
+    params.set('last', String(recent.length))
+    get<MatchRow[]>('matches', params.toString()).then((found) => current && (before = found), () => {})
     return () => (current = false)
   })
   // the same matches over every role, for the role wheel to turn from all roles to the picked ones; the main fetch reports errors
@@ -99,6 +113,96 @@
     ['Enemy wards destroyed', mean(recent.map((r) => r.wards_destroyed)), 'per match'],
     ['Observer uptime', mean(recent.map((r) => r.obs_lifetime)), 'how long an observer stood'],
   ] as const)
+
+  // ---- general: averages over the matches shown, sorted into sections, each with its spread and its trend
+  const FEW = 10 // a stat over fewer matches than this is dimmed as rough, and gets no trend
+  /** One number of a cell: `sum` counts instead of averaging; `replay` stats are null without a parsed replay */
+  type Part = { of: (r: MatchRow) => number | null; show: (v: number) => string; name?: string; sum?: true; replay?: true }
+  /** `better` 1 when more is better, -1 when less is; neither gets no colour. `spread` false: no median or best game */
+  type Cell = { label: string; parts: Part[]; better?: 1 | -1; signed?: true; spread?: false }
+  const one = (v: number) => v.toFixed(1)
+  const whole = (v: number) => Math.round(v).toLocaleString()
+  const pct = (v: number) => `${Math.round(100 * v)}%`
+  const lead = (digits: number) => (v: number) => {
+    const t = Math.abs(v).toFixed(digits)
+    return Number(t) === 0 ? t : `${v > 0 ? '+' : '−'}${t}`
+  }
+  const stat = (key: keyof MatchRow, show = one): Part => ({ of: (r) => r[key] as number | null, show })
+  const replay = (key: keyof MatchRow, show = one, name?: string): Part => ({ ...stat(key, show), replay: true, name })
+  const SECTIONS: [string, Cell[]][] = [
+    ['Results', [
+      { label: 'Matches', parts: [{ of: () => 1, show: String, sum: true }], spread: false },
+      { label: 'Win rate', parts: [stat('win', pct)], better: 1, spread: false },
+      { label: 'Parsed matches', parts: [{ of: (r) => +(r.replay_state === 'parsed'), show: String, sum: true }], spread: false },
+    ]],
+    ['Combat', [
+      { label: 'Kills', parts: [stat('kills')], better: 1 },
+      { label: 'Deaths', parts: [stat('deaths')], better: -1 },
+      { label: 'Assists', parts: [stat('assists')], better: 1 },
+    ]],
+    ['Economy', [
+      { label: 'Gold per minute', parts: [stat('gold_per_min', whole)], better: 1 },
+      { label: 'Experience per minute', parts: [stat('xp_per_min', whole)], better: 1 },
+      { label: 'Camps stacked', parts: [replay('camps_stacked')] },
+    ]],
+    ['Laning at 10:00, vs the enemy lane', [
+      { label: 'Last hits', parts: [replay('lane_cs_diff', lead(1))], better: 1, signed: true },
+      { label: 'Net worth', parts: [replay('lane_nw_diff', lead(0))], better: 1, signed: true },
+      { label: 'Denies', parts: [replay('lane_dn_diff', lead(1))], better: 1, signed: true },
+    ]],
+    ['Fights', [
+      { label: 'Kill participation', parts: [replay('kill_participation', pct)], better: 1 },
+      { label: 'Teamfights taken part in', parts: [replay('fight_participation', pct)], better: 1 },
+      { label: 'Deaths outside teamfights', parts: [replay('deaths_outside_fights')], better: -1 },
+    ]],
+    ['Vision', [
+      { label: 'Observers placed / bought', parts: [replay('obs_placed', one, 'placed'), replay('obs_bought', one, 'bought')] },
+      { label: 'Sentries placed / bought', parts: [replay('sen_placed', one, 'placed'), replay('sen_bought', one, 'bought')] },
+      { label: 'Enemy wards destroyed', parts: [replay('wards_destroyed')], better: 1 },
+      { label: 'Observer lifetime', parts: [replay('obs_lifetime', (v) => clock(Math.round(v)))], better: 1 },
+    ]],
+  ] // prettier-ignore
+
+  /** A part over some matches: its average (or sum), median, lowest and highest, and how many matches have it */
+  function summary(rows: MatchRow[], part: Part) {
+    const v = rows.map(part.of).filter((x) => x !== null).sort((a, b) => a - b)
+    const total = v.reduce((a, b) => a + b, 0)
+    if (!v.length) return null
+    const median = v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2
+    return { value: part.sum ? total : total / v.length, median, low: v[0], high: v.at(-1)!, n: v.length }
+  }
+  /** What a cell shows: the value, a ▲/▼ against the matches before (on its first part), and the hover text */
+  function describe(cell: Cell) {
+    const now = cell.parts.map((p) => summary(recent, p))
+    const n = Math.min(...now.map((s) => s?.n ?? 0))
+    const rough = n > 0 && n < FEW && !cell.parts[0].sum
+    const lines = rough ? [`Only ${n} parsed matches have this, so it is a rough number.`] : []
+    cell.parts.forEach((p, i) => {
+      const s = now[i]
+      if (!s || p.sum) return
+      const of = `${p.name ? `${p.name[0].toUpperCase()}${p.name.slice(1)}: a` : 'A'}verage over ${s.n} ${p.replay ? 'parsed ' : ''}matches`
+      const [best, worst] = cell.better === -1 ? [s.low, s.high] : [s.high, s.low]
+      const words = cell.better ? ['best game', 'worst'] : ['most in a game', 'fewest']
+      const game = (x: number) => p.show(x).replace(/\.0$/, '') // single games are whole counts
+      const spread = cell.spread === false ? '' : `; median ${game(s.median)}, ${words[0]} ${game(best)}, ${words[1]} ${game(worst)}`
+      lines.push(of + spread)
+    })
+    let trend: { up: boolean; text: string; tone: string } | null = null
+    const [part, s] = [cell.parts[0], now[0]]
+    const was = before.length >= FEW && !part.sum ? summary(before, part) : null
+    if (s && was && was.n >= FEW && !rough) {
+      lines.push(`The ${before.length} matches before these: ${cell.parts.map((p) => summary(before, p)).map((w, i) => (w ? cell.parts[i].show(w.value) : '–')).join(' / ')}`)
+      const delta = s.value - was.value
+      if (part.show(s.value) !== part.show(was.value)) {
+        const text = part.show(Math.abs(delta)).replace(/^[+−]/, '')
+        trend = { up: delta > 0, text, tone: !cell.better ? '' : delta * cell.better > 0 ? 'good' : 'bad' }
+      }
+    }
+    const value = now.map((x, i) => (x ? cell.parts[i].show(x.value) : '–')).join(' / ')
+    const tone = cell.signed && s ? (s.value > 0 ? 'good' : s.value < 0 ? 'bad' : '') : ''
+    return { value, tone, rough, trend, title: lines.join('\n') }
+  }
+  const general = $derived(SECTIONS.map(([title, cells]) => [title, cells.map((c) => [c, describe(c)] as const)] as const))
 
   // ---- laning: averages of the first 10 minutes. 'signed' stats are differences to the enemy lane, 'tenths' are counts
   let laneHero = $state(0) // the hero picked above the laning numbers, 0 for every hero
@@ -310,18 +414,24 @@
   </div>
 
   {:else if shown === 'general'}
-  {@const side = { matches: recent, wards, averages }}
-  <p class="muted laning">Your averages over the filtered matches, the same numbers the Player comparison shows; the replay stats come from the parsed ones.</p>
-  <dl class="card numbers">
-    {#each ROWS as row (row.label)}
-      {@const value = row.of(side)}
-      <div>
-        <dt>{row.label}</dt>
-        <dd>{value === undefined ? '–' : row.show(value)}</dd>
-        <dd class="muted">{row.title?.(side) ?? ''}</dd>
-      </div>
+  <div class="sections">
+    {#each general as [title, cells] (title)}
+      <section class="card">
+        <h3>{title}</h3>
+        <dl class="numbers">
+          {#each cells as [cell, d] (cell.label)}
+            <div class:rough={d.rough} title={d.title}>
+              <dt>{cell.label}</dt>
+              <dd class={d.tone}>
+                {d.value}
+                <span class="trend {d.trend?.tone}">{d.trend ? `${d.trend.up ? '▲' : '▼'} ${d.trend.text}` : ''}</span>
+              </dd>
+            </div>
+          {/each}
+        </dl>
+      </section>
     {/each}
-  </dl>
+  </div>
 
   {:else if shown === 'laning'}
   <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches{onHero ? ` on ${heroName(laneHero)}` : ''} with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a date to open the match.</About></p>
@@ -818,6 +928,57 @@
     color: var(--good);
   }
   .bad {
+    color: var(--critical);
+  }
+  .sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+    gap: 12px;
+  }
+  .sections section {
+    padding: 14px 4px 4px;
+  }
+  .sections h3 {
+    margin: 0 14px 4px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-2);
+  }
+  .sections .numbers {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    margin: 0;
+  }
+  .sections .numbers div {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 14px 12px;
+    border: 0;
+  }
+  /* labels of one or two lines: the numbers of a row still line up at the bottom */
+  .sections dt {
+    flex: 1;
+    font-size: 13px;
+  }
+  .sections dt + dd {
+    font-size: 24px;
+    white-space: nowrap;
+  }
+  .rough {
+    opacity: 0.5;
+  }
+  .trend {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+    min-height: 1.2em;
+    color: var(--muted);
+  }
+  .trend.good {
+    color: var(--good);
+  }
+  .trend.bad {
     color: var(--critical);
   }
 </style>
