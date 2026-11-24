@@ -15,6 +15,7 @@
     account,
     tab,
     ontracked,
+    onshown,
     positions,
     onpositions,
   }: {
@@ -22,6 +23,7 @@
     account: Account | undefined
     tab: string
     ontracked: () => void
+    onshown: (shown: { games: number; parsed: number } | null) => void // for the filter panel's count
     positions: (1 | 2 | 3 | 4 | 5)[] // the Role filter's
     onpositions: (positions: (1 | 2 | 3 | 4 | 5)[]) => void
   } = $props()
@@ -101,6 +103,10 @@
     (r.lane_nw_diff === null ? '' : `, lane ${signed(r.lane_nw_diff)} net worth at 10:00`)
 
   const parsed = $derived(recent.filter((r) => r.replay_state === 'parsed').length)
+  $effect(() => {
+    onshown({ games: recent.length, parsed })
+    return () => onshown(null) // gone with the page, so another page's panel shows no stale count
+  })
   const kda = $derived([mean(recent.map((r) => r.kills)), mean(recent.map((r) => r.deaths)), mean(recent.map((r) => r.assists))])
   /** The mean of a replay stat over the matches that have it, null with none */
   function mean(values: (number | null)[]) {
@@ -275,7 +281,6 @@
       {#if account?.avatar}<img class="avatar" src={account.avatar} alt="" width="40" height="40" />{/if}
       {account?.label ?? account?.account_id}
     </h2>
-    <p class="muted">{recent.length} matches for these filters</p>
     <p class="track">
       <span class="muted" role="status">{tracked}</span>
       <button

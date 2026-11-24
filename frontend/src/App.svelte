@@ -98,6 +98,17 @@
 
   let adding = $state(false) // the Add profile form is open
   let filtersOpen = $state(false) // on a narrow screen the filters fold behind a button, so the page shows first
+  let selected = $state<{ games: number; parsed: number } | null>(null) // what the page below shows, for the panel's top line
+  let belowTabs = $state(0) // px from the page's top to the end of its tabs: the panel starts level with what is under them
+  function measureTabs(content: HTMLElement) {
+    const measure = () => {
+      const tabs = content.querySelector('[role=tablist]')
+      belowTabs = tabs ? tabs.getBoundingClientRect().bottom + parseFloat(getComputedStyle(tabs).marginBottom) - content.getBoundingClientRect().top : 0
+    }
+    const watch = new ResizeObserver(measure) // the tabs appear once the page has its data, and the content grows then
+    watch.observe(content)
+    return { destroy: () => watch.disconnect() }
+  }
   let newId = $state('')
   async function addProfile(event: SubmitEvent) {
     event.preventDefault()
@@ -200,11 +211,17 @@
     </form>
   {/if}
 
-  <div class="layout" class:paneled={showFilters}>
+  <div class="layout" class:paneled={showFilters} style:--below-tabs="{belowTabs}px">
   {#if showFilters}
     <!-- every tab below takes all of these. A team page takes only the time and the season: its games are league games -->
     <aside class="panel" class:folded={!filtersOpen} aria-label="Filters">
       <button class="action fold" aria-expanded={filtersOpen} onclick={() => (filtersOpen = !filtersOpen)}>Filters {filtersOpen ? '▴' : '▾'}</button>
+      {#if selected}
+        <p class="selected" role="status">
+          <b>{selected.games}</b> {selected.games === 1 ? 'match' : 'matches'} selected
+          <span class="muted">{selected.parsed} of them with a parsed replay</span>
+        </p>
+      {/if}
       {#if !league}
         <section>
           <h3>Matches</h3>
@@ -268,14 +285,14 @@
     </aside>
   {/if}
 
-  <div class="content">
+  <div class="content" use:measureTabs>
   {#key version}
   {#if error}
     <p class="error" role="alert">Could not reach the API: {error}</p>
   {:else if matchId}
     <Match id={matchId} />
   {:else if teamId}
-    <Team id={teamId} {query} />
+    <Team id={teamId} {query} onshown={(s) => (selected = s)} />
   {:else if page === 'tournaments'}
     <Tournaments tab={tournamentsTab} />
   {:else if page === 'queue'}
@@ -287,6 +304,7 @@
       {query}
       tab={profileTab}
       ontracked={loadAccounts}
+      onshown={(s) => (selected = s)}
       positions={ROLES[own.role][2]}
       onpositions={(p) => (own.role = Math.max(0, ROLES.findIndex(([, , r]) => r.join() === p.join())))}
       account={accounts.find((a) => String(a.account_id) === filters.account_id)} />

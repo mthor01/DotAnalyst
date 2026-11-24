@@ -141,6 +141,7 @@ nav a[aria-current='page'] {
   order: 1; /* the filters stand right of the page; first in the markup, so keyboards still reach them first */
   position: sticky;
   top: 12px;
+  margin-top: var(--below-tabs, 0); /* scrolled to the top it starts level with the page under its tabs */
   display: grid;
   gap: 16px;
   padding: 14px;
@@ -182,6 +183,20 @@ nav a[aria-current='page'] {
   align-items: center;
   margin-top: 6px;
 }
+/* how many matches the filters select, at the panel's top */
+.panel .selected {
+  display: grid;
+  margin: 0;
+  font-size: 14px;
+}
+.panel .selected b {
+  font-size: 24px;
+  font-weight: 800;
+  font-stretch: var(--wide); /* like the page's other big numbers */
+}
+.panel .selected .muted {
+  font-size: 12px;
+}
 /* the button that folds the filters away; only a narrow screen has it */
 .panel .fold {
   display: none;
@@ -201,6 +216,7 @@ nav a[aria-current='page'] {
   .panel {
     order: 0; /* above the page when there is no room beside it */
     position: static;
+    margin-top: 0;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   }
 }

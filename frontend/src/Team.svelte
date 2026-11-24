@@ -9,7 +9,7 @@
   import WardHeat from './lib/WardHeat.svelte'
   import Match from './Match.svelte'
 
-  let { id, query }: { id: string; query: string } = $props()
+  let { id, query, onshown }: { id: string; query: string; onshown: (shown: { games: number; parsed: number } | null) => void } = $props()
   let team = $state<TeamDetail>()
   let error = $state('')
   let fetched = $state(0) // goes up when a replay asked for on this page has arrived: the team is read again
@@ -91,6 +91,10 @@
   /** The wards of all their players in the team's own games, for the General tab's map */
   const teamWards = $derived(team?.players.flatMap((p) => p.wards.filter((w) => w.league)) ?? [])
   const parsed = $derived(team?.games.filter((g) => g.replay).map((g) => ({ radiant: g.radiant, win: g.win })) ?? [])
+  $effect(() => {
+    onshown(team ? { games, parsed: parsed.length } : null)
+    return () => onshown(null) // gone with the page, so another page's panel shows no stale count
+  })
   const PICKS = ['1st pick (first phase)', '2nd pick (second phase)', '3rd pick (second phase)', '4th pick (second phase)', '5th pick (last phase)']
 </script>
 
