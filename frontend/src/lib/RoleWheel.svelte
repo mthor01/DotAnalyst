@@ -189,7 +189,8 @@ ${heroName(t.hero_id)}: ${record(t.wins, t.games)}`).join('')}</title>
     <text class="count" y="2">{alone ? focusGames.length : games.length}</text>
     <text class="unit" y="15">{alone ? (GROUPS[leg.after.join()] ?? short(ROLES.get(leg.after[0])!.title)) : 'matches'}</text>
   </svg>
-  {#if alone}<button class="action" onclick={() => pick([])}>Show all roles</button>{/if}
+  <!-- always there, only hidden, so the card keeps its height when the button comes and goes -->
+  <button class="action" style:visibility={alone ? null : 'hidden'} onclick={() => pick([])}>Show all roles</button>
 </div>
 
 <style>

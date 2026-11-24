@@ -50,8 +50,6 @@ export type MatchRow = {
   camps_pulled_by_10: number | null
   /** whole-match replay stats, null without a replay: see dotanalyst/metrics.py; the two participations are 0-1 shares */
   camps_stacked: number | null
-  obs_placed: number | null
-  sen_placed: number | null
   kill_participation: number | null
   fight_participation: number | null
   deaths_outside_fights: number | null

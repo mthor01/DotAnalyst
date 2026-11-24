@@ -39,7 +39,7 @@
     }
     tracking = false
   }
-  const TABS = { overview: 'Overview', general: 'General', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding', teammates: 'Teammates' }
+  const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding', teammates: 'Teammates' }
   const shown = $derived<keyof typeof TABS>(tab in TABS ? (tab as keyof typeof TABS) : 'overview')
   // the server narrows to every filter, the role, the queue and the number of matches among them; newest first
   let recent = $state<MatchRow[]>([])
@@ -54,12 +54,12 @@
     )
     return () => (current = false)
   })
-  // the General tab's trend: as many matches as shown, under the same filters, from before the oldest one shown
+  // the Overview averages' trend: as many matches as shown, under the same filters, from before the oldest one shown
   let before = $state.raw<MatchRow[]>([])
   $effect(() => {
     const oldest = recent.at(-1)
     before = []
-    if (shown !== 'general' || !oldest) return
+    if (shown !== 'overview' || !oldest) return
     let current = true
     const params = new URLSearchParams(query)
     const day = new Date(oldest.start_time * 1000)
@@ -114,12 +114,10 @@
     ['Observer uptime', mean(recent.map((r) => r.obs_lifetime)), 'how long an observer stood'],
   ] as const)
 
-  // ---- general: averages over the matches shown, sorted into sections, each with its spread and its trend
+  // ---- averages at the bottom of the Overview, in sections, each with its spread and its trend
   const FEW = 10 // a stat over fewer matches than this is dimmed as rough, and gets no trend
-  /** One number of a cell: `sum` counts instead of averaging; `replay` stats are null without a parsed replay */
-  type Part = { of: (r: MatchRow) => number | null; show: (v: number) => string; name?: string; sum?: true; replay?: true }
-  /** `better` 1 when more is better, -1 when less is; neither gets no colour. `spread` false: no median or best game */
-  type Cell = { label: string; parts: Part[]; better?: 1 | -1; signed?: true; spread?: false }
+  /** `better` 1 when more is better, -1 when less is, neither gets no colour; `replay` stats are null without a parsed replay */
+  type Stat = { label: string; of: (r: MatchRow) => number | null; show: (v: number) => string; better?: 1 | -1; signed?: true; replay?: true }
   const one = (v: number) => v.toFixed(1)
   const whole = (v: number) => Math.round(v).toLocaleString()
   const pct = (v: number) => `${Math.round(100 * v)}%`
@@ -127,82 +125,58 @@
     const t = Math.abs(v).toFixed(digits)
     return Number(t) === 0 ? t : `${v > 0 ? '+' : '−'}${t}`
   }
-  const stat = (key: keyof MatchRow, show = one): Part => ({ of: (r) => r[key] as number | null, show })
-  const replay = (key: keyof MatchRow, show = one, name?: string): Part => ({ ...stat(key, show), replay: true, name })
-  const SECTIONS: [string, Cell[]][] = [
-    ['Results', [
-      { label: 'Matches', parts: [{ of: () => 1, show: String, sum: true }], spread: false },
-      { label: 'Win rate', parts: [stat('win', pct)], better: 1, spread: false },
-      { label: 'Parsed matches', parts: [{ of: (r) => +(r.replay_state === 'parsed'), show: String, sum: true }], spread: false },
-    ]],
-    ['Combat', [
-      { label: 'Kills', parts: [stat('kills')], better: 1 },
-      { label: 'Deaths', parts: [stat('deaths')], better: -1 },
-      { label: 'Assists', parts: [stat('assists')], better: 1 },
-    ]],
+  const stat = (label: string, key: keyof MatchRow, show = one, more?: Partial<Stat>): Stat => ({ label, of: (r) => r[key] as number | null, show, ...more })
+  const SECTIONS: [string, Stat[]][] = [
     ['Economy', [
-      { label: 'Gold per minute', parts: [stat('gold_per_min', whole)], better: 1 },
-      { label: 'Experience per minute', parts: [stat('xp_per_min', whole)], better: 1 },
-      { label: 'Camps stacked', parts: [replay('camps_stacked')] },
+      stat('Gold per minute', 'gold_per_min', whole, { better: 1 }),
+      stat('Experience per minute', 'xp_per_min', whole, { better: 1 }),
+      stat('Camps stacked', 'camps_stacked', one, { replay: true }),
     ]],
     ['Laning at 10:00, vs the enemy lane', [
-      { label: 'Last hits', parts: [replay('lane_cs_diff', lead(1))], better: 1, signed: true },
-      { label: 'Net worth', parts: [replay('lane_nw_diff', lead(0))], better: 1, signed: true },
-      { label: 'Denies', parts: [replay('lane_dn_diff', lead(1))], better: 1, signed: true },
+      stat('Last hits', 'lane_cs_diff', lead(1), { better: 1, signed: true, replay: true }),
+      stat('Net worth', 'lane_nw_diff', lead(0), { better: 1, signed: true, replay: true }),
+      stat('Denies', 'lane_dn_diff', lead(1), { better: 1, signed: true, replay: true }),
     ]],
     ['Fights', [
-      { label: 'Kill participation', parts: [replay('kill_participation', pct)], better: 1 },
-      { label: 'Teamfights taken part in', parts: [replay('fight_participation', pct)], better: 1 },
-      { label: 'Deaths outside teamfights', parts: [replay('deaths_outside_fights')], better: -1 },
-    ]],
-    ['Vision', [
-      { label: 'Observers placed / bought', parts: [replay('obs_placed', one, 'placed'), replay('obs_bought', one, 'bought')] },
-      { label: 'Sentries placed / bought', parts: [replay('sen_placed', one, 'placed'), replay('sen_bought', one, 'bought')] },
-      { label: 'Enemy wards destroyed', parts: [replay('wards_destroyed')], better: 1 },
-      { label: 'Observer lifetime', parts: [replay('obs_lifetime', (v) => clock(Math.round(v)))], better: 1 },
+      stat('Kill participation', 'kill_participation', pct, { better: 1, replay: true }),
+      stat('Teamfights taken part in', 'fight_participation', pct, { better: 1, replay: true }),
+      stat('Deaths outside teamfights', 'deaths_outside_fights', one, { better: -1, replay: true }),
     ]],
   ] // prettier-ignore
 
-  /** A part over some matches: its average (or sum), median, lowest and highest, and how many matches have it */
-  function summary(rows: MatchRow[], part: Part) {
-    const v = rows.map(part.of).filter((x) => x !== null).sort((a, b) => a - b)
-    const total = v.reduce((a, b) => a + b, 0)
+  /** A stat over some matches: its average, median, lowest and highest, and how many matches have it */
+  function summary(rows: MatchRow[], s: Stat) {
+    const v = rows.map(s.of).filter((x) => x !== null).sort((a, b) => a - b)
     if (!v.length) return null
     const median = v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2
-    return { value: part.sum ? total : total / v.length, median, low: v[0], high: v.at(-1)!, n: v.length }
+    return { value: v.reduce((a, b) => a + b, 0) / v.length, median, low: v[0], high: v.at(-1)!, n: v.length }
   }
-  /** What a cell shows: the value, a ▲/▼ against the matches before (on its first part), and the hover text */
-  function describe(cell: Cell) {
-    const now = cell.parts.map((p) => summary(recent, p))
-    const n = Math.min(...now.map((s) => s?.n ?? 0))
-    const rough = n > 0 && n < FEW && !cell.parts[0].sum
-    const lines = rough ? [`Only ${n} parsed matches have this, so it is a rough number.`] : []
-    cell.parts.forEach((p, i) => {
-      const s = now[i]
-      if (!s || p.sum) return
-      const of = `${p.name ? `${p.name[0].toUpperCase()}${p.name.slice(1)}: a` : 'A'}verage over ${s.n} ${p.replay ? 'parsed ' : ''}matches`
-      const [best, worst] = cell.better === -1 ? [s.low, s.high] : [s.high, s.low]
-      const words = cell.better ? ['best game', 'worst'] : ['most in a game', 'fewest']
-      const game = (x: number) => p.show(x).replace(/\.0$/, '') // single games are whole counts
-      const spread = cell.spread === false ? '' : `; median ${game(s.median)}, ${words[0]} ${game(best)}, ${words[1]} ${game(worst)}`
-      lines.push(of + spread)
-    })
+  /** What a stat's cell shows: the value, a ▲/▼ against the matches before, and the hover text */
+  function describe(stat: Stat) {
+    const now = summary(recent, stat)
+    if (!now) return { value: '–', tone: '', rough: false, trend: null, title: '' }
+    const rough = now.n < FEW
+    const game = (x: number) => stat.show(x).replace(/\.0$/, '') // single games are whole counts
+    const [best, worst] = stat.better === -1 ? [now.low, now.high] : [now.high, now.low]
+    const words = stat.better ? ['best game', 'worst'] : ['most in a game', 'fewest']
+    const lines = [
+      ...(rough ? [`Only ${now.n} parsed matches have this, so it is a rough number.`] : []),
+      `Average over ${now.n} ${stat.replay ? 'parsed ' : ''}matches; median ${game(now.median)}, ${words[0]} ${game(best)}, ${words[1]} ${game(worst)}`,
+    ]
     let trend: { up: boolean; text: string; tone: string } | null = null
-    const [part, s] = [cell.parts[0], now[0]]
-    const was = before.length >= FEW && !part.sum ? summary(before, part) : null
-    if (s && was && was.n >= FEW && !rough) {
-      lines.push(`The ${before.length} matches before these: ${cell.parts.map((p) => summary(before, p)).map((w, i) => (w ? cell.parts[i].show(w.value) : '–')).join(' / ')}`)
-      const delta = s.value - was.value
-      if (part.show(s.value) !== part.show(was.value)) {
-        const text = part.show(Math.abs(delta)).replace(/^[+−]/, '')
-        trend = { up: delta > 0, text, tone: !cell.better ? '' : delta * cell.better > 0 ? 'good' : 'bad' }
+    const was = before.length >= FEW ? summary(before, stat) : null
+    if (was && was.n >= FEW && !rough) {
+      lines.push(`The ${before.length} matches before these: ${stat.show(was.value)}`)
+      const delta = now.value - was.value
+      if (stat.show(now.value) !== stat.show(was.value)) {
+        const text = stat.show(Math.abs(delta)).replace(/^[+−]/, '')
+        trend = { up: delta > 0, text, tone: !stat.better ? '' : delta * stat.better > 0 ? 'good' : 'bad' }
       }
     }
-    const value = now.map((x, i) => (x ? cell.parts[i].show(x.value) : '–')).join(' / ')
-    const tone = cell.signed && s ? (s.value > 0 ? 'good' : s.value < 0 ? 'bad' : '') : ''
-    return { value, tone, rough, trend, title: lines.join('\n') }
+    const tone = stat.signed ? (now.value > 0 ? 'good' : now.value < 0 ? 'bad' : '') : ''
+    return { value: stat.show(now.value), tone, rough, trend, title: lines.join('\n') }
   }
-  const general = $derived(SECTIONS.map(([title, cells]) => [title, cells.map((c) => [c, describe(c)] as const)] as const))
+  const averages = $derived(SECTIONS.map(([title, stats]) => [title, stats.map((s) => [s, describe(s)] as const)] as const))
 
   // ---- laning: averages of the first 10 minutes. 'signed' stats are differences to the enemy lane, 'tenths' are counts
   let laneHero = $state(0) // the hero picked above the laning numbers, 0 for every hero
@@ -413,15 +387,14 @@
   </section>
   </div>
 
-  {:else if shown === 'general'}
   <div class="sections">
-    {#each general as [title, cells] (title)}
+    {#each averages as [title, stats] (title)}
       <section class="card">
         <h3>{title}</h3>
         <dl class="numbers">
-          {#each cells as [cell, d] (cell.label)}
+          {#each stats as [stat, d] (stat.label)}
             <div class:rough={d.rough} title={d.title}>
-              <dt>{cell.label}</dt>
+              <dt>{stat.label}</dt>
               <dd class={d.tone}>
                 {d.value}
                 <span class="trend {d.trend?.tone}">{d.trend ? `${d.trend.up ? '▲' : '▼'} ${d.trend.text}` : ''}</span>
@@ -932,8 +905,9 @@
   }
   .sections {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 12px;
+    margin-top: 12px;
   }
   .sections section {
     padding: 14px 4px 4px;
@@ -946,7 +920,7 @@
     color: var(--text-2);
   }
   .sections .numbers {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
     margin: 0;
   }
   .sections .numbers div {
