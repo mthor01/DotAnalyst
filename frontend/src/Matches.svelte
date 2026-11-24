@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { EVEN, GAME_MODES, LOBBY_TYPES, clock, get, type MatchRow } from './lib/api'
+  import { GAME_MODES, LOBBY_TYPES, clock, get, type MatchRow } from './lib/api'
   import { constants, itemIcon } from './lib/constants.svelte'
   import Hero from './lib/Hero.svelte'
   import ReplaySign from './lib/ReplaySign.svelte'
@@ -25,7 +25,6 @@
   // ---- sorting: a header click sorts by its column, a second click flips it; matches without the value go last
   const SORTS = {
     date: (r: MatchRow) => r.start_time,
-    lane: (r: MatchRow) => r.lane_nw_diff,
     kda: (r: MatchRow) => (r.kills + r.assists) / Math.max(1, r.deaths),
     gpm: (r: MatchRow) => r.gold_per_min,
     xpm: (r: MatchRow) => r.xp_per_min,
@@ -69,8 +68,6 @@
   const time = (seconds: number) => new Date(seconds * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' })
 
-  const laneResult = (diff: number) => (diff > EVEN ? 'won' : diff < -EVEN ? 'lost' : 'even')
-  const signed = (n: number) => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(Math.round(n)).toLocaleString('en-GB')
   const itemName = (id: number) => constants.items[id]?.replaceAll('_', ' ') ?? `Item ${id}`
 
   let unfolded = $state<number[]>([])
@@ -99,7 +96,7 @@
           {@render header(sort.key === 'date' ? 'Time' : 'Date', 'date', false)}
           <th>Hero</th>
           <th>Party</th>
-          {@render header('Lane', 'lane', false)}
+          <th>Result</th>
           {@render header('K / D / A', 'kda')}
           {@render header('GPM', 'gpm')}
           {@render header('XPM', 'xpm')}
@@ -125,7 +122,7 @@
           {/if}
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the arrow button is the keyboard way) -->
           <tr class="folds" onclick={(e) => unfoldRow(e, r.match_id)}>
-            <td class="edge {result}" title={r.win ? 'Won' : 'Lost'}>
+            <td>
               <button
                 class="unfold"
                 aria-expanded={open}
@@ -162,16 +159,7 @@
                 <span class="muted" title="Queued alone">–</span>
               {/if}
             </td>
-            <td>
-              {#if r.lane_nw_diff === null}
-                <span class="muted" title={r.lane === 'jungle' ? 'Jungle: no lane to compare' : 'No lane result: needs a parsed replay of a lane'}>–</span>
-              {:else}
-                {@const lane = laneResult(r.lane_nw_diff)}
-                <span class={lane === 'won' ? 'good' : lane === 'lost' ? 'bad' : ''} title="{signed(r.lane_nw_diff)} net worth at 10:00 against the enemy lane (even within {EVEN})">
-                  {lane === 'won' ? 'Won' : lane === 'lost' ? 'Lost' : 'Even'}
-                </span>
-              {/if}
-            </td>
+            <td class={r.win ? 'good' : 'bad'}>{r.win ? 'Won' : 'Lost'}</td>
             <td class="num">{r.kills} / {r.deaths} / {r.assists}</td>
             <td class="num">{r.gold_per_min}</td>
             <td class="num">{r.xp_per_min}</td>
@@ -259,13 +247,6 @@
   }
   .bad {
     color: var(--critical);
-  }
-  /* the result is the row's left edge */
-  .edge.won {
-    box-shadow: inset 3px 0 0 var(--good);
-  }
-  .edge.lost {
-    box-shadow: inset 3px 0 0 var(--critical);
   }
   .day th {
     padding: 14px 12px 6px;
