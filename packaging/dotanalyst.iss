@@ -46,8 +46,9 @@ Source: "..\build\dist\DotAnalyst\*"; DestDir: "{app}"; Flags: recursesubdirs ig
 Source: "..\frontend\public\logo.png"; Flags: dontcopy
 
 [Icons]
-Name: "{autoprograms}\DotAnalyst"; Filename: "{app}\DotAnalyst.exe"
-Name: "{autodesktop}\DotAnalyst"; Filename: "{app}\DotAnalyst.exe"; Tasks: desktopicon
+; the app's taskbar id (app.py), so a pinned or started shortcut and the running window share one button
+Name: "{autoprograms}\DotAnalyst"; Filename: "{app}\DotAnalyst.exe"; AppUserModelID: "DotAnalyst.DotAnalyst"
+Name: "{autodesktop}\DotAnalyst"; Filename: "{app}\DotAnalyst.exe"; Tasks: desktopicon; AppUserModelID: "DotAnalyst.DotAnalyst"
 
 [Registry]
 ; the key with the setup's answers goes with the program; the data folder it names only if the user says so

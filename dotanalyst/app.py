@@ -169,6 +169,11 @@ def main() -> None:
     while not server.started and thread.is_alive():
         threading.Event().wait(0.1)
 
+    # the taskbar files windows under this id: without it under the exe's path, where it keeps the icon an older exe
+    # there had (0.1.0's PyInstaller icon), or under python.exe from source. Same id as the shortcuts in dotanalyst.iss
+    import ctypes
+
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("DotAnalyst.DotAnalyst")
     window = webview.create_window(
         "DotAnalyst", f"http://127.0.0.1:{port}/", width=1400, height=900, min_size=(900, 600), hidden=not visible.is_set()
     )

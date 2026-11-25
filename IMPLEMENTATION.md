@@ -485,6 +485,10 @@ The installed program sets `DOTA_REPLAY_DIR` from the registry's `ReplayDir` whe
 
 The task "Start DotAnalyst with Windows" writes the Run value `DotAnalyst` = `"<program>\DotAnalyst.exe" --tray`; unticking it on a reinstall removes the value, and a silent reinstall keeps the earlier choice. Started with `--tray`, the program shows only its tray icon. When the Run value exists, closing the window hides it to the tray (a balloon says so, the first time each run) instead of quitting; left-click or "Open DotAnalyst" shows it, Quit ends the program. Without the Run value, closing the window quits as before.
 
+### Taskbar icon
+
+The program sets its own taskbar id, `DotAnalyst.DotAnalyst` (`SetCurrentProcessExplicitAppUserModelID` in `app.py`, before the window), and the setup gives the Start menu and desktop shortcuts the same id (`AppUserModelID` in `dotanalyst.iss`), so a pinned shortcut and the running window are one button. Without it Windows files the window under the exe's path and shows the icon it remembers for that path, which after an update from 0.1.0 was PyInstaller's default; from source it fell under `python.exe` and showed Python's.
+
 ### One instance
 
 At start the installed program asks `POST http://127.0.0.1:8765/api/desktop/show`. If a DotAnalyst answers, that one shows its window and the new start exits, so two pollers never share one database. Anything else on that port, or no answer within 2 seconds, counts as not running.
