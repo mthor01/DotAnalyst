@@ -64,7 +64,7 @@ export type MatchRow = {
 /** A lane within this much net worth at 10:00 counts as even */
 export const EVEN = 500
 
-export type TeammateRow = { account_id: number; label: string | null; games: number; wins: number }
+export type TeammateRow = { account_id: number; label: string | null; avatar: string | null; games: number; wins: number }
 
 export type MatchupRow = {
   hero_id: number

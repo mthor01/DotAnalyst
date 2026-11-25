@@ -140,7 +140,7 @@ def test_filters(session):
 
 def test_teammates_counts_only_same_team_and_tracked(session):
     rows = queries.teammates(session, queries.conditions(ME))
-    assert rows == [{"account_id": FRIEND, "label": "friend", "games": 2, "wins": 1}]
+    assert rows == [{"account_id": FRIEND, "label": "friend", "avatar": None, "games": 2, "wins": 1}]
 
 
 def test_played_heroes_of_tracked_accounts_most_played_first(session):
@@ -517,7 +517,7 @@ def test_last_keeps_the_newest_matches_of_the_other_filters(session):
     assert ids(queries.matches(session, newest(2))) == [3, 2]
     assert ids(queries.matches(session, newest(1, game_mode=22))) == [2]
     # match 3 is the newest: lost, the friend on my team
-    assert queries.teammates(session, newest(1)) == [{"account_id": FRIEND, "label": "friend", "games": 1, "wins": 0}]
+    assert queries.teammates(session, newest(1)) == [{"account_id": FRIEND, "label": "friend", "avatar": None, "games": 1, "wins": 0}]
     assert {r["hero_id"] for r in queries.matchups(session, newest(1))} == set(range(2, 11))
 
 

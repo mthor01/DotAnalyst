@@ -221,7 +221,7 @@ Steam's data does not say who queued together. A match counts as "with tracked p
 
 The match page's scoreboard shows each player's name after the hero: the account's label, else its Steam name. A tracked player's name links to their profile (`#account/{id}`); any other player with an account gets a + button that adds them as above. The Steam names of a match's players are asked for once, when the match is first opened (`store_names`), and kept in the player names table; a player Steam has no profile for is asked again at every opening. Anonymous players show as Anonymous.
 
-### Frequent teammates (Profile, Add frequent teammates)
+### Frequent teammates (Teammates tab, Add frequent teammates)
 
 `frequent_teammates` in `queries.py`: every player on the account's team in at least 10 (`TEAMMATE_GAMES`) of its newest 500 (`TEAMMATE_MATCHES`) stored matches, whatever the page's filters. Anonymous players are left out. The button tracks those not tracked yet, as Add profile does, and says how many it added.
 
@@ -443,6 +443,10 @@ The rules:
 The heatmap's own ward count is hidden here (`counts={false}`), since the lists show it. The heatmap's explanation (`HOW` in WardHeat.svelte) sits behind the intro's "?"; the controls box has none. On Player comparison it sits behind the "?" under the maps, and the box between the maps is the same `.filterbox`.
 
 Known limit: placed, placed in all and dewarded follow only the filters the map follows, not the map's own buttons. They count both sides, wins and losses, and every minute, whatever the buttons pick.
+
+### Teammates (Profile)
+
+The Teammates tab (`Teammates.svelte`) over the filtered matches. With tracked accounts: one row per other active tracked account that was on the account's team (see Played with a tracked account), with its Steam picture, games, win rate as a bar from the 50% line, and Won − lost (wins minus losses, green above 0, red below). The Add frequent teammates button sits under that table (see Frequent teammates). Heroes on my team and against me: two cards, On my team and Against me, each counting only the games in which that hero was on that side (`matchups` in `queries.py`); the win rate is always the account's own. The At least 1+ / 3+ / 5+ / 10+ buttons (5+ to start) hide heroes with fewer games on that side, so a hero can be in one card and not the other. Each card sorts on its own by games or win rate.
 
 ### Laning (Profile)
 

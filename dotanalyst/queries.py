@@ -217,18 +217,18 @@ def matches(session: Session, where: list) -> list[dict]:
 
 
 def teammates(session: Session, where: list) -> list[dict]:
-    """Games and wins on the same team as each other tracked account."""
+    """Games and wins on the same team as each other tracked account, with its label and Steam picture."""
     games = func.count().label("games")
     return _rows(
         session,
-        _mine(OTHER.account_id, Account.label, games, func.sum(WON).label("wins"))
+        _mine(OTHER.account_id, Account.label, Account.avatar, games, func.sum(WON).label("wins"))
         .join(
             OTHER,
             and_(OTHER.match_id == MatchPlayer.match_id, OTHER.account_id != MatchPlayer.account_id, SAME_TEAM),
         )
         .join(Account, and_(Account.account_id == OTHER.account_id, Account.active))
         .where(*where)
-        .group_by(OTHER.account_id, Account.label)
+        .group_by(OTHER.account_id, Account.label, Account.avatar)
         .order_by(games.desc()),
     )
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import About from './lib/About.svelte'
-  import { EVEN, TEAMMATE_GAMES, TEAMMATE_MATCHES, clock, get, percent, post, type Account, type MatchRow, type WardSpot } from './lib/api'
+  import { EVEN, clock, get, percent, type Account, type MatchRow, type WardSpot } from './lib/api'
   import { heroIcon, heroName, heroPortrait } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
   import Match from './Match.svelte'
@@ -29,19 +29,6 @@
     onpositions: (positions: (1 | 2 | 3 | 4 | 5)[]) => void
   } = $props()
 
-  let tracking = $state(false)
-  let tracked = $state('') // what the last "Add teammates" did
-  async function addTeammates() {
-    tracking = true
-    try {
-      const { added } = await post<{ added: number[] }>(`accounts/${account?.account_id}/teammates`)
-      tracked = `${added.length} added. Their matches load with the next check.`
-      if (added.length) ontracked()
-    } catch (e) {
-      tracked = `Could not add them: ${(e as Error).message}`
-    }
-    tracking = false
-  }
   const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding', teammates: 'Teammates' }
   const shown = $derived<keyof typeof TABS>(tab in TABS ? (tab as keyof typeof TABS) : 'overview')
   // the server narrows to every filter, the role, the queue and the number of matches among them; newest first
@@ -328,17 +315,6 @@
       {#if account?.avatar}<img class="avatar" src={account.avatar} alt="" width="40" height="40" />{/if}
       {account?.label ?? account?.account_id}
     </h2>
-    <p class="track">
-      <span class="muted" role="status">{tracked}</span>
-      <button
-        class="action"
-        onclick={addTeammates}
-        disabled={tracking}
-        title="Adds every player with {TEAMMATE_GAMES} or more games on their team in their last {TEAMMATE_MATCHES} matches"
-      >
-        {tracking ? 'Adding…' : 'Add frequent teammates'}
-      </button>
-    </p>
   </header>
 
   <div class="tabs" role="tablist" aria-label="Profile">
@@ -352,7 +328,7 @@
   {:else if shown === 'heroes'}
     <Heroes matches={recent} open={heroOpen} />
   {:else if shown === 'teammates'}
-    <Teammates {query} />
+    <Teammates {query} {account} {ontracked} />
   {:else if shown === 'overview'}
   <dl class="card numbers">
     <div>
@@ -580,12 +556,6 @@
     margin-right: 10px;
     border-radius: 4px;
     vertical-align: -6px;
-  }
-  .title p {
-    margin: 0;
-  }
-  .track {
-    margin-left: auto;
   }
 
   .overview {
