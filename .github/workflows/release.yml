@@ -1,11 +1,15 @@
 # Publishes a new DotAnalyst-Setup.exe; the last release's notes record the parser and app commits it was built from.
-# Every hour: when odota/parser (which OpenDota updates for each Dota patch) has a new commit. Run by hand
-# (Actions -> Release -> Run workflow): when the parser or this repo has one, so pushed changes ship only then.
-# The installed program looks for a newer release at every start and installs it when its window is closed
-# (dotanalyst/update.py).
+# On every push to main that changes more than docs. Every hour: when odota/parser (which OpenDota updates for
+# each Dota patch) has a new commit. Run by hand (Actions -> Release -> Run workflow): when either has one.
+# Versions count up from 0.1.0 by one per release. The notes list the subjects of the commits since the last
+# release; the first release gets .github/release-intro.md instead. The installed program looks for a newer
+# release at every start and installs it when its window is closed (dotanalyst/update.py).
 name: Release
 
 on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -24,19 +28,26 @@ jobs:
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      VERSION: 0.1.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the notes list the commits since the last release
 
       - name: Anything new since the last release?
         id: check
         run: |
           $parser = ((git ls-remote https://github.com/odota/parser.git refs/heads/master) -split '\s')[0]
-          $last = (gh release view --json body -q .body) -join "`n"  # empty when there is no release yet
+          $release = gh release view --json tagName,body | ConvertFrom-Json  # nothing when there is no release yet
+          $last = "$($release.body)"
           $app = $env:GITHUB_EVENT_NAME -eq "schedule" -or $last -like "*app $env:GITHUB_SHA*"  # schedule: parser only
           $new = -not ($last -like "*parser $parser*" -and $app)
-          Write-Host "parser $parser, app $env:GITHUB_SHA, new: $new"
+          $v = if ($release) { $release.tagName.TrimStart("v").Split(".") } else { "0", "1", "-1" }
+          $version = "$($v[0]).$($v[1]).$([int]$v[2] + 1)"
+          Write-Host "parser $parser, app $env:GITHUB_SHA, new: $new, version: $version"
           "new=$($new.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          "previous=$([regex]::Match($last, '(?m)^app ([0-9a-f]{40})').Groups[1].Value)" >> $env:GITHUB_OUTPUT
+          "parser_new=$((-not ($last -like "*parser $parser*")).ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          "VERSION=$version" >> $env:GITHUB_ENV
           exit 0  # gh fails when there is no release yet, which is no reason to stop
 
       - uses: astral-sh/setup-uv@v6
@@ -73,6 +84,16 @@ jobs:
         run: |
           $setup = "build\installer\DotAnalyst-Setup.exe"
           "$((Get-FileHash $setup).Hash.ToLower())  DotAnalyst-Setup.exe" | Set-Content "$setup.sha256" -Encoding ascii
-          $notes = "parser $(Get-Content build\parser\COMMIT)`napp $env:GITHUB_SHA"
+          $previous = "${{ steps.check.outputs.previous }}"
+          if ($previous) {
+            # the commits since the last release, leaving out those that changed only docs
+            $lines = @(git log --no-merges --format="- %s" "$previous..$env:GITHUB_SHA" -- . ":!*.md" ":!docs")
+            if ("${{ steps.check.outputs.parser_new }}" -eq "true") { $lines += "- The replay parser is updated to the newest odota/parser, for the latest Dota patch." }
+            if (-not $lines) { $lines = @("- Small fixes behind the scenes.") }  # e.g. only .gitignore or build files changed
+            $notes = "## What's new`n`n" + ($lines -join "`n")
+          } else {
+            $notes = Get-Content .github\release-intro.md -Raw  # the first release
+          }
           if ("${{ steps.smoke.outputs.unchecked }}") { $notes += "`n`nThe parser was not checked with a replay: OpenDota gave none." }
+          $notes += "`n`n---`nBuilt from:`nparser $(Get-Content build\parser\COMMIT)`napp $env:GITHUB_SHA"  # read by the next run
           gh release create "v$env:VERSION" $setup "$setup.sha256" --target $env:GITHUB_SHA --title "DotAnalyst $env:VERSION" --notes $notes
