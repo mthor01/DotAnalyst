@@ -468,7 +468,7 @@ What the setup asks and what the installed program does with the answers. `packa
 
 ### Data folder
 
-The program keeps its database (`data\`), `.env`, log and downloaded updates (`update\`) in one folder: `DataDir` from the registry, else `%LOCALAPPDATA%\DotAnalyst` (`home` in `app.py`). The setup asks for it only on a first install: when `DataDir` is not recorded and the default folder already has a `data\` folder (a 0.1.0 install, which recorded nothing), it skips the page and the program keeps using the default folder. Moving the folder later is not offered; the data stays where it was first put.
+The program keeps its database (`data\`), `.env`, log and downloaded updates (`update\`) in one folder: `DataDir` from the registry, else `%LOCALAPPDATA%\DotAnalyst` (`home` in `app.py`). The setup asks for it only on a first install: when `DataDir` is not recorded and the default folder already has a `data\` folder (a 0.1.0 install, which recorded nothing), it skips the page and the program keeps using the default folder. Moving the folder later is not offered; the data stays where it was first put. Uninstalling removes the registry key, `DataDir` with it: a reinstall after keeping the data of a folder other than the default proposes the default again, and finds the old data only if the user picks that folder again.
 
 ### Replays from the Dota client folder
 
