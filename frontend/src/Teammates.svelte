@@ -48,6 +48,12 @@
     )
   const sortBy = (side: Side, key: Key) => (sorts[side] = { key, down: sorts[side].key === key ? !sorts[side].down : true })
   const signed = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0')
+  // the mates come most games first; the best win rate counts only mates with enough games for it to say something
+  const SURE = 5
+  const best = $derived.by(() => {
+    const sure = teammates.filter((t) => t.games >= SURE)
+    return sure.length > 1 ? sure.reduce((a, b) => (b.wins / b.games > a.wins / a.games ? b : a)).account_id : undefined
+  })
 </script>
 
 {#snippet header(side: Side, label: string, key: Key)}
@@ -63,44 +69,51 @@
   <p class="error" role="alert">{error}</p>
 {:else}
   <h2>With tracked accounts</h2>
-  <div class="card friends">
-    {#if teammates.length === 0}
-      <p>No matches on the same team as another tracked account for these filters.</p>
-    {:else}
-      <table>
-        <thead>
-          <tr><th>Account</th><th class="num">Games</th><th>Win rate</th><th class="num">Won − lost</th></tr>
-        </thead>
-        <tbody>
-          {#each teammates as t (t.account_id)}
-            {@const lead = 2 * t.wins - t.games}
-            <tr>
-              <td>
-                <a class="who" href="#account/{t.account_id}">
-                  <span class="pic">{#if t.avatar}<img src={t.avatar} alt="" width="24" height="24" />{/if}</span>
-                  {t.label ?? t.account_id}
-                </a>
-              </td>
-              <td class="num">{t.games}</td>
-              <td><WinRate wins={t.wins} games={t.games} /></td>
-              <td class="num" class:good={lead > 0} class:bad={lead < 0}>{signed(lead)}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {/if}
-    <p class="track">
+  {#if teammates.length === 0}
+    <p class="muted">No matches on the same team as another tracked account for these filters.</p>
+  {/if}
+  <!-- one card per mate, most games first, across the page's whole width; a click opens the mate's profile -->
+  <ul class="mates">
+    {#each teammates as t, i (t.account_id)}
+      {@const lead = 2 * t.wins - t.games}
+      {@const rate = percent(t.wins, t.games)}
+      <li>
+        <a class="card mate" class:rough={t.games < SURE} href="#account/{t.account_id}" title={t.games < SURE ? `Only ${t.games} ${t.games === 1 ? 'game' : 'games'} together: a rough win rate` : null}>
+          <span class="pic">{#if t.avatar}<img src={t.avatar} alt="" width="56" height="56" />{/if}</span>
+          <span class="who">
+            <b>{t.label ?? t.account_id}</b>
+            <span class="muted">{t.games} {t.games === 1 ? 'game' : 'games'} together</span>
+            {#if (i === 0 && teammates.length > 1) || t.account_id === best}
+              <span class="badges">
+                {#if i === 0 && teammates.length > 1}<span class="badge">Most games</span>{/if}
+                {#if t.account_id === best}<span class="badge">Best win rate</span>{/if}
+              </span>
+            {/if}
+          </span>
+          <span class="rate" class:good={2 * t.wins > t.games} class:bad={2 * t.wins < t.games}>{rate}%</span>
+          <span class="split" role="img" aria-label="{t.wins} won, {t.games - t.wins} lost">
+            <i class="won" style:width="{(100 * t.wins) / t.games}%"></i><i class="lost"></i>
+          </span>
+          <span class="tally">
+            <span><b class="good">{t.wins} W</b> <b class="bad">{t.games - t.wins} L</b></span>
+            <span class:good={lead > 0} class:bad={lead < 0} title="games won minus games lost">{signed(lead)}</span>
+          </span>
+        </a>
+      </li>
+    {/each}
+    <li class="card adder">
       <button
         class="action"
         onclick={addTeammates}
         disabled={tracking}
         title="Adds every player with {TEAMMATE_GAMES} or more games on their team in their last {TEAMMATE_MATCHES} matches"
       >
-        {tracking ? 'Adding…' : 'Add frequent teammates'}
+        {tracking ? 'Adding…' : '+ Add frequent teammates'}
       </button>
+      <span class="muted">Players with {TEAMMATE_GAMES}+ games on the team in the last {TEAMMATE_MATCHES} matches</span>
       <span role="status">{tracked}</span>
-    </p>
-  </div>
+    </li>
+  </ul>
 
   <h2>Heroes on my team and against me</h2>
   <div class="filters">
@@ -143,40 +156,115 @@
 {/if}
 
 <style>
-  .friends {
-    width: fit-content;
-    max-width: 100%;
+  .mates {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 12px;
+    margin: 0 0 28px;
+    padding: 0;
+    list-style: none;
   }
-  .friends > p {
-    margin: 0;
-    padding: 10px 12px;
-  }
-  .friends table + .track {
-    border-top: 1px solid var(--grid);
-  }
-  .track {
-    display: flex;
-    flex-wrap: wrap;
+  /* picture and name on top, the win rate big under them, the wins against the losses as one bar */
+  .mate {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 12px 14px;
     align-items: center;
-    gap: 6px 12px;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 16px 18px;
+    color: inherit;
+    text-decoration: none;
+    transition: background-color 0.15s;
   }
-  .track span {
-    color: var(--text-2);
-  }
-  .who {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+  .mate:hover {
+    background: var(--raised);
   }
   .pic {
-    width: 24px;
-    height: 24px;
-    border-radius: 3px;
+    width: 56px;
+    height: 56px;
+    border-radius: 6px;
     overflow: hidden;
     background: var(--raised);
   }
   .pic img {
     display: block;
+  }
+  .who {
+    display: grid;
+    min-width: 0;
+  }
+  .who b {
+    overflow: hidden;
+    font-size: 17px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .who .muted {
+    font-size: 13px;
+  }
+  .rate {
+    grid-column: 1 / -1;
+    font-size: 34px;
+    font-weight: 800;
+    font-stretch: var(--wide);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .split {
+    grid-column: 1 / -1;
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .split i {
+    display: block;
+  }
+  .split .won {
+    background: var(--good);
+  }
+  .split .lost {
+    flex: 1;
+    background: var(--critical);
+    opacity: 0.75;
+  }
+  .tally {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .badge {
+    padding: 1px 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 11px;
+    color: var(--text-2);
+  }
+  /* too few games together for the win rate to say much, as the Overview dims its rough numbers */
+  .rough {
+    opacity: 0.55;
+  }
+  .rough:hover {
+    opacity: 1;
+  }
+  .adder {
+    display: grid;
+    align-content: center;
+    justify-items: start;
+    gap: 8px;
+    padding: 16px 18px;
+    border: 1px dashed var(--border);
+    background: none;
+    font-size: 13px;
   }
   .good {
     color: var(--good);
