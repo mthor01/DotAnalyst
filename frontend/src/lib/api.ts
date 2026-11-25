@@ -181,8 +181,9 @@ export type QueuePlayer = { account_id: number; name: string | null; avatar: str
 /** A replay download: compressed bytes as Valve sends them; `total` is null when Valve does not say the size. */
 export type Download = { match_id: number; started: number; bytes: number; total: number | null }
 /** A ward as a heatmap needs it: its kind, its place in map cells, and the side its owner played. */
-/** time: game second placed; league: on team pages, whether the game is one of the team's tournament games */
-export type WardSpot = { match_id: number; type: 'obs' | 'sen'; x: number; y: number; radiant: boolean; time: number; win: boolean; league?: boolean }
+/** time: game second placed; league: on team pages, whether the game is one of the team's tournament games;
+ *  killed: on profiles, whether the enemy destroyed it */
+export type WardSpot = { match_id: number; type: 'obs' | 'sen'; x: number; y: number; radiant: boolean; time: number; win: boolean; league?: boolean; killed?: boolean }
 /** One hero in a team's league drafts. `open` counts the games in which neither side banned it and the other side
  *  did not pick it (`picked_against`). */
 export type TeamHero = { hero_id: number; banned_against: number; banned: number; picked_against: number; open: number; picked: number; wins: number }

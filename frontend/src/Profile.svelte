@@ -113,12 +113,29 @@
     const known = values.filter((v) => v !== null)
     return known.length ? known.reduce((a, b) => a + b, 0) / known.length : null
   }
-  const wardAverages = $derived([
-    ['Observers bought', mean(recent.map((r) => r.obs_bought)), 'per match'],
-    ['Sentries bought', mean(recent.map((r) => r.sen_bought)), 'per match'],
-    ['Enemy wards destroyed', mean(recent.map((r) => r.wards_destroyed)), 'per match'],
-    ['Observer uptime', mean(recent.map((r) => r.obs_lifetime)), 'how long an observer stood'],
-  ] as const)
+  // ---- warding: per match over the matches with a parsed replay; placed and dewarded come from the wards themselves
+  const placed = (kind: string) => wards.filter((w) => w.type === kind)
+  /** percent of the player's wards of a kind the enemy destroyed, null with none placed */
+  const dewarded = (kind: string) => {
+    const all = placed(kind)
+    return all.length ? (100 * all.filter((w) => w.killed).length) / all.length : null
+  }
+  const wardLists = $derived([
+    ['Observers', [
+      ['Bought', mean(recent.map((r) => r.obs_bought)), 'tenths'],
+      ['Placed', parsed ? placed('obs').length / parsed : null, 'tenths'],
+      ['Placed in all', placed('obs').length, ''],
+      ['Uptime', mean(recent.map((r) => r.obs_lifetime)), 'clock'],
+      ['Dewarded by the enemy', dewarded('obs'), 'percent'],
+    ]],
+    ['Sentries', [
+      ['Bought', mean(recent.map((r) => r.sen_bought)), 'tenths'],
+      ['Placed', parsed ? placed('sen').length / parsed : null, 'tenths'],
+      ['Placed in all', placed('sen').length, ''],
+      ['Dewarded by the enemy', dewarded('sen'), 'percent'],
+    ]],
+    ['Enemy wards', [['Destroyed', mean(recent.map((r) => r.wards_destroyed)), 'tenths']]],
+  ] as const) // prettier-ignore
 
   // ---- averages at the bottom of the Overview, in sections, each with its spread and its trend
   const FEW = 10 // a stat over fewer matches than this is dimmed as rough, and gets no trend
@@ -234,7 +251,8 @@
   let laneOpen = $state<number[]>([]) // the best and worst lanes unfolded into their match
   const unfoldLane = (id: number) => (laneOpen = laneOpen.includes(id) ? laneOpen.filter((o) => o !== id) : [...laneOpen, id])
   const shownStat = (value: number | null, kind: string) =>
-    value === null ? '–' : kind === 'signed' ? signed(value) : kind === 'tenths' ? value.toFixed(1) : Math.round(value).toLocaleString('en-GB')
+    value === null ? '–' : kind === 'signed' ? signed(value) : kind === 'tenths' ? value.toFixed(1) : kind === 'clock' ? clock(Math.round(value))
+      : kind === 'percent' ? `${Math.round(value)}%` : Math.round(value).toLocaleString('en-GB')
 
   // ---- activity: games per day over the last 6 months, one column per week from Monday
   const dayOf = (d: Date) => d.toLocaleDateString('en-CA')
@@ -283,6 +301,21 @@
     lost: laned.filter((r) => r.lane_nw_diff! < -EVEN).length,
   })
 </script>
+
+<!-- a titled list of stats, each a label left and its number right (Laning, Warding) -->
+{#snippet list(title: string, stats: readonly (readonly [string, number | null, string])[])}
+  <div>
+    <h3>{title}</h3>
+    <dl>
+      {#each stats as [label, value, kind]}
+        <div>
+          <dt>{label}</dt>
+          <dd class:good={kind === 'signed' && value !== null && value > 0} class:bad={kind === 'signed' && value !== null && value < 0}>{shownStat(value, kind)}</dd>
+        </div>
+      {/each}
+    </dl>
+  </div>
+{/snippet}
 
 {#if error}
   <p class="error" role="alert">{error}</p>
@@ -426,19 +459,6 @@
 
   {:else if shown === 'laning'}
   <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a row to unfold the match, or its date to open it. The Hero filter in the panel narrows all of it to one hero.</About></p>
-  {#snippet list(title: string, stats: readonly (readonly [string, number | null, string])[])}
-    <div>
-      <h3>{title}</h3>
-      <dl>
-        {#each stats as [label, value, kind]}
-          <div>
-            <dt>{label}</dt>
-            <dd class:good={kind === 'signed' && value !== null && value > 0} class:bad={kind === 'signed' && value !== null && value < 0}>{shownStat(value, kind)}</dd>
-          </div>
-        {/each}
-      </dl>
-    </div>
-  {/snippet}
   <!-- your own lane phase and what it meant for the game: one card, three lists of equal width -->
   <section class="card lists">
     {#each laning as [title, stats]}{@render list(title, stats)}{/each}
@@ -522,34 +542,13 @@
     {/if}
   {/each}
   {:else}
+  <p class="muted">Your wards and your averages per match over the {parsed} filtered matches with a parsed replay.<About>The wards and numbers of the {parsed} of these {recent.length} matches that have a parsed replay. Radiant and Dire ward different places, so the map shows one side's games at a time; the buttons above it switch sides and kinds. Uptime is the mean time from placing an observer to its expiry or its destruction; one still standing when the game ended is left out. Dewarded counts the wards an enemy hero, creep or building destroyed before they ran out.</About></p>
   <section class="card vision">
     <div>
-      <WardHeat {wards}games={recent.filter((r) => r.replay_state === 'parsed')} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches" />
+      <WardHeat {wards} games={recent.filter((r) => r.replay_state === 'parsed')} counts={false} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches" />
     </div>
-    <div class="muted">
-      <dl class="wardstats">
-        {#each wardAverages as [label, value, unit]}
-          <div>
-            <dt>{label}</dt>
-            <dd>{value === null ? '–' : label === 'Observer uptime' ? clock(Math.round(value)) : value.toFixed(1)}</dd>
-            <dd>{unit}</dd>
-          </div>
-        {/each}
-      </dl>
-      <h3>Wards placed</h3>
-      <p>
-        Where the wards went in the {parsed} of these {recent.length} matches that have a parsed replay. Every ward
-        warms the map around its spot; red is a spot warded now and then, yellow to white the spots warded most.
-      </p>
-      <p>
-        Radiant and Dire ward different places, so the map shows one side's games and one kind of ward at a time: the
-        buttons above it switch between them. Scroll over the map to zoom (scrolling all the way out shows the whole map again), drag to move it, hover a spot for
-        its count.
-      </p>
-      <p>
-        The numbers above are averages over the same matches. Uptime is the mean time from placing an observer to its
-        expiry or its destruction; one still standing when the game ended is left out.
-      </p>
+    <div class="lists wards">
+      {#each wardLists as [title, stats]}{@render list(title, stats)}{/each}
     </div>
   </section>
   {/if}
@@ -856,8 +855,9 @@
   }
 
   .vision {
+    --map-max: 640px;
     display: grid;
-    grid-template-columns: minmax(280px, 520px) minmax(200px, 1fr);
+    grid-template-columns: minmax(280px, 640px) minmax(240px, 1fr);
     gap: 8px 24px;
     padding: 16px 18px;
     margin-bottom: 12px;
@@ -867,22 +867,13 @@
       grid-template-columns: 1fr;
     }
   }
-  .vision h3 {
-    margin: 0 0 8px;
-    color: var(--text);
-  }
-  .vision p {
-    max-width: 52ch;
-  }
-  .wardstats {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 24px;
-    max-width: 52ch;
-    margin: 0 0 20px;
-  }
-  .wardstats dt + dd {
-    color: var(--text);
+  /* the lists beside the map: one column, no card of their own */
+  .lists.wards {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 0;
+    margin: 0;
   }
 
   .group {

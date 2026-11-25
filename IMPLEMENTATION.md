@@ -426,7 +426,23 @@ The match's `picks_bans` from Steam's answer, in draft order, so it is there wit
 
 ### Ward numbers (Profile)
 
-Above the ward heatmap: observers bought, sentries bought and enemy wards destroyed per match, and the observer uptime, each the mean of that metric (see Metrics) over the profile's matches that have it, so only matches with a parsed replay count. Uptime is the mean of the matches' `obs_lifetime`, so a match with few observers weighs as much as one with many; an observer still standing at the end is left out.
+The Warding tab: the ward heatmap on the left, and on the right one card of three lists (on a phone, under the map). Only matches with a parsed replay count.
+
+- **Observers:** bought, placed, placed in all, uptime, dewarded by the enemy.
+- **Sentries:** bought, placed, placed in all, dewarded by the enemy.
+- **Enemy wards:** destroyed.
+
+The rules:
+
+- **Bought and destroyed:** the mean of that metric (see Metrics) over the parsed matches that have it.
+- **Placed:** the account's wards of that kind on the profile's map (`/api/wards`), divided by the parsed filtered matches.
+- **Placed in all:** the same wards, counted.
+- **Uptime:** the mean of the matches' `obs_lifetime`. A match with few observers weighs as much as one with many. An observer still standing at the end is left out.
+- **Dewarded by the enemy:** the share of those wards with `killed` set, meaning an enemy hero, a creep or a building destroyed them (see Wards). A ward that ran out or stood to the end is not dewarded.
+
+The heatmap's own ward count is hidden here (`counts={false}`), since the lists show it. The explanation sits behind the "?" buttons, one by the intro and one by the colour legend.
+
+Known limit: placed, placed in all and dewarded follow only the filters the map follows, not the map's own buttons. They count both sides, wins and losses, and every minute, whatever the buttons pick.
 
 ### Laning (Profile)
 

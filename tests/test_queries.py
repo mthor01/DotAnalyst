@@ -158,16 +158,16 @@ def test_wards_of_the_account_with_the_side_it_played(session):
     session.add_all(
         [
             Ward(match_id=1, player_slot=0, type="obs", x=100.0, y=90.0, placed=-30, **ward),  # mine, as Radiant
-            Ward(match_id=2, player_slot=128, type="sen", x=150.0, y=140.0, placed=720, **ward),  # mine, as Dire
+            Ward(match_id=2, player_slot=128, type="sen", x=150.0, y=140.0, placed=720, **ward | {"killed": True}),  # mine, as Dire, dewarded
             Ward(match_id=2, player_slot=0, type="obs", x=1.0, y=1.0, placed=0, **ward),  # the friend's
         ]
     )
     assert queries.wards(session, queries.conditions(ME)) == [
-        {"match_id": 1, "type": "obs", "x": 100.0, "y": 90.0, "radiant": True, "time": -30, "win": True},
-        {"match_id": 2, "type": "sen", "x": 150.0, "y": 140.0, "radiant": False, "time": 720, "win": False},
+        {"match_id": 1, "type": "obs", "x": 100.0, "y": 90.0, "radiant": True, "time": -30, "win": True, "killed": False},
+        {"match_id": 2, "type": "sen", "x": 150.0, "y": 140.0, "radiant": False, "time": 720, "win": False, "killed": True},
     ]
     assert queries.wards(session, queries.conditions(ME, date_to=date(2026, 6, 10))) == [
-        {"match_id": 1, "type": "obs", "x": 100.0, "y": 90.0, "radiant": True, "time": -30, "win": True},
+        {"match_id": 1, "type": "obs", "x": 100.0, "y": 90.0, "radiant": True, "time": -30, "win": True, "killed": False},
     ]
 
 

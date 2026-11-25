@@ -269,12 +269,12 @@ def matchups(session: Session, where: list) -> list[dict]:
 
 
 def wards(session: Session, where: list) -> list[dict]:
-    """Every ward the account placed in its parsed matches: the match, the kind, the place, the side played and
-    whether that match was won."""
+    """Every ward the account placed in its parsed matches: the match, the kind, the place, the side played,
+    whether that match was won and whether the enemy destroyed the ward."""
     ward = and_(Ward.match_id == MatchPlayer.match_id, Ward.player_slot == MatchPlayer.player_slot)
     columns = (
         Match.match_id, Ward.type, Ward.x, Ward.y, IS_RADIANT.label("radiant"), Ward.placed.label("time"),
-        (IS_RADIANT == Match.radiant_win).label("win"),
+        (IS_RADIANT == Match.radiant_win).label("win"), Ward.killed,
     )  # fmt: skip
     return _rows(session, _mine(*columns).join(Ward, ward).where(*where))
 

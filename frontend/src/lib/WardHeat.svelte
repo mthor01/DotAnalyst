@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WardSpot } from './api'
+  import About from './About.svelte'
   import MiniMap, { KINDS as KIND_NAMES, mapX, mapY } from './MiniMap.svelte'
 
   /** games: those the wards could come from, warded or not. byGame: wards and games carry `league`, and a dropdown
@@ -16,9 +17,11 @@
     chosen?: string[]
     /** Only the map with its counts, or only the controls and the legend (with a Reset view for the shared zoom) */
     only?: 'map' | 'controls'
+    /** false when the page shows the ward counts itself */
+    counts?: boolean
   }
   let {
-    wards, games, label, byGame = false, only,
+    wards, games, label, byGame = false, only, counts = true,
     periods = $bindable([true, true, true, true, true]), // the stretches of the timeline (PERIODS) switched on
     share = $bindable(0), // percent: only squares warded in at least this share of the chosen games
     moved = $bindable(null), chosen = $bindable([]),
@@ -149,13 +152,12 @@
 </MiniMap>
 {#if only !== 'map'}
 <p class="timeline">
-  <span class="choice" role="group" aria-label="When the wards were placed, in minutes">
+  <span class="choice" role="group" aria-label="When the wards were placed, in minutes" title="When the wards were placed, in minutes">
     {#each PERIODS as name, i}
       <button aria-pressed={periods[i]} onclick={() => (periods = periods.map((on, j) => on !== (i === j)))}>{name}</button>
     {/each}
   </span>
   <button class="action" onclick={() => (periods = PERIODS.map(() => !every))}>{every ? 'All off' : 'All on'}</button>
-  <span class="unit">minutes</span>
 </p>
 <label class="share" title="Only the spots warded in at least this share of the chosen games">
   Min % games warded
@@ -164,12 +166,12 @@
 </label>
 {/if}
 <p class="legend">
-  {#if only !== 'controls'}<span>{count('obs')} observers and {count('sen')} sentries.</span>{/if}
+  {#if only !== 'controls' && counts}<span>{count('obs')} observers and {count('sen')} sentries.</span>{/if}
   {#if only !== 'map'}
     {#each KINDS as kind}
-      <span class="scale">{KIND_NAMES[kind]}: one <i class="ramp" style:background={strip(RAMPS[kind])}></i> the most</span>
+      <span class="scale">{KIND_NAMES[kind]} <i class="ramp" style:background={strip(RAMPS[kind])}></i></span>
     {/each}
-    <span>The buttons, dropdowns, slider and timeline choose which wards count; hover a spot for its numbers.</span>
+    <About>Every ward warms the map around its spot: dark is a spot warded once, bright the spots warded most, each kind scaled to its own busiest spot. The buttons, dropdowns, slider and timeline choose which wards count. Scroll over the map to zoom (all the way out shows the whole map again), drag to move it, hover a spot for its numbers.</About>
   {/if}
 </p>
 
@@ -179,7 +181,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
-    max-width: 520px;
+    max-width: var(--map-max, 520px);
     margin: 8px 0 0;
     font-size: 13px;
     color: var(--text-2);
@@ -203,16 +205,15 @@
     font-size: 13px;
   }
   .choice {
-    flex: 1;
+    flex: 1 0 260px;
+    flex-wrap: nowrap;
     max-width: 380px;
   }
   .choice button {
     flex: 1;
+    min-width: 0;
     white-space: nowrap;
     padding: 4px 6px;
-  }
-  .unit {
-    color: var(--muted);
   }
   .veil {
     fill: #000;
@@ -231,7 +232,7 @@
     align-items: center;
     gap: 4px 14px;
     margin: 8px 0 0;
-    max-width: 520px;
+    max-width: var(--map-max, 520px);
   }
   .scale {
     display: inline-flex;
@@ -240,7 +241,7 @@
   }
   .ramp {
     display: inline-block;
-    width: 90px;
+    width: 70px;
     height: 10px;
     border-radius: 2px;
   }
