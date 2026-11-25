@@ -17,12 +17,34 @@ def paint_title_bar(hwnd: int) -> None:
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(ctypes.c_int(value)), 4)
 
 
+def installed_settings(key: str = r"Software\DotAnalyst") -> dict[str, str]:
+    """The setup's answers (DataDir, ReplayDir) under HKEY_CURRENT_USER; empty when it never wrote any."""
+    import winreg
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
+            return {name: value for name, value, _ in (winreg.EnumValue(k, i) for i in range(winreg.QueryInfoKey(k)[1]))}
+    except FileNotFoundError:
+        return {}
+
+
+def home(settings: dict[str, str]) -> Path:
+    """Where the installed app keeps its data, .env and log: the setup's data folder, else the user's app data."""
+    return Path(settings.get("DataDir") or Path(os.environ["LOCALAPPDATA"]) / "DotAnalyst")
+
+
 def main() -> None:
-    if getattr(sys, "frozen", False):  # installed: the data, .env and logs live in the user's app data, not the program
-        home = Path(os.environ["LOCALAPPDATA"]) / "DotAnalyst"
-        home.mkdir(parents=True, exist_ok=True)
-        os.chdir(home)
+    if getattr(sys, "frozen", False):  # installed: the data, .env and logs live in the user's folders, not the program
+        settings = installed_settings()
+        folder = home(settings)
+        folder.mkdir(parents=True, exist_ok=True)
+        os.chdir(folder)
         sys.stdout = sys.stderr = open("dotanalyst.log", "a", buffering=1, encoding="utf-8")  # a windowed exe has none
+        if "ReplayDir" in settings:  # "" = don't use the Dota client's replays
+            from dotanalyst import load_env
+
+            load_env()  # first, so a DOTA_REPLAY_DIR in .env still wins over the setup's answer
+            os.environ.setdefault("DOTA_REPLAY_DIR", settings["ReplayDir"])
 
     import httpx
     import uvicorn

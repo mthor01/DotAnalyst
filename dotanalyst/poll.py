@@ -49,7 +49,7 @@ STORAGE = {"raw": "Parser output", "dotanalyst.db": "Database", "opendota": "Ope
 @dataclass
 class Setup:
     key: str  # STEAM_API_KEY; without it Steam is not asked
-    replay_dir: Path  # the Dota client's replay folder
+    replay_dir: Path | None  # the Dota client's replay folder; None: the user chose not to use it
     data: Path = DATA
     alt: bool = False  # whether the second Steam account asks Valve for salts
     retry_seconds: int = RETRY_SECONDS
@@ -110,10 +110,10 @@ def usual_waiting(now: float):
     )  # fmt: skip
 
 
-def folder_replays(session: Session, replay_dir: Path) -> list[Path]:
+def folder_replays(session: Session, replay_dir: Path | None) -> list[Path]:
     """The .dem files in the Dota client folder of stored matches that have no parse yet."""
     found = []
-    for dem in sorted(replay_dir.glob("*.dem")) if replay_dir.is_dir() else []:
+    for dem in sorted(replay_dir.glob("*.dem")) if replay_dir and replay_dir.is_dir() else []:
         match = session.get(Match, int(dem.stem)) if dem.stem.isdigit() else None
         if match is not None and match.replay_state not in ("parsed", "failed"):
             found.append(dem)
@@ -335,7 +335,7 @@ def run_step(key: str, session: Session, client: httpx.Client, setup: Setup) -> 
 
 
 def poll_once(
-    session: Session, client: httpx.Client, key: str, replay_dir: Path, data: Path = DATA, alt: bool = False,
+    session: Session, client: httpx.Client, key: str, replay_dir: Path | None, data: Path = DATA, alt: bool = False,
     retry_seconds: int = RETRY_SECONDS, newest_only: bool = False,
 ) -> tuple[int, int]:  # fmt: skip
     """Every step once, one after the other on this thread (see STEP_FUNCS); the server runs each on its own, see
@@ -423,7 +423,7 @@ def whose(session: Session, ids: list[int]) -> dict[int, dict]:
     return found
 
 
-def queue(session: Session, replay_dir: Path, data: Path = DATA, now: float | None = None) -> dict:
+def queue(session: Session, replay_dir: Path | None, data: Path = DATA, now: float | None = None) -> dict:
     """What the poller has to do, for the queue page: every match whose replay it still wants, in the order it will
     take them, and what it is doing and did lately."""
     now = now or time.time()
@@ -515,7 +515,8 @@ def steps(session: Session, replay_dir: Path, data: Path, waiting: list[Match], 
         "leagues": ("New league games", f"{leagues} tournaments" if key else "off: no STEAM_API_KEY", "new games"),
         "usual": ("Usual games of checked players", f"{usual} games", "matches"),
         "folder": ("Replays in the Dota client folder",
-                   f"{ready} replays" + (f", {writing} still being written" if writing else ""), "replays"),
+                   f"{ready} replays" + (f", {writing} still being written" if writing else "") if replay_dir
+                   else "off: no replay folder", "replays"),
         "salts": ("Replay ids from Valve", f"{salts} salts" if alt else "off: no STEAM_ALT_USER", "salts"),
         "downloads": ("Replay downloads and parsing",
                       f"{len(due)} replays" + (f", {later} waiting for a retry" if later else ""), "replays"),
@@ -573,8 +574,10 @@ def refresh_replay(engine: Engine, match_id: int) -> str | None:
         release(match_id)
 
 
-def replay_dir() -> Path:
-    return Path(os.environ.get("DOTA_REPLAY_DIR", REPLAY_DIR))
+def replay_dir() -> Path | None:
+    """DOTA_REPLAY_DIR, else Steam's default folder; set but empty (the setup's "don't use my replays"): None."""
+    folder = os.environ.get("DOTA_REPLAY_DIR")
+    return REPLAY_DIR if folder is None else Path(folder) if folder else None
 
 
 def refresh(engine: Engine) -> dict:
