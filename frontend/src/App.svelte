@@ -1,7 +1,7 @@
 <script lang="ts">
   import { GAME_MODES, LOBBY_TYPES, get, post, type Account } from './lib/api'
   import { MARKS } from './lib/RoleWheel.svelte'
-  import { constants, loadConstants } from './lib/constants.svelte'
+  import { constants, heroName, loadConstants } from './lib/constants.svelte'
   import Match from './Match.svelte'
   import Compare from './Compare.svelte'
   import Profile from './Profile.svelte'
@@ -23,7 +23,7 @@
   const league = $derived(!!teamId || (!matchId && page === 'tournaments'))
   let accounts = $state<Account[]>([])
   let error = $state('')
-  let filters = $state({ account_id: '', lobby_type: '', game_mode: '' })
+  let filters = $state({ account_id: '', lobby_type: '', game_mode: '', hero_id: '' })
   // a number is that many months back from today; only "dates" uses the From and To days
   // a Map: an object puts the numeric keys first, whatever order they are written in, and All time goes top left
   const SPANS = new Map([['all', 'All time'], ['1', 'Last month'], ['3', 'Last 3 months'], ['6', 'Last 6 months'], ['12', 'Last year'], ['dates', 'Dates…']])
@@ -48,6 +48,7 @@
   ]
   const QUEUES = ['Both', 'Solo', 'Party'] // see Solo or party in IMPLEMENTATION.md
   const own = $state({ size: 100, role: 0, queue: 0 })
+  const heroes = $derived(Object.keys(constants.heroes).sort((a, b) => heroName(Number(a)).localeCompare(heroName(Number(b)))))
   const showFilters = $derived(!matchId && !(league && !teamId) && page !== 'queue')
   function monthsAgo(n: number) {
     const day = new Date()
@@ -261,6 +262,13 @@
             {#each Object.entries(GAME_MODES).filter(([id]) => id !== '1') as [id, name]}
               <option value={id}>{name}</option>
             {/each}
+          </select>
+        </section>
+        <section>
+          <h3><label for="hero">Hero</label></h3>
+          <select id="hero" bind:value={filters.hero_id}>
+            <option value="">All heroes</option>
+            {#each heroes as id}<option value={id}>{heroName(Number(id))}</option>{/each}
           </select>
         </section>
       {/if}

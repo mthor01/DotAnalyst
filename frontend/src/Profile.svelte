@@ -3,6 +3,7 @@
   import { EVEN, TEAMMATE_GAMES, TEAMMATE_MATCHES, clock, get, percent, post, type Account, type MatchRow, type WardSpot } from './lib/api'
   import { heroIcon, heroName, heroPortrait } from './lib/constants.svelte'
   import Heroes from './Heroes.svelte'
+  import Match from './Match.svelte'
   import Matches from './Matches.svelte'
   import Teammates from './Teammates.svelte'
   import RoleWheel, { tally } from './lib/RoleWheel.svelte'
@@ -96,7 +97,7 @@
   const form = $derived(recent.slice(0, FORM).reverse())
   const formWins = $derived(form.filter((r) => r.win).length)
 
-  const signed = (n: number) => `${n > 0 ? '+' : ''}${Math.round(n).toLocaleString()}`
+  const signed = (n: number) => `${n > 0 ? '+' : ''}${Math.round(n).toLocaleString('en-GB')}`
   const note = (r: MatchRow) =>
     `${heroName(r.hero_id)}, ${date(r.start_time)}: ${r.win ? 'won' : 'lost'}` +
     (r.lane_nw_diff === null ? '' : `, lane ${signed(r.lane_nw_diff)} net worth at 10:00`)
@@ -124,7 +125,7 @@
   /** `better` 1 when more is better, -1 when less is, neither gets no colour; `replay` stats are null without a parsed replay */
   type Stat = { label: string; of: (r: MatchRow) => number | null; show: (v: number) => string; better?: 1 | -1; signed?: true; replay?: true }
   const one = (v: number) => v.toFixed(1)
-  const whole = (v: number) => Math.round(v).toLocaleString()
+  const whole = (v: number) => Math.round(v).toLocaleString('en-GB')
   const pct = (v: number) => `${Math.round(100 * v)}%`
   const lead = (digits: number) => (v: number) => {
     const t = Math.abs(v).toFixed(digits)
@@ -184,24 +185,34 @@
   const averages = $derived(SECTIONS.map(([title, stats]) => [title, stats.map((s) => [s, describe(s)] as const)] as const))
 
   // ---- laning: averages of the first 10 minutes. 'signed' stats are differences to the enemy lane, 'tenths' are counts
-  let laneHero = $state(0) // the hero picked above the laning numbers, 0 for every hero
-  // a hero no longer among the matches shown (another role, fewer matches) falls back to every hero
-  const onHero = $derived(heroes.some((h) => h.hero_id === laneHero))
-  const laneGames = $derived(onHero ? recent.filter((r) => r.hero_id === laneHero) : recent)
-  // ---- the strip: one column per match, oldest on the left, of the hero picked for laning
+  // the hero is the filter panel's, like every other narrowing
+  const laneGames = $derived(recent)
+  // ---- the strip: one column per match, oldest on the left
   const strip = $derived([...laneGames].reverse())
   const reach = $derived(Math.max(1000, ...laneGames.map((r) => Math.abs(r.lane_nw_diff ?? 0))))
   const at10 = (key: keyof MatchRow) => mean(laneGames.map((r) => r[key] as number | null))
   const laneMatches = $derived(laneGames.filter((r) => r.xp_at_10 !== null).length)
+  // the game's result after a won, an even and a lost lane: [label, games won, games], see EVEN
+  const afterLane = $derived.by(() => {
+    const laned = laneGames.filter((r) => r.lane_nw_diff !== null)
+    const kinds = [
+      ['After a won lane', laned.filter((r) => r.lane_nw_diff! > EVEN)],
+      ['After an even lane', laned.filter((r) => Math.abs(r.lane_nw_diff!) <= EVEN)],
+      ['After a lost lane', laned.filter((r) => r.lane_nw_diff! < -EVEN)],
+    ] as const
+    return kinds.map(([label, games]) => [label, games.filter((r) => r.win).length, games.length] as const)
+  })
   const laning = $derived([
-    ['By 10:00', [
+    ['Farm, by 10:00', [
       ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals', ''],
       ['Denies', at10('denies_at_10'), '', ''],
       ['Net worth', at10('net_worth_at_10'), '', ''],
       ['Experience', at10('xp_at_10'), '', ''],
+      ['Camps pulled', at10('camps_pulled_by_10'), '', 'tenths'],
+    ]],
+    ['Fights, by 10:00', [
       ['Kills', at10('kills_by_10'), '', 'tenths'],
       ['Deaths', at10('deaths_by_10'), '', 'tenths'],
-      ['Camps pulled', at10('camps_pulled_by_10'), '', 'tenths'],
       ['Damage dealt', at10('damage_at_10'), 'to enemy heroes', ''],
       ['Damage taken', at10('damage_taken_at_10'), 'from enemy heroes', ''],
     ]],
@@ -219,8 +230,10 @@
     const best = ranked.slice(0, Math.min(LANES, Math.ceil(ranked.length / 2)))
     return [['Best lanes', best], ['Worst lanes', ranked.slice(best.length).reverse().slice(0, LANES)]] as const
   })
+  let laneOpen = $state<number[]>([]) // the best and worst lanes unfolded into their match
+  const unfoldLane = (id: number) => (laneOpen = laneOpen.includes(id) ? laneOpen.filter((o) => o !== id) : [...laneOpen, id])
   const shownStat = (value: number | null, kind: string) =>
-    value === null ? '–' : kind === 'signed' ? signed(value) : kind === 'tenths' ? value.toFixed(1) : Math.round(value).toLocaleString()
+    value === null ? '–' : kind === 'signed' ? signed(value) : kind === 'tenths' ? value.toFixed(1) : Math.round(value).toLocaleString('en-GB')
 
   // ---- activity: games per day over the last 6 months, one column per week from Monday
   const dayOf = (d: Date) => d.toLocaleDateString('en-CA')
@@ -411,14 +424,7 @@
   </div>
 
   {:else if shown === 'laning'}
-  <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches{onHero ? ` on ${heroName(laneHero)}` : ''} with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches{onHero ? ` on ${heroName(laneHero)}` : ''} that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a date to open the match.</About></p>
-  <label class="pick">
-    Hero
-    <select value={onHero ? laneHero : 0} onchange={(e) => (laneHero = +e.currentTarget.value)}>
-      <option value={0}>All heroes ({recent.length})</option>
-      {#each heroes as h (h.hero_id)}<option value={h.hero_id}>{heroName(h.hero_id)} ({h.games})</option>{/each}
-    </select>
-  </label>
+  <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a row to unfold the match, or its date to open it. The Hero filter in the panel narrows all of it to one hero.</About></p>
   {#each laning as [title, stats]}
     <h3 class="group">{title}</h3>
     <dl class="card numbers">
@@ -433,6 +439,16 @@
       {/each}
     </dl>
   {/each}
+  <h3 class="group">Lane result vs game result</h3>
+  <dl class="card numbers" title="A lane is won or lost by more than {EVEN} net worth at 10:00, even within it">
+    {#each afterLane as [label, won, games]}
+      <div>
+        <dt>{label}</dt>
+        <dd>{games ? `${percent(won, games)}%` : '–'}</dd>
+        <dd class="muted">games won: {won} of {games}</dd>
+      </div>
+    {/each}
+  </dl>
   <section class="card form">
     <div class="strip" class:dense={laneGames.length > 25} class:packed={laneGames.length > 100}>
       <!-- the scale: built like a column, so its labels line up with the bars -->
@@ -460,15 +476,18 @@
     <h3 class="group">{title}</h3>
     {#if games.length}
       <section class="card">
-        <table>
+        <table class="lanes">
           <thead>
-            <tr><th>Match</th><th>Your heroes</th><th>Enemy heroes</th><th>Result</th><th class="num">Net worth lead</th><th class="num">Last-hit lead</th><th class="num">Deaths</th></tr>
+            <tr><th></th><th>Match</th><th>Your heroes</th><th>Enemy heroes</th><th>Result</th><th class="num">Net worth lead</th><th class="num">Last-hit lead</th><th class="num">Deaths</th></tr>
           </thead>
           <tbody>
             {#each games as r (r.match_id)}
               {@const nw = r.lane_nw_diff}
               {@const cs = r.lane_cs_diff}
-              <tr>
+              {@const open = laneOpen.includes(r.match_id)}
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the arrow button is the keyboard way) -->
+              <tr class="folds" onclick={(e) => !(e.target as Element).closest('a, button') && unfoldLane(r.match_id)}>
+                <td><button class="unfold" aria-expanded={open} aria-label="Unfold the match of {date(r.start_time)}" onclick={() => unfoldLane(r.match_id)}>{open ? '▾' : '▸'}</button></td>
                 <td><a href="#match/{r.match_id}">{date(r.start_time)}</a></td>
                 <!-- the whole lane on both sides: you first, then your lane partners -->
                 {#each [[r.hero_id, ...r.lane_allies], r.lane_enemies] as side}
@@ -481,6 +500,9 @@
                 <td class="num" class:good={cs !== null && cs > 0} class:bad={cs !== null && cs < 0}>{shownStat(cs, 'signed')}</td>
                 <td class="num">{shownStat(r.deaths_by_10, 'tenths')}</td>
               </tr>
+              {#if open}
+                <tr class="more"><td colspan="8"><Match id={String(r.match_id)} brief draft={false} /></td></tr>
+              {/if}
             {/each}
           </tbody>
         </table>
@@ -869,8 +891,35 @@
     border-radius: 3px;
     vertical-align: middle;
   }
-  .pick select {
-    margin-left: 6px;
+  /* both tables share their column widths, so Best and Worst line up */
+  .lanes {
+    table-layout: fixed;
+    min-width: 1060px; /* narrower, the card scrolls instead of portraits spilling over the next column */
+  }
+  .lanes th:nth-child(1) {
+    width: 36px;
+  }
+  .lanes th:nth-child(2),
+  .lanes th:nth-child(6),
+  .lanes th:nth-child(7) {
+    width: 100px;
+  }
+  .lanes th:nth-child(5) {
+    width: 70px;
+  }
+  .lanes th:nth-child(8) {
+    width: 50px;
+  } /* the two hero columns share the rest: three portraits each */
+  .lanes .more > td {
+    padding: 12px 12px 18px;
+    background: var(--page);
+  }
+  .unfold {
+    padding: 2px 6px;
+    background: none;
+    border: 0;
+    color: var(--text-2);
+    cursor: pointer;
   }
   .laning {
     max-width: 72ch;
@@ -886,6 +935,18 @@
   }
   .numbers div:last-child {
     border: 0;
+  }
+  /* a phone fits two numbers a row: one would leave the cards half empty */
+  @media (max-width: 600px) {
+    .numbers {
+      grid-template-columns: 1fr 1fr;
+    }
+    .numbers div {
+      padding: 12px 14px;
+    }
+    .numbers dt + dd {
+      font-size: 22px;
+    }
   }
   dt {
     color: var(--text-2);

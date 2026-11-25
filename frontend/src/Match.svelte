@@ -73,7 +73,7 @@
   const TEAMS = ['Radiant', 'Dire'] as const
   const isRadiant = (slot: number) => slot < 128
   const teamOf = (slot: number) => (isRadiant(slot) ? 'radiant' : 'dire')
-  const number = (n: number | null | undefined) => (n == null ? '–' : n.toLocaleString()) // Steam omits some stats for older matches
+  const number = (n: number | null | undefined) => (n == null ? '–' : n.toLocaleString('en-GB')) // Steam omits some stats for older matches
   const thousands = (n: number) => (n === 0 ? '0' : `${Math.round(n / 100) / 10}k`)
   const sum = (values: number[]) => values.reduce((a, b) => a + b, 0)
 

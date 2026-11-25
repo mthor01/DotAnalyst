@@ -44,8 +44,10 @@ def conditions(
     game_mode: int | None = None,
     lobby_type: int | None = None,
     league_id: int | None = None,
+    hero_id: int | None = None,
 ) -> list:
-    """SQL conditions for the filters every view shares. Dates are local days, both inclusive."""
+    """SQL conditions for the filters every view shares. Dates are local days, both inclusive; `hero_id` is the
+    player's own hero."""
     found = [MatchPlayer.account_id == account_id, *between(Match.start_time, date_from, date_to)]
     if league_id is not None:
         found.append(Match.match_id.in_(select(LeagueMatch.match_id).where(LeagueMatch.league_id == league_id)))
@@ -53,6 +55,8 @@ def conditions(
         found.append(Match.game_mode == game_mode)
     if lobby_type is not None:
         found.append(Match.lobby_type == lobby_type)
+    if hero_id is not None:
+        found.append(MatchPlayer.hero_id == hero_id)
     return found
 
 

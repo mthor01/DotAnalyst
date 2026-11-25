@@ -128,6 +128,7 @@ def test_filters(session):
 
     assert found(lobby_type=0) == [3]
     assert found(game_mode=22) == [2, 1]
+    assert found(hero_id=1) == [3, 1]  # my own hero: hero 6 in match 2, whoever else played hero 1
     assert found(date_from=date(2026, 7, 1)) == [3, 2]
     assert found(date_to=date(2026, 7, 10)) == [2, 1]  # the end day is included
     assert found(date_from=date(2026, 7, 11), date_to=date(2026, 8, 9)) == []
