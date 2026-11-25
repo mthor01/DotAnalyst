@@ -14,6 +14,8 @@
   let {
     query,
     account,
+    accounts,
+    onaccount,
     tab,
     ontracked,
     onshown,
@@ -22,6 +24,8 @@
   }: {
     query: string
     account: Account | undefined
+    accounts: Account[] // the tracked ones, for the picker in the heading
+    onaccount: (id: string) => void
     tab: string
     ontracked: () => void
     onshown: (shown: { games: number; parsed: number } | null) => void // for the filter panel's count
@@ -305,17 +309,25 @@
   </div>
 {/snippet}
 
+<!-- the name is the account picker: a click on it or its arrow opens the tracked accounts; first, so that an account
+     without matches for these filters can still be left -->
+<header class="title">
+  <h2>
+    {#if account?.avatar}<img class="avatar" src={account.avatar} alt="" width="40" height="40" />{/if}
+    <span class="pick">
+      {account?.label ?? account?.account_id}<span class="arrow" aria-hidden="true">▾</span>
+      <select aria-label="Account" title="Show another account" value={String(account?.account_id)} onchange={(e) => onaccount(e.currentTarget.value)}>
+        {#each accounts as a (a.account_id)}<option value={String(a.account_id)}>{a.label ?? a.account_id}</option>{/each}
+      </select>
+    </span>
+  </h2>
+</header>
+
 {#if error}
   <p class="error" role="alert">{error}</p>
 {:else if recent.length === 0}
   <p class="muted">No matches for these filters.</p>
 {:else}
-  <header class="title">
-    <h2>
-      {#if account?.avatar}<img class="avatar" src={account.avatar} alt="" width="40" height="40" />{/if}
-      {account?.label ?? account?.account_id}
-    </h2>
-  </header>
 
   <div class="tabs" role="tablist" aria-label="Profile">
     {#each Object.entries(TABS) as [id, title]}
@@ -563,6 +575,34 @@
     margin-right: 10px;
     border-radius: 4px;
     vertical-align: -6px;
+  }
+  /* the native select lies invisible over the name and its arrow: it opens where they are, and takes the keyboard */
+  .pick {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+  }
+  .pick select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    opacity: 0;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .arrow {
+    margin-left: 8px;
+    font-size: 0.75em;
+    color: var(--muted);
+    vertical-align: 0.2em;
+  }
+  .pick:hover .arrow {
+    color: var(--text);
+  }
+  .pick:has(:focus-visible) {
+    outline: 2px solid var(--text-2);
+    outline-offset: 4px;
+    border-radius: 3px;
   }
 
   .overview {

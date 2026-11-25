@@ -149,6 +149,12 @@
     }
   }
 
+  /** Asks the server again for what the page shows, without looking for new games */
+  function reload() {
+    version += 1
+    loadAccounts()
+  }
+
   let checking = $state(false)
   let checked = $state('') // what the last check found, or why it failed
   let version = $state(0) // goes up with every check; the page below is built anew, so it asks for its data again
@@ -188,16 +194,9 @@
         <a href="#{id}" aria-current={(teamId ? id === 'tournaments' : !matchId && page === id) ? 'page' : undefined}>{title}</a>
       {/each}
     </nav>
-    <Progress current={!matchId && page === 'queue'} />
     <div class="side">
-      <label hidden={!!matchId || league || ALL_ACCOUNTS.includes(page) || page === 'queue'}>
-        Account
-        <select bind:value={filters.account_id}>
-          {#each accounts as a}
-            <option value={String(a.account_id)}>{a.label ?? a.account_id}</option>
-          {/each}
-        </select>
-      </label>
+      <Progress current={!matchId && page === 'queue'} />
+      <button class="action reload" onclick={reload} title="Reload what the page shows" aria-label="Reload what the page shows">↻</button>
       {#if adding}
         <form class="add" onsubmit={addProfile}>
           <input bind:value={newId} use:focus required pattern="\s*\d+\s*" inputmode="numeric" aria-label="Friend id or Steam id" placeholder="Friend id or Steam id" />
@@ -331,6 +330,8 @@
       onshown={(s) => (selected = s)}
       positions={ROLES[own.role][2]}
       onpositions={(p) => (own.role = Math.max(0, ROLES.findIndex(([, , r]) => r.join() === p.join())))}
+      {accounts}
+      onaccount={(id) => (filters.account_id = id)}
       account={accounts.find((a) => String(a.account_id) === filters.account_id)} />
   {:else}
     <Compare {query} {accounts} />

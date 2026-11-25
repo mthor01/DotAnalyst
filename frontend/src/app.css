@@ -112,13 +112,21 @@ nav a[aria-current='page'] {
   color: var(--text);
   border-bottom-color: var(--text);
 }
-/* the right end of the top bar: the account, then the button that checks for new games */
+/* the right end of the top bar: the progress bar, the page's reload, Add profile and the check for new games */
 .side {
   margin-left: auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 14px;
+}
+/* there the progress bar's panel would run off the window to the right: it opens leftwards instead */
+.side .progress .panel {
+  left: auto;
+  right: 0;
+}
+.reload {
+  padding-inline: 10px;
 }
 /* the header's Add profile form */
 .add {
