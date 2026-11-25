@@ -67,9 +67,15 @@
     const large = to - from > 0.5 ? 1 : 0
     return `M${point(outer, from)}A${outer} ${outer} 0 ${large} 1 ${point(outer, to)}L${point(inner, to)}A${inner} ${inner} 0 ${large} 0 ${point(inner, from)}Z`
   }
-  const ICON = 15 // in the wheel's units; a slice shorter than this along its arc gets no hero icon
+  const ICON = 15 // in the wheel's units: a hero icon's size where its slice has room
   const ICON_AT = 78
-  const fits = (share: number) => share * 2 * Math.PI * ICON_AT >= ICON + 2
+  const fits = (share: number) => share * 2 * Math.PI * ICON_AT >= ICON + 2 // room for the "+N" of the others slice
+  /** A hero icon's size in a slice `share` long: 15 at most, less where the arc at the icon's inner edge is shorter
+   *  (size s fits when s ≤ arc at ICON_AT − s/2, with 1 to spare); under 3 the slice gets none. */
+  const heroSize = (share: number) => {
+    const turn = share * 2 * Math.PI
+    return Math.min(ICON, (turn * ICON_AT) / (1 + turn / 2) - 1)
+  }
   const GLYPH_AT = 46 // the middle ring's centre line
   /** A role icon's size in a part `share` long: 16 at most, less where the part's arc at the icon's inner edge is
    *  shorter; under 6 the part gets none. */
@@ -116,9 +122,6 @@
   })
   const alone = $derived(leg.after.length > 0)
   const focusGames = $derived(zoomed.filter((g) => leg.after.includes(g.role)))
-  const GROUPS: Record<string, string> = { '1,2,3': 'cores', '4,5': 'supports' }
-  /** What fits in the wheel's hole: "Pos 4 (soft support)" → "soft support", "Safe lane" → "safe lane". */
-  const short = (title: string) => (title.match(/\((.*)\)/)?.[1] ?? title).toLowerCase()
 
   // ---- the outer ring: each hero once over all roles, or over the picked ones; it switches half way through a move.
   // Heroes thinner than SLIVER merge into one grey "+N" slice at the end, `others`, when there are at least two.
@@ -182,13 +185,14 @@ ${heroName(t.hero_id)}: ${record(t.wins, t.games)}`).join('')}</title>
           {:else}
             <title>{heroName(s.hero_id)}: {record(s.wins, s.games)}</title>
             <path d={segment(59, 97, s.from, s.to)} class:winning={s.wins * 2 >= s.games} class:losing={s.wins * 2 < s.games} />
-            {#if fits(s.to - s.from)}<image href={heroIcon(s.hero_id)} x={x - ICON / 2} y={y - ICON / 2} width={ICON} height={ICON} />{/if}
+            {@const size = heroSize(s.to - s.from)}
+            {#if size >= 3}<image href={heroIcon(s.hero_id)} x={x - size / 2} y={y - size / 2} width={size} height={size} />{/if}
           {/if}
         </g>
       {/each}
     </g>
     <text class="count" y="2">{alone ? focusGames.length : games.length}</text>
-    <text class="unit" y="15">{alone ? (GROUPS[leg.after.join()] ?? short(ROLES.get(leg.after[0])!.title)) : 'matches'}</text>
+    <text class="unit" y="15">matches</text>
   </svg>
   <!-- always there, only hidden, so the card keeps its height when the button comes and goes -->
   <button class="action" style:visibility={alone ? null : 'hidden'} onclick={() => pick([])}>Show all roles</button>

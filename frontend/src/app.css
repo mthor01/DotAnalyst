@@ -196,6 +196,29 @@ nav a[aria-current='page'] {
 .panel .roles button:hover img {
   opacity: 1;
 }
+/* the heroes played, most played first, under All heroes; a long list scrolls so the panel stays on the screen */
+.panel .heroes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(28px, 1fr));
+  max-height: 160px;
+  overflow-y: auto;
+}
+.panel .heroes button {
+  padding: 2px;
+}
+.panel .heroes .all {
+  grid-column: 1 / -1;
+  padding: 4px 8px;
+}
+.panel .heroes img {
+  display: block;
+  margin: auto;
+  opacity: 0.5;
+}
+.panel .heroes button[aria-pressed='true'] img,
+.panel .heroes button:hover img {
+  opacity: 1;
+}
 .panel .spans {
   display: grid;
   grid-template-columns: 1fr 1fr;

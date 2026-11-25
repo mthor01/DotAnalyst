@@ -3,6 +3,7 @@ export type Account = {
   label: string | null
   history_exposed: boolean | null
   avatar: string | null // Steam profile picture; "" when there is none, null until the poller asked
+  heroes: number[] // the heroes it played in its stored matches, most played first
 }
 
 export type MatchRow = {

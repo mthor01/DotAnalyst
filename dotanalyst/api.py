@@ -59,7 +59,12 @@ Where = Annotated[list, Depends(where)]
 @app.get("/api/accounts")
 def accounts(session: Db) -> list[dict]:
     rows = session.scalars(select(Account).where(Account.active).order_by(Account.label, Account.account_id))
-    return [{"account_id": a.account_id, "label": a.label, "history_exposed": a.history_exposed, "avatar": a.avatar} for a in rows]
+    heroes = queries.played_heroes(session)
+    return [
+        {"account_id": a.account_id, "label": a.label, "history_exposed": a.history_exposed, "avatar": a.avatar,
+         "heroes": heroes.get(a.account_id, [])}
+        for a in rows
+    ]  # fmt: skip
 
 
 def track(session: Session, account_ids: list[int]) -> None:

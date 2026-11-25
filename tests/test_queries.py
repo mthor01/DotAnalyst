@@ -143,6 +143,11 @@ def test_teammates_counts_only_same_team_and_tracked(session):
     assert rows == [{"account_id": FRIEND, "label": "friend", "games": 2, "wins": 1}]
 
 
+def test_played_heroes_of_tracked_accounts_most_played_first(session):
+    # ME: hero 1 twice, hero 6 once; FRIEND: heroes 2, 1, 3 once each, ties by hero id; STRANGER is no longer tracked
+    assert queries.played_heroes(session) == {ME: [1, 6], FRIEND: [1, 2, 3]}
+
+
 def test_matchups_with_and_against(session):
     rows = {r["hero_id"]: r for r in queries.matchups(session, queries.conditions(ME))}
     # hero 2 sits in slot 1: my ally in matches 1 and 3, my enemy in match 2

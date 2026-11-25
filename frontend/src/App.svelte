@@ -1,7 +1,7 @@
 <script lang="ts">
   import { GAME_MODES, LOBBY_TYPES, get, post, type Account } from './lib/api'
   import { MARKS } from './lib/RoleWheel.svelte'
-  import { constants, heroName, loadConstants } from './lib/constants.svelte'
+  import { constants, heroIcon, heroName, loadConstants } from './lib/constants.svelte'
   import Match from './Match.svelte'
   import Compare from './Compare.svelte'
   import Profile from './Profile.svelte'
@@ -48,7 +48,16 @@
   ]
   const QUEUES = ['Both', 'Solo', 'Party'] // see Solo or party in IMPLEMENTATION.md
   const own = $state({ size: 100, role: 0, queue: 0 })
-  const heroes = $derived(Object.keys(constants.heroes).sort((a, b) => heroName(Number(a)).localeCompare(heroName(Number(b)))))
+  // the hero filter offers only the heroes played: the account's, or every account's on the pages that show them all
+  const heroes = $derived(
+    ALL_ACCOUNTS.includes(page)
+      ? [...new Set(accounts.flatMap((a) => a.heroes))]
+      : (accounts.find((a) => String(a.account_id) === filters.account_id)?.heroes ?? []),
+  )
+  // another account may never have played the picked hero: its grid has no button to take it back off
+  $effect(() => {
+    if (filters.hero_id && !heroes.includes(Number(filters.hero_id))) filters.hero_id = ''
+  })
   const showFilters = $derived(!matchId && !(league && !teamId) && page !== 'queue')
   function monthsAgo(n: number) {
     const day = new Date()
@@ -265,11 +274,15 @@
           </select>
         </section>
         <section>
-          <h3><label for="hero">Hero</label></h3>
-          <select id="hero" bind:value={filters.hero_id}>
-            <option value="">All heroes</option>
-            {#each heroes as id}<option value={id}>{heroName(Number(id))}</option>{/each}
-          </select>
+          <h3>Hero</h3>
+          <div class="choice heroes" role="group" aria-label="Hero">
+            <button class="all" aria-pressed={filters.hero_id === ''} onclick={() => (filters.hero_id = '')}>All heroes</button>
+            {#each heroes as id}
+              <button aria-pressed={filters.hero_id === String(id)} onclick={() => (filters.hero_id = String(id))}>
+                <img src={heroIcon(id)} alt={heroName(id)} title={heroName(id)} width="24" height="24" />
+              </button>
+            {/each}
+          </div>
         </section>
       {/if}
       <section>

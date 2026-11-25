@@ -233,6 +233,21 @@ def teammates(session: Session, where: list) -> list[dict]:
     )
 
 
+def played_heroes(session: Session) -> dict[int, list[int]]:
+    """The heroes each tracked account played in its stored matches, most played first: the hero filter's choices."""
+    games = func.count()
+    rows = session.execute(
+        select(MatchPlayer.account_id, MatchPlayer.hero_id)
+        .join(Account, and_(Account.account_id == MatchPlayer.account_id, Account.active))
+        .group_by(MatchPlayer.account_id, MatchPlayer.hero_id)
+        .order_by(games.desc(), MatchPlayer.hero_id)
+    )
+    heroes: dict[int, list[int]] = {}
+    for account_id, hero_id in rows:
+        heroes.setdefault(account_id, []).append(hero_id)
+    return heroes
+
+
 def frequent_teammates(session: Session, account_id: int) -> list[int]:
     """Every player, tracked or not, on the account's team in at least TEAMMATE_GAMES of its newest
     TEAMMATE_MATCHES matches, most games first. Anonymous players are nobody."""
