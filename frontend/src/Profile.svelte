@@ -425,30 +425,36 @@
 
   {:else if shown === 'laning'}
   <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a row to unfold the match, or its date to open it. The Hero filter in the panel narrows all of it to one hero.</About></p>
-  {#each laning as [title, stats]}
-    <h3 class="group">{title}</h3>
-    <dl class="card numbers">
-      {#each stats as [label, value, unit, kind]}
+  <!-- three lists of equal width: label left, number right, so every column lines up -->
+  <div class="lists">
+    {#each laning as [title, stats]}
+      <section class="card">
+        <h3>{title}</h3>
+        <dl>
+          {#each stats as [label, value, unit, kind]}
+            <div>
+              <dt>{label}{#if unit}<small>{unit}</small>{/if}</dt>
+              <dd class:good={kind === 'signed' && value !== null && value > 0} class:bad={kind === 'signed' && value !== null && value < 0}>
+                {shownStat(value, kind)}
+              </dd>
+            </div>
+          {/each}
+        </dl>
+      </section>
+    {/each}
+  </div>
+  <section class="card lists-one" title="A lane is won or lost by more than {EVEN} net worth at 10:00, even within it">
+    <h3>Lane result vs game result</h3>
+    <dl>
+      {#each afterLane as [label, won, games]}
         <div>
           <dt>{label}</dt>
-          <dd class:good={kind === 'signed' && value !== null && value > 0} class:bad={kind === 'signed' && value !== null && value < 0}>
-            {shownStat(value, kind)}
-          </dd>
-          <dd class="muted">{unit}</dd>
+          <dd>{#if games}<WinRate wins={won} {games} />{:else}–{/if}</dd>
+          <dd class="muted">games won: {won} of {games}</dd>
         </div>
       {/each}
     </dl>
-  {/each}
-  <h3 class="group">Lane result vs game result</h3>
-  <dl class="card numbers" title="A lane is won or lost by more than {EVEN} net worth at 10:00, even within it">
-    {#each afterLane as [label, won, games]}
-      <div>
-        <dt>{label}</dt>
-        <dd>{games ? `${percent(won, games)}%` : '–'}</dd>
-        <dd class="muted">games won: {won} of {games}</dd>
-      </div>
-    {/each}
-  </dl>
+  </section>
   <section class="card form">
     <div class="strip" class:dense={laneGames.length > 25} class:packed={laneGames.length > 100}>
       <!-- the scale: built like a column, so its labels line up with the bars -->
@@ -923,6 +929,65 @@
   }
   .laning {
     max-width: 72ch;
+  }
+  /* Laning: three lists of equal width, each row a label left and its number right */
+  .lists {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 16px 0 12px;
+  }
+  @media (max-width: 700px) {
+    .lists {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .lists section,
+  .lists-one {
+    padding: 14px 18px 6px;
+  }
+  .lists-one {
+    margin-bottom: 12px;
+  }
+  .lists h3,
+  .lists-one h3 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-2);
+  }
+  .lists dl,
+  .lists-one dl {
+    margin: 0;
+  }
+  .lists dl div,
+  .lists-one dl div {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 8px 0;
+    border-top: 1px solid var(--grid);
+  }
+  .lists dt,
+  .lists-one dt {
+    flex: 1;
+  }
+  .lists small {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .lists dt + dd {
+    font-size: 20px;
+  }
+  .lists-one dt + dd {
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .lists-one dd.muted {
+    width: 130px;
+    text-align: right;
   }
   .numbers {
     display: grid;
