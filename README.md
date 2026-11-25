@@ -94,7 +94,7 @@ A player is tracked by their Dota account id, the short number (8 to 10 digits),
 - or take the number at the end of their [OpenDota](https://www.opendota.com), [Dotabuff](https://www.dotabuff.com) or [STRATZ](https://stratz.com) profile URL, e.g. `opendota.com/players/12345678`;
 - or, from a Steam profile URL `steamcommunity.com/profiles/7656119...`, subtract 76561197960265728 from that number.
 
-Then add it with **Add profile** at the top of the site; it takes the Steam id too. Or from the command line, with an optional name for the Account menu:
+Then add it with **Add profile** at the top of the site; it takes the Steam id too. Or from the command line, with an optional name for the account picker:
 
 ```powershell
 uv run python -m dotanalyst add-account 12345678 "Player 1"
