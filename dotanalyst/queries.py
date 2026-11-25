@@ -69,7 +69,7 @@ def narrowed(
     if position or party is not None:
         found, parties = _positions(session, where), _parties(session, where) if party is not None else set()
         mine = session.execute(_mine(MatchPlayer.match_id, MatchPlayer.player_slot).where(*where))
-        kept = [m for m, slot in mine if (not position or found[m, slot] in position) and (party is None or (m in parties) == party)]
+        kept = [m for m, slot in mine if (not position or found.get((m, slot)) in position) and (party is None or (m in parties) == party)]
         where = [*where, Match.match_id.in_(kept)]
     if last is not None:
         # correlate(None): the subquery has its own Match and MatchPlayer, not the outer query's
@@ -92,8 +92,8 @@ def positions(team: list[dict]) -> dict[int, int]:
     net_worth and lane: safe | mid | off | jungle, seen from the team's side, or None without a parsed replay.
 
     The farm (last hits, then net worth) picks within a lane: the safe lane's most farmed is 1 and least farmed 5,
-    the mid's is 2, the off lane's 3 and 4. Whoever is left (jungle, roaming, a third in a lane, no replay) takes the
-    open positions in order of farm.
+    the mid's is 2, the off lane's 3 and 4. Whoever is left (jungle, roaming, a third in a lane) takes the open
+    positions in order of farm. A player without a lane gets no position: farm alone guesses wrong too often.
     """
     farm = lambda p: (p["last_hits"] or 0, p["net_worth"] or 0)  # noqa: E731
     found: dict[int, int] = {}
@@ -102,7 +102,7 @@ def positions(team: list[dict]) -> dict[int, int]:
         if len(laners) == 1:
             places = places[:1]
         found.update(zip((p["player_slot"] for p in laners), places))
-    rest = sorted((p for p in team if p["player_slot"] not in found), key=farm, reverse=True)
+    rest = sorted((p for p in team if p["lane"] and p["player_slot"] not in found), key=farm, reverse=True)
     found.update(zip((p["player_slot"] for p in rest), (n for n in range(1, 6) if n not in found.values())))
     return found
 
@@ -211,7 +211,7 @@ def matches(session: Session, where: list) -> list[dict]:
     found, laners, parties = _positions(session, where), _laners(session, where), _parties(session, where)
     for r in rows:
         key = r["match_id"], r.pop("player_slot")
-        r["position"], r["party_size"] = found[key], parties.get(r["match_id"], 1)
+        r["position"], r["party_size"] = found.get(key), parties.get(r["match_id"], 1)
         r["lane_allies"], r["lane_enemies"] = laners.get(key, ([], []))
     return rows
 
@@ -476,7 +476,8 @@ def team(
             }  # fmt: skip
             player = players.setdefault(p["account_id"], blank)  # rows are newest first: last_played is their newest
             player["games"] += 1
-            player["positions"][replay_positions.get((g.match_id, p["player_slot"]), farmed[p["player_slot"]])] += 1
+            if n := replay_positions.get((g.match_id, p["player_slot"]), farmed.get(p["player_slot"])):
+                player["positions"][n] += 1
             player["recent"] += g.match_id in recent
             player["replays"] += g.match_id in parsed
             if g.match_id in parsed:  # the ward map's games, wards or none
@@ -561,7 +562,8 @@ def team(
         player["avatar"] = name and name.avatar or tracked.get(player["account_id"]) or None
         player["tracked"] = player["account_id"] in tracked
         player["main"] = player["account_id"] in stack
-        player["position"] = player.pop("positions").most_common(1)[0][0]  # ties: the first counted, the newest
+        # ties: the first counted, the newest; None when no game of theirs has a known position
+        player["position"] = (player.pop("positions").most_common(1) or [(None,)])[0][0]
         player["outside_listed"] = player["account_id"] in listed
         player["usual_waiting"] = waiting.get(player["account_id"], 0) if player["account_id"] in wanted else None
         player["outside"] = outside[player["account_id"]]

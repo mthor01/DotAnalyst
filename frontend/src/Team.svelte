@@ -112,7 +112,7 @@
       <li>
         <a href={profile(p.account_id, p.tracked)} target={p.tracked ? undefined : '_blank'} rel="noopener">
           {@render face(p, 36)}
-          <span><b>{p.name ?? `Player ${p.account_id}`}</b><br /><span class="muted">Pos {p.position}, {p.games} {p.games === 1 ? 'game' : 'games'}, last {date(p.last_played)}</span></span>
+          <span><b>{p.name ?? `Player ${p.account_id}`}</b><br /><span class="muted">{p.position ? `Pos ${p.position}, ` : ''}{p.games} {p.games === 1 ? 'game' : 'games'}, last {date(p.last_played)}</span></span>
         </a>
       </li>
     {/each}
@@ -185,7 +185,7 @@
         <span class="presence" role="img" aria-label="In {p.recent} of the last {RECENT_GAMES} games">
           {#each { length: RECENT_GAMES } as _, i}<i class:on={i < p.recent}></i>{/each}
         </span>
-        <span class="muted">Pos {p.position}, {p.games} games{p.tracked ? ', tracked' : ''}</span>
+        <span class="muted">{p.position ? `Pos ${p.position}, ` : ''}{p.games} games{p.tracked ? ', tracked' : ''}</span>
         {@render icons(p.heroes.slice(0, 3).map((h) => h.hero_id))}
       </li>
     {/each}

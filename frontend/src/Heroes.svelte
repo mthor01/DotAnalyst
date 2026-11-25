@@ -32,7 +32,7 @@
     for (const m of matches) by.set(m.hero_id, [...(by.get(m.hero_id) ?? []), m])
     return [...by].map(([hero_id, games]): Row => {
       const positions = new Map<number, number>()
-      for (const m of games) if (MARKS.has(m.position)) positions.set(m.position, (positions.get(m.position) ?? 0) + 1)
+      for (const m of games) if (m.position && MARKS.has(m.position)) positions.set(m.position, (positions.get(m.position) ?? 0) + 1)
       return {
         hero_id,
         games,

@@ -58,7 +58,7 @@ export type MatchRow = {
   lane_enemies: number[]
   party_size: number // 1 queued alone; see Solo or party in IMPLEMENTATION.md (a guess counts only regular teammates)
   with_tracked: boolean
-  position: 1 | 2 | 3 | 4 | 5 // from the lane and the farm, see IMPLEMENTATION.md
+  position: 1 | 2 | 3 | 4 | 5 | null // from the replay's lanes and farm, null without a parsed replay; see IMPLEMENTATION.md
 }
 
 /** A lane within this much net worth at 10:00 counts as even */
@@ -208,9 +208,9 @@ export type TeamDetail = {
    *  `usual_waiting`: usual games of the last 90 days whose replay the poller still means to get, null until Refresh
    *  on the team page asked for them. `main`: one of the five most seen in their newest `RECENT_GAMES` games
    *  (`recent` of them), the others stand in. `tracked`: an account of this site, whose profile it has.
-   *  `position`: the position 1-5 they took most often in these games. */
+   *  `position`: the position 1-5 they took most often in these games, null when none of them has a known one. */
   players: {
-    account_id: number; name: string | null; avatar: string | null; tracked: boolean; main: boolean; recent: number; last_played: number; position: number
+    account_id: number; name: string | null; avatar: string | null; tracked: boolean; main: boolean; recent: number; last_played: number; position: number | null
     games: number; replays: number; usual_replays: number; heroes: TeamPlayerHero[]; wards: WardSpot[]; parsed: { radiant: boolean; league: boolean; win: boolean }[]
     outside_listed: boolean
     usual_waiting: number | null

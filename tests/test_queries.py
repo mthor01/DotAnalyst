@@ -109,7 +109,7 @@ def test_matches_carry_side_lane_and_company(session):
     assert (rows[1]["obs_destroyed"], rows[1]["sen_destroyed"]) == (3, None)
     assert rows[1]["position"] == 2  # the only one in mid
     assert (rows[1]["lane_enemies"], rows[2]["lane_enemies"]) == ([6], [])  # match 2 has no lanes
-    assert {r["position"] for r in rows.values()} <= {1, 2, 3, 4, 5}
+    assert rows[2]["position"] is None and rows[3]["position"] is None  # no lanes, no guess
     assert extras(2) == (False, None, None, False)  # no replay stats; the friend was on the other team
     assert extras(3) == (True, None, None, True)
 
@@ -507,9 +507,10 @@ def test_positions_leave_the_rest_to_farm():
     assert queries.positions(team)[3] == 4 and queries.positions(team)[4] == 5  # net worth breaks a tie in last hits
 
 
-def test_positions_without_a_replay_rank_the_farm():
+def test_positions_without_a_replay_are_unknown():
+    # the farm order alone guessed wrong too often (a mid out-farming the carry, a late-game support)
     team = [player(s, None, lh) for s, lh in zip(range(5), (30, 250, 10, 120, 180))]
-    assert queries.positions(team) == {1: 1, 4: 2, 3: 3, 0: 4, 2: 5}
+    assert queries.positions(team) == {}
 
 
 def test_last_keeps_the_newest_matches_of_the_other_filters(session):
@@ -535,10 +536,9 @@ def test_narrowed_keeps_the_role_and_queue_the_rows_show(session):
 
 
 def test_team_players_position_is_the_one_they_took_most(league):
-    # no replay and no lane_role: the farm decides. As Radiant (games 1 and 3) 1001 is the third most farmed, as
-    # Dire (game 2) the least farmed: 3, 5, 3
+    # no replay and no lane_role: no position
     players = {p["account_id"]: p["position"] for p in queries.team(league, US)["players"]}
-    assert players == {1000: 1, 1001: 3, 1002: 2, 1003: 4, 1004: 5}
+    assert players == dict.fromkeys((1000, 1001, 1002, 1003, 1004))
     # with game 2's replay parsed its lanes count: 1001 alone in Dire's safe lane (top) is position 1 there
     store_match(league, LEAGUE_GAMES[1])
     league.get(Match, 2).replay_state = "parsed"

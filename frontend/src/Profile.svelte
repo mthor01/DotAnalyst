@@ -77,8 +77,8 @@
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' })
 
   const heroes = $derived(tally(recent))
-  const roles = $derived(recent.map((r) => ({ ...r, role: r.position })))
-  const allRoles = $derived(everyRole.map((r) => ({ ...r, role: r.position })))
+  const roles = $derived(recent.map((r) => ({ ...r, role: r.position ?? ('none' as const) })))
+  const allRoles = $derived(everyRole.map((r) => ({ ...r, role: r.position ?? ('none' as const) })))
   const FORM = 15 // results in the Form card
   let heroOpen = $state(0) // the hero a click in the Overview's table opens on the Heroes tab
   const form = $derived(recent.slice(0, FORM).reverse())
@@ -355,7 +355,7 @@
   </dl>
   <div class="overview">
     <section class="card roles">
-      <RoleWheel games={allRoles} zoomed={roles} picked={positions} onpick={(p) => onpositions(p as typeof positions)} none="No replay" />
+      <RoleWheel games={allRoles} zoomed={roles} picked={positions} onpick={(p) => onpositions(p.filter((n) => typeof n === 'number') as typeof positions)} none="No replay" />
     </section>
 
     <section class="card">
