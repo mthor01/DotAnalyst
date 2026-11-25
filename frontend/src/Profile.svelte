@@ -436,21 +436,28 @@
 
   {:else if shown === 'laning'}
   <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a row to unfold the match, or its date to open it. The Hero filter in the panel narrows all of it to one hero.</About></p>
-  <!-- your own lane phase and what it meant for the game: one card, three lists of equal width -->
+  <!-- your own lane phase and what it meant for the game: one card, three columns of equal width; the lane record
+       (as on the Overview) and what each lane result meant for the game on the left, farm and fights beside them -->
   <section class="card lists">
-    {#each laning as [title, stats]}{@render list(title, stats)}{/each}
-    <div title="A lane is won or lost by more than {EVEN} net worth, even within it">
-      <h3>Lane result vs game result</h3>
-      <dl class="after">
-        {#each afterLane as [label, won, games]}
-          <div>
-            <dt>{label}</dt>
-            <dd>{#if games}<WinRate wins={won} {games} />{:else}–{/if}</dd>
-            <dd class="count" title="games won: {won} of {games}">{won} / {games}</dd>
-          </div>
-        {/each}
-      </dl>
+    <div class="first" title="A lane is won or lost by more than {EVEN} net worth at 10:00, even within it">
+      <div>
+        <h3>Lanes won, even, lost</h3>
+        <p class="record"><span class="good">{lanes.won}</span> – {lanes.even} – <span class="bad">{lanes.lost}</span></p>
+      </div>
+      <div>
+        <h3>Lane result vs game result</h3>
+        <dl class="after">
+          {#each afterLane as [label, won, games]}
+            <div>
+              <dt>{label}</dt>
+              <dd>{#if games}<WinRate wins={won} {games} />{:else}–{/if}</dd>
+              <dd class="count" title="games won: {won} of {games}">{won} / {games}</dd>
+            </div>
+          {/each}
+        </dl>
+      </div>
     </div>
+    {#each laning as [title, stats]}{@render list(title, stats)}{/each}
   </section>
   <!-- your lane against the enemy lane: the means beside the lead of every match -->
   <section class="card lists versus">
@@ -961,6 +968,19 @@
   .lists .after dt + dd {
     font-size: 16px;
     font-weight: 700;
+  }
+  .lists .first {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .record {
+    margin: 2px 0 0;
+    font-size: 28px;
+    font-weight: 800;
+    font-stretch: var(--wide);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
   }
   .lists .count {
     width: 4.5em;
