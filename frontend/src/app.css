@@ -33,6 +33,12 @@
   --wide: 118%;
 }
 
+/* on every element: scrollbar-width is not inherited, so inner scroll areas need it too */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--axis) transparent;
+}
+
 body {
   margin: 0;
   background: var(--page);
