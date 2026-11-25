@@ -1,15 +1,35 @@
-# DotAnalyst
+<p align="center"><img src="docs/logo.png" width="128" height="128" alt="DotAnalyst logo"></p>
 
-A local Dota 2 stats site for the players I care about. There are plenty of stat sites already, but I often want numbers they don't show. This started with an amateur tournament where I wanted to analyse the opposing teams thoroughly.
+<h1 align="center">DotAnalyst</h1>
+
+<p align="center">A Dota 2 stats site on your own PC, for the players you care about, with the numbers other stat sites don't show.</p>
+
+<p align="center">
+  <a href="https://github.com/mthor01/DotAnalyst/releases/latest"><img src="https://img.shields.io/github/v/release/mthor01/DotAnalyst" alt="release"></a>
+  <a href="https://github.com/mthor01/DotAnalyst/releases"><img src="https://img.shields.io/github/downloads/mthor01/DotAnalyst/total" alt="downloads"></a>
+  <a href="https://github.com/mthor01/DotAnalyst/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/mthor01/DotAnalyst/release.yml?logo=github&label=CI" alt="CI"></a>
+</p>
+
+<p align="center"><b><a href="https://github.com/mthor01/DotAnalyst/releases/latest/download/DotAnalyst-Setup.exe">Download for Windows</a></b> · <a href="#install">Install</a> · <a href="#adding-players">Adding players</a> · <a href="#run-from-source">Run from source</a></p>
+
+![A player's profile page: win rate, lanes won, K/D/A, the roles and heroes played, the most played heroes, activity and recent form, with the filter panel on the right](docs/profile.png)
+
+There are plenty of stat sites already, but I often want numbers they don't show. This started with an amateur tournament where I wanted to analyse the opposing teams thoroughly.
 
 How it works:
 - Match data comes from Valve's Steam Web API.
 - The salt each match's replay URL needs comes from Valve's game coordinator, asked by a second Steam account (`steam/salts.mjs`), or else from the [OpenDota API](https://docs.opendota.com).
 - Replays are parsed by [odota/parser](https://github.com/odota/parser), OpenDota's replay parser, built with its own trimmed Java runtime and started by the server.
 
-![A player's profile page: win rate, lanes won, the heroes played in each lane, and the most played heroes](docs/profile.png)
+## Install
 
-## Setup
+1. Download [`DotAnalyst-Setup.exe`](https://github.com/mthor01/DotAnalyst/releases/latest/download/DotAnalyst-Setup.exe) and run it. It installs DotAnalyst for the current user, without admin rights, with a Start menu entry. The program bundles Python, the site and the parser with its Java runtime, so it needs nothing else installed. The setup is not signed, so Windows may warn about an unknown publisher first (**More info → Run anyway**).
+2. Start DotAnalyst. It opens in its own window and asks at the top of the page for a Steam Web API key, which you get at <https://steamcommunity.com/dev/apikey>.
+3. Add the players you want to follow (see [Adding players](#adding-players)). Their matches and replays load in the background.
+
+The program keeps its database, `.env` and logs in `%LOCALAPPDATA%\DotAnalyst`; uninstalling keeps them. It updates itself: at every start it looks for a newer release, downloads it in the background and installs it when the window is closed. It cannot ask a second Steam account for replay salts (that needs Node.js), so it takes them from OpenDota.
+
+## Run from source
 
 The setup is written for Windows; every command runs in PowerShell, in the repo folder. You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.14 itself), [Node.js](https://nodejs.org) and [git](https://git-scm.com).
 
@@ -47,9 +67,9 @@ The setup is written for Windows; every command runs in PowerShell, in the repo 
    uv run python -m dotanalyst.app
    ```
 
-### The Windows program
+### Building the setup
 
-`DotAnalyst-Setup.exe` installs DotAnalyst for the current user, without admin rights, with a Start menu entry. The program bundles Python, the site and the parser with its Java runtime, so it needs nothing else installed. To build the setup into `build\installer`, install [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) and run:
+To build `DotAnalyst-Setup.exe` into `build\installer`, install [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) and run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File packaging\build.ps1 -Version 0.1.0
@@ -58,8 +78,6 @@ powershell -ExecutionPolicy Bypass -File packaging\build.ps1 -Version 0.1.0
 It builds the parser, the site and `build\dist\DotAnalyst\DotAnalyst.exe` (PyInstaller, `packaging\dotanalyst.spec`) first. A newer setup installs over a running DotAnalyst; uninstalling keeps the data.
 
 The program updates itself from the GitHub releases that `.github/workflows/release.yml` publishes. Every hour, the workflow checks whether [odota/parser](https://github.com/odota/parser) (which OpenDota updates for each Dota patch) has a commit the last release was not built from. Changes pushed to this repo are released only when you start the workflow with **Actions → Release → Run workflow**. Before it publishes release `v0.1.<run>`, it runs the tests, builds the setup and parses a recent pro replay from OpenDota with the new parser. When OpenDota gives no replay, it publishes anyway, and the release notes say the parser was not checked. A parser release is built from the current `main`, so it also ships whatever was pushed since the last release. At every start the program asks GitHub for the newest release and downloads a newer setup in the background. When the window is closed, the program installs it silently, so the next start runs the new version. A program built by hand with `build.ps1` checks for updates the same way; one run from the repo never does. GitHub turns the hourly schedule off after 60 days without a commit; **Actions → Release → Enable workflow** turns it back on.
-
-The program keeps its database, `.env` and logs in `%LOCALAPPDATA%\DotAnalyst`, not in the repo folder. It cannot ask the second Steam account for replay salts (that needs Node.js), so it takes them from OpenDota.
 
 ## Adding players
 
@@ -76,7 +94,7 @@ uv run python -m dotanalyst add-account 12345678 "Player 1"
 uv run python -m dotanalyst sync
 ```
 
-`sync` fetches the account's last 500 matches at once; the running server picks a new account up within a minute either way. On a profile, **Add frequent teammates** adds every player with 10 or more games on that player's team in their last 500 matches. The player must have **Expose Public Match Data** on (Dota 2 → Settings → Options → Social), or Steam returns no matches; `status` then says so.
+`sync` fetches the account's last 500 matches at once; the running server picks a new account up within a minute either way. On the Teammates tab of a profile, **Add frequent teammates** adds every player with 10 or more games on that player's team in their last 500 matches. The player must have **Expose Public Match Data** on (Dota 2 → Settings → Options → Social), or Steam returns no matches; `status` then says so.
 
 Stop tracking an account, or list the tracked accounts and their replay counts:
 
