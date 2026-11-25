@@ -50,6 +50,8 @@
   export const SIDES = { radiant: 'Radiant', dire: 'Dire' }
   export const KINDS = { obs: 'Observers', sen: 'Sentries' }
   const TINTS: Record<string, string> = { radiant: 'var(--radiant)', dire: 'var(--dire)', obs: 'var(--series-4)', sen: 'var(--series-1)' }
+  /** Results are told by the text's colour rather than a dot, and their Both in grey */
+  const WORDS: Record<string, string> = { won: 'var(--good)', lost: 'var(--critical)' }
 </script>
 
 <script lang="ts">
@@ -154,7 +156,9 @@
   {:else}
     <span class="choice" role="group" aria-label={Object.values(toggles[i - layers.length]).join(' or ')}>
       {#each Object.entries(group) as [key, name] (key)}
-        <button aria-pressed={picked[i] === key} onclick={() => choose(i, key)}>{#if key}<i style:background={TINTS[key]}></i>{/if}{name}</button>
+        <button aria-pressed={picked[i] === key} onclick={() => choose(i, key)} style:color={key ? WORDS[key] : 'won' in group ? 'var(--muted)' : null}>
+          {#if TINTS[key]}<i style:background={TINTS[key]}></i>{/if}{name}
+        </button>
       {/each}
     </span>
   {/if}

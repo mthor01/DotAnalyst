@@ -40,7 +40,7 @@
   const SPREAD = 1.5 // cells: wards on the same spot run into one hill, wards a few cells apart stay apart
   const TOGGLES = [{ radiant: 'As Radiant', dire: 'As Dire' }, KIND_NAMES]
   const GAMES = { '': 'All games', league: 'Tournament games', usual: 'Usual matches' }
-  const RESULTS = { '': 'Wins and losses', won: 'Wins', lost: 'Losses' }
+  const RESULTS = { won: 'Wins', lost: 'Losses' } // buttons like the side's and the kind's, with Both before them
   /** The timeline: ten minutes each, the last open-ended */
   const PERIODS = ['0–10', '10–20', '20–30', '30–40', '40+']
   /** The ten minutes a ward was placed in, as an index of PERIODS; wards before the horn count to the first. */
@@ -133,7 +133,7 @@
   }
   const count = (type: string) => wards.filter((w) => w.type === type).length
   const SHARE_RULE =
-    'Shows only the spots (squares of 2 × 2 map cells) warded in at least this share of the chosen games. A spot counts each game once, however many wards went into it. The chosen games are those the result, side and other dropdowns pick, games without a ward included; the timeline does not change them. 0% shows every warded spot.'
+    'Shows only the spots (squares of 2 × 2 map cells) warded in at least this share of the chosen games. A spot counts each game once, however many wards went into it. The chosen games are those the result, side and games choices pick, games without a ward included; the timeline does not change them. 0% shows every warded spot.'
 </script>
 
 {#snippet timeline()}
@@ -147,7 +147,7 @@
   <button class="action" onclick={() => (periods = PERIODS.map(() => !every))}>{every ? 'All off' : 'All on'}</button>
 {/snippet}
 
-<MiniMap bind:moved bind:chosen {only} reset={false} titles={[...(byGame ? ['Games'] : []), 'Result', 'Side', 'Wards']} label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
+<MiniMap bind:moved bind:chosen {only} reset={false} titles={[...(byGame ? ['Games'] : []), 'Result', 'Side', 'Wards']} label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={[RESULTS, ...TOGGLES]} layers={byGame ? [GAMES] : []}>
   {#snippet children(_, on)}
     {@const of = tally(on)}
     {@const shown = common(shownOf(on), of)}
@@ -173,19 +173,19 @@
     <div class="head"><h3>Time</h3>{@render all()}</div>
     {@render timeline()}
   </div>
-  <div title={SHARE_RULE}>
+  <div>
     <h3><label for="{id}-share">Quantity filter</label></h3>
-    <p class="share"><input id="{id}-share" type="range" min="0" max="50" step="1" bind:value={share} /><b>{share ? `${share}%` : 'Every spot'}</b></p>
+    <p class="share boxed"><input id="{id}-share" type="range" min="0" max="50" step="1" bind:value={share} /><b>{share ? `${share}%` : 'Every spot'}</b><About>{SHARE_RULE}</About></p>
   </div>
   <!-- the map is shown whole at first, so any move is one to undo -->
   <button class="action" disabled={!moved || moved.size >= 127} onclick={() => (moved = null)}>Reset view</button>
 {:else if only !== 'map'}
 <p class="timeline">{@render timeline()}{@render all()}</p>
-<label class="share" title={SHARE_RULE}>
-  Quantity filter
-  <input type="range" min="0" max="50" step="1" bind:value={share} />
-  <b>{share ? `${share}%` : 'Every spot'}</b>
-</label>
+<p class="share">
+  <label for="{id}-share">Quantity filter</label>
+  <input id="{id}-share" type="range" min="0" max="50" step="1" bind:value={share} />
+  <b>{share ? `${share}%` : 'Every spot'}</b><About>{SHARE_RULE}</About>
+</p>
 {/if}
 {#if only !== 'controls' && (only !== 'map' || counts)}
 <p class="legend">
@@ -224,7 +224,7 @@
   .head .action {
     padding: 2px 10px;
   }
-  p.share {
+  .share.boxed {
     max-width: none;
     margin: 0;
   }
