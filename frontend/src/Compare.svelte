@@ -1,36 +1,50 @@
 <script module lang="ts">
-  import { METRICS, type MatchRow, type MetricAverage, type WardSpot } from './lib/api'
+  import { METRICS, clock, type MatchRow, type MetricAverage, type WardSpot } from './lib/api'
 
   export type Side = { matches: MatchRow[]; wards: WardSpot[]; averages: Record<string, MetricAverage> }
   const mean = (rows: MatchRow[], value: (r: MatchRow) => number) =>
     rows.length ? rows.reduce((sum, r) => sum + value(r), 0) / rows.length : undefined
   const fixed = (digits: number) => (v: number) => v.toFixed(digits)
-  /** The rows of the comparison: `lower` when less is better, `count` when neither is (only how much was seen) */
-  export type Row = { label: string; of: (s: Side) => number | undefined; show: (v: number) => string; lower?: boolean; count?: boolean; title?: (s: Side) => string }
-  export const ROWS: Row[] = [
-    { label: 'Matches', of: (s) => s.matches.length, show: String, count: true },
-    { label: 'Win rate', of: (s) => mean(s.matches, (r) => r.win), show: (v) => `${Math.round(100 * v)}%` },
-    { label: 'Kills', of: (s) => mean(s.matches, (r) => r.kills), show: fixed(1) },
-    { label: 'Deaths', of: (s) => mean(s.matches, (r) => r.deaths), show: fixed(1), lower: true },
-    { label: 'Assists', of: (s) => mean(s.matches, (r) => r.assists), show: fixed(1) },
-    { label: 'Gold per minute', of: (s) => mean(s.matches, (r) => r.gold_per_min), show: fixed(0) },
-    { label: 'Experience per minute', of: (s) => mean(s.matches, (r) => r.xp_per_min), show: fixed(0) },
-    // every parsed match of an account has a kill participation, so its count is the number of parsed matches
-    { label: 'Parsed matches', of: (s) => s.averages.kill_participation?.matches ?? 0, show: String, count: true },
-    ...METRICS.map((m) => ({
-      label: m.label,
-      of: (s: Side) => s.averages[m.name]?.average,
-      show: m.show,
-      lower: m.name === 'deaths_outside_fights',
-      title: (s: Side) => `${s.averages[m.name]?.matches ?? 0} parsed matches`,
-    })),
+  /** The rows of the comparison: `lower` when less is better, `count` when neither is (only how much was seen);
+   *  `heroes` is the row of most played heroes, pictures rather than a number */
+  export type Row = { label: string; of: (s: Side) => number | undefined; show: (v: number) => string; lower?: boolean; count?: boolean; heroes?: true; title?: (s: Side) => string }
+  /** A replay stat, averaged over the account's parsed matches */
+  const metric = (name: string, more: Partial<Row> = {}): Row => {
+    const m = METRICS.find((m) => m.name === name)!
+    return { label: m.label, of: (s) => s.averages[name]?.average, show: m.show, title: (s) => `${s.averages[name]?.matches ?? 0} parsed matches`, ...more }
+  }
+  export const GROUPS: [string, Row[]][] = [
+    ['General', [
+      { label: 'Matches', of: (s) => s.matches.length, show: String, count: true },
+      // every parsed match of an account has a kill participation, so its count is the number of parsed matches
+      { label: 'Parsed matches', of: (s) => s.averages.kill_participation?.matches ?? 0, show: String, count: true },
+      { label: 'Most played heroes', of: () => undefined, show: String, count: true, heroes: true },
+      { label: 'Win rate', of: (s) => mean(s.matches, (r) => r.win), show: (v) => `${Math.round(100 * v)}%` },
+      { label: 'Kills', of: (s) => mean(s.matches, (r) => r.kills), show: fixed(1) },
+      { label: 'Deaths', of: (s) => mean(s.matches, (r) => r.deaths), show: fixed(1), lower: true },
+      { label: 'Assists', of: (s) => mean(s.matches, (r) => r.assists), show: fixed(1) },
+    ]],
+    ['Economy', [
+      { label: 'Gold per minute', of: (s) => mean(s.matches, (r) => r.gold_per_min), show: fixed(0) },
+      { label: 'Experience per minute', of: (s) => mean(s.matches, (r) => r.xp_per_min), show: fixed(0) },
+      metric('camps_stacked'),
+    ]],
+    ['Lane', [metric('lane_cs_diff'), metric('lane_nw_diff'), metric('lane_dn_diff')]],
+    ['Fights', [metric('kill_participation'), metric('fight_participation'), metric('deaths_outside_fights', { lower: true })]],
+    ['Wards', [
+      metric('obs_placed'), metric('sen_placed'), metric('obs_bought'), metric('sen_bought'), metric('wards_destroyed'),
+      metric('obs_lifetime', { show: (v) => clock(Math.round(v)) }),
+    ]],
   ] // prettier-ignore
+  const TOP_HEROES = 5
 </script>
 
 <script lang="ts">
   import About from './lib/About.svelte'
   import { untrack } from 'svelte'
   import { get, percent, queryFor, type Account, type TeammateRow } from './lib/api'
+  import { heroIcon, heroName } from './lib/constants.svelte'
+  import { tally } from './lib/RoleWheel.svelte'
   import WardHeat, { HOW } from './lib/WardHeat.svelte'
 
   let { query, accounts }: { query: string; accounts: Account[] } = $props()
@@ -99,11 +113,24 @@
 
     {#if sides.length === 2}
       <div class="card stats">
-        {#each ROWS as row (row.label)}
-          {#each [0, 1] as i}
-            {@const v = row.of(sides[i])}
-            <span class="value {verdict(row, i)}" class:right={i === 1} title={row.title?.(sides[i])}>{v === undefined ? '–' : row.show(v)}</span>
-            {#if i === 0}<span class="stat">{row.label}</span>{/if}
+        {#each GROUPS as [title, rows] (title)}
+          <h3 class="group">{title}</h3>
+          {#each rows as row (row.label)}
+            {#each [0, 1] as i}
+              {#if row.heroes}
+                <!-- the most played next to the label in the middle, on both sides -->
+                <span class="value heroes" class:right={i === 1}>
+                  {#each tally(sides[i].matches).slice(0, TOP_HEROES) as h (h.hero_id)}
+                    {@const note = `${heroName(h.hero_id)}: ${h.games} ${h.games === 1 ? 'match' : 'matches'}, ${percent(h.wins, h.games)}% won`}
+                    <img src={heroIcon(h.hero_id)} alt={note} title={note} width="30" height="30" />
+                  {:else}–{/each}
+                </span>
+              {:else}
+                {@const v = row.of(sides[i])}
+                <span class="value {verdict(row, i)}" class:right={i === 1} title={row.title?.(sides[i])}>{v === undefined ? '–' : row.show(v)}</span>
+              {/if}
+              {#if i === 0}<span class="stat">{row.label}</span>{/if}
+            {/each}
           {/each}
         {/each}
       </div>
@@ -219,6 +246,32 @@
   }
   .value.right {
     text-align: left;
+  }
+  /* a heading across all three columns; the first sits at the card's top */
+  .group {
+    grid-column: 1 / -1;
+    margin: 18px 0 2px;
+    text-align: center;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-2);
+  }
+  .group:first-child {
+    margin-top: 8px;
+  }
+  .heroes {
+    display: flex;
+    flex-direction: row-reverse;
+    gap: 4px;
+    align-self: center;
+  }
+  .heroes.right {
+    flex-direction: row;
+  }
+  .heroes img {
+    display: block;
+    border-radius: 3px;
   }
   .better {
     color: var(--good);
