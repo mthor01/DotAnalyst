@@ -74,9 +74,9 @@ def tray(icon_file: str | None, open_window: Callable[[], None], quit_app: Calla
         icon = NotifyIcon()
         icon.Icon = Icon(icon_file) if icon_file else Icon.ExtractAssociatedIcon(sys.executable)
         icon.Text = icon.BalloonTipTitle = "DotAnalyst"
-        icon.BalloonTipText = "Still running here and collecting your matches. Quit from this icon's menu."
+        icon.BalloonTipText = "DotAnalyst keeps fetching in the background. Quit from this icon."
         icon.ContextMenuStrip = ContextMenuStrip()
-        icon.ContextMenuStrip.Items.Add("Open", None, EventHandler(lambda *_: open_window()))
+        icon.ContextMenuStrip.Items.Add("Open DotAnalyst", None, EventHandler(lambda *_: open_window()))
         icon.ContextMenuStrip.Items.Add("Quit", None, EventHandler(lambda *_: quit_app()))
         icon.MouseClick += MouseEventHandler(lambda _, e: open_window() if e.Button == MouseButtons.Left else None)
         icon.Visible = True
