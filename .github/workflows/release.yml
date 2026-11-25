@@ -68,6 +68,22 @@ jobs:
           powershell -ExecutionPolicy Bypass -File packaging\build.ps1 -Version $env:VERSION
           if ($LASTEXITCODE) { exit 1 }
 
+      - name: Install and uninstall the setup
+        if: steps.check.outputs.new == 'true'
+        run: |
+          # silent: the app is not started, and the uninstall keeps the user's data without asking
+          $dir = "$env:RUNNER_TEMP\da"
+          $data = "$env:LOCALAPPDATA\DotAnalyst"
+          Start-Process -Wait build\installer\DotAnalyst-Setup.exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=$dir"
+          if (-not (Test-Path "$dir\DotAnalyst.exe")) { throw "the setup installed no DotAnalyst.exe" }
+          New-Item -ItemType Directory -Force "$data\data" | Out-Null
+          Set-Content "$data\data\dotanalyst.db" "user data"
+          Start-Process -Wait "$dir\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES"
+          # the uninstaller goes on in a copy of itself after unins000.exe returns
+          for ($i = 0; $i -lt 60 -and (Test-Path "$dir\DotAnalyst.exe"); $i++) { Start-Sleep 1 }
+          if (Test-Path "$dir\DotAnalyst.exe") { throw "the uninstall left DotAnalyst.exe" }
+          if (-not (Test-Path "$data\data\dotanalyst.db")) { throw "the uninstall deleted the user's data" }
+
       - name: Parse a replay with the new parser
         id: smoke
         if: steps.check.outputs.new == 'true'

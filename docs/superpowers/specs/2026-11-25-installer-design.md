@@ -215,6 +215,9 @@ After the files are removed, an interactive uninstall asks:
   - The registry-to-settings step in `app.py`, if it is split into a small function, is tested against a made-up
     key under HKCU.
 - **Build:** `packaging\build.ps1` builds the setup, and CI must stay green.
+- **CI:** the release workflow installs the new setup silently into a temp folder, then uninstalls it silently. It
+  fails when `DotAnalyst.exe` is missing after the install or still there after the uninstall, or when a stand-in
+  database in the data folder is gone.
 - **By hand (no unit tests):**
   - Run the setup through every page, check the look against the sketch, and take screenshots.
   - Install into a scratch folder.

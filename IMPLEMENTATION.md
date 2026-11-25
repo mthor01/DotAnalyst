@@ -461,3 +461,37 @@ How often the game was won after a won, an even and a lost lane: the matches sho
 ### Lead charts
 
 A team's lead is Radiant's sum minus Dire's, per minute. The laning table and lane charts use minute 10, or the last minute of a shorter game.
+
+## The installed program
+
+What the setup asks and what the installed program does with the answers. `packaging/dotanalyst.iss` writes them under `HKCU\Software\DotAnalyst`; `dotanalyst/app.py` reads them at every start (`installed_settings`).
+
+### Data folder
+
+The program keeps its database (`data\`), `.env`, log and downloaded updates (`update\`) in one folder: `DataDir` from the registry, else `%LOCALAPPDATA%\DotAnalyst` (`home` in `app.py`). The setup asks for it only on a first install: when `DataDir` is not recorded and the default folder already has a `data\` folder (a 0.1.0 install, which recorded nothing), it skips the page and the program keeps using the default folder. Moving the folder later is not offered; the data stays where it was first put.
+
+### Replays from the Dota client folder
+
+The folder step reads replays the Dota client already downloaded, so they cost no download (`replay_dir` in `poll.py`):
+
+- `DOTA_REPLAY_DIR` set to a folder: that folder.
+- set but empty: off; the step reads no folder.
+- not set: Steam's default, `C:\Program Files (x86)\Steam\steamapps\common\dota 2 beta\game\dota\replays` (`REPLAY_DIR`).
+
+The installed program sets `DOTA_REPLAY_DIR` from the registry's `ReplayDir` when the setup recorded one (an empty value means "don't use my replays"); a `DOTA_REPLAY_DIR` in `.env` wins over it. The setup proposes a folder it finds: Steam's own library (`SteamPath` under `HKCU\Software\Valve\Steam`), else each library listed in `steamapps\libraryfolders.vdf`, the first holding `steamapps\common\dota 2 beta\game\dota\replays`. When none has one, the box starts unticked. Paths are as Steam records them, so they can be in lower case. A silent install (the program's own updates) writes nothing, so the earlier answers stay.
+
+### Start with Windows, tray
+
+The task "Start DotAnalyst with Windows" writes the Run value `DotAnalyst` = `"<program>\DotAnalyst.exe" --tray`; unticking it on a reinstall removes the value, and a silent reinstall keeps the earlier choice. Started with `--tray`, the program shows only its tray icon. When the Run value exists, closing the window hides it to the tray (a balloon says so, the first time each run) instead of quitting; left-click or "Open DotAnalyst" shows it, Quit ends the program. Without the Run value, closing the window quits as before.
+
+### One instance
+
+At start the installed program asks `POST http://127.0.0.1:8765/api/desktop/show`. If a DotAnalyst answers, that one shows its window and the new start exits, so two pollers never share one database. Anything else on that port, or no answer within 2 seconds, counts as not running.
+
+### Updates
+
+At every start, and every 6 hours while it runs in the tray, the program looks for a newer release and downloads its setup to `update\`. The setup runs silently when the window is closed. In the tray that happens as soon as the window is hidden, or right away if it already is; the setup gets `/TRAY` and starts the program in the tray again afterwards.
+
+### Uninstall
+
+The uninstaller ends a running DotAnalyst and its parser, and removes the program, the Run value and the registry key. It then asks whether to delete the data in the data folder: on Yes it deletes only `data\`, `update\`, `.env` and `dotanalyst.log`, and the folder itself only when nothing else is left in it. The default answer is No, and a silent uninstall never deletes. Dota's own replay folder is never touched.

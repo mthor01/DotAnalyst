@@ -27,7 +27,14 @@ How it works:
 2. Start DotAnalyst. It opens in its own window and asks at the top of the page for a Steam Web API key, which you get at <https://steamcommunity.com/dev/apikey>.
 3. Add the players you want to follow (see [Adding players](#adding-players)). Their matches and replays load in the background.
 
-The program keeps its database, `.env` and logs in `%LOCALAPPDATA%\DotAnalyst`; uninstalling keeps them. It updates itself: at every start it looks for a newer release, downloads it in the background and installs it when the window is closed. It cannot ask a second Steam account for replay salts (that needs Node.js), so it takes them from OpenDota.
+The setup asks for:
+
+- the install folder;
+- on a first install, the data folder for the database, `.env` and logs (by default `%LOCALAPPDATA%\DotAnalyst`);
+- whether to use the replays the Dota client already downloaded, with the folder it found through Steam, so those cost no download;
+- whether to start DotAnalyst with Windows. It then starts in the tray, and closing the window hides it there; **Quit** in the tray icon's menu ends it.
+
+Uninstalling asks whether to delete the data as well (the default is to keep it); it never touches Dota's replay folder. The program updates itself: at every start (and every 6 hours while it runs in the tray) it looks for a newer release, downloads it in the background and installs it when the window is closed. It cannot ask a second Steam account for replay salts (that needs Node.js), so it takes them from OpenDota.
 
 ## Run from source
 
@@ -75,9 +82,9 @@ To build `DotAnalyst-Setup.exe` into `build\installer`, install [Inno Setup 6](h
 powershell -ExecutionPolicy Bypass -File packaging\build.ps1 -Version 0.1.0
 ```
 
-It builds the parser, the site and `build\dist\DotAnalyst\DotAnalyst.exe` (PyInstaller, `packaging\dotanalyst.spec`) first. A newer setup installs over a running DotAnalyst; uninstalling keeps the data.
+It builds the parser, the site and `build\dist\DotAnalyst\DotAnalyst.exe` (PyInstaller, `packaging\dotanalyst.spec`) first. A newer setup installs over a running DotAnalyst; uninstalling asks before it deletes the data.
 
-The program updates itself from the GitHub releases that `.github/workflows/release.yml` publishes. The workflow runs on every push to `main` that changes more than documentation (Markdown files and `docs/`). Every hour it also checks whether [odota/parser](https://github.com/odota/parser) (which OpenDota updates for each Dota patch) has a commit the last release was not built from; **Actions → Release → Run workflow** starts it by hand. Release numbers count up by one from `v0.1.0`. Before it publishes a release, it runs the tests, builds the setup and parses a recent pro replay from OpenDota with the new parser. When OpenDota gives no replay, it publishes anyway, and the release notes say the parser was not checked. The notes list the subjects of the commits since the last release, plus a line when the parser changed; the first release shows `.github/release-intro.md` instead. They end with the parser and app commits the release was built from, which the next run compares against. At every start the program asks GitHub for the newest release and downloads a newer setup in the background. When the window is closed, the program installs it silently, so the next start runs the new version. A program built by hand with `build.ps1` checks for updates the same way; one run from the repo never does. GitHub turns the hourly schedule off after 60 days without a commit; **Actions → Release → Enable workflow** turns it back on.
+The program updates itself from the GitHub releases that `.github/workflows/release.yml` publishes. The workflow runs on every push to `main` that changes more than documentation (Markdown files and `docs/`). Every hour it also checks whether [odota/parser](https://github.com/odota/parser) (which OpenDota updates for each Dota patch) has a commit the last release was not built from; **Actions → Release → Run workflow** starts it by hand. Release numbers count up by one from `v0.1.0`. Before it publishes a release, it runs the tests, builds the setup, installs and uninstalls it silently (the uninstall must keep a stand-in database) and parses a recent pro replay from OpenDota with the new parser. When OpenDota gives no replay, it publishes anyway, and the release notes say the parser was not checked. The notes list the subjects of the commits since the last release, plus a line when the parser changed; the first release shows `.github/release-intro.md` instead. They end with the parser and app commits the release was built from, which the next run compares against. At every start the program asks GitHub for the newest release and downloads a newer setup in the background. When the window is closed, the program installs it silently, so the next start runs the new version. A program built by hand with `build.ps1` checks for updates the same way; one run from the repo never does. GitHub turns the hourly schedule off after 60 days without a commit; **Actions → Release → Enable workflow** turns it back on.
 
 ## Adding players
 
