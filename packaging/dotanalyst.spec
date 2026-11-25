@@ -17,5 +17,6 @@ a = Analysis(
     hiddenimports=collect_submodules("uvicorn"),  # uvicorn picks its loop and protocol modules by name
 )
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="DotAnalyst", console=False)
+exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="DotAnalyst", console=False,
+          icon=ROOT + "\\packaging\\dotanalyst.ico")  # also the window's: pywebview takes it from the exe
 coll = COLLECT(exe, a.binaries, a.datas, name="DotAnalyst")

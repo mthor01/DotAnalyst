@@ -8,6 +8,15 @@ import threading
 from pathlib import Path
 
 
+def paint_title_bar(hwnd: int) -> None:
+    """Windows 11 draws the title bar in the page's colour (#151a21, light text); Windows 10 ignores 35/36 and shows it
+    plain dark. Run on `shown`: pywebview's constructor sets dark mode (20) from the Windows theme before that."""
+    import ctypes
+
+    for attr, value in ((20, 1), (35, 0x00211A15), (36, 0x00EAE7E4)):  # dark mode, caption, text; colours are 0x00BBGGRR
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(ctypes.c_int(value)), 4)
+
+
 def main() -> None:
     if getattr(sys, "frozen", False):  # installed: the data, .env and logs live in the user's app data, not the program
         home = Path(os.environ["LOCALAPPDATA"]) / "DotAnalyst"
@@ -65,8 +74,11 @@ def main() -> None:
     while not server.started and thread.is_alive():
         threading.Event().wait(0.1)
 
-    webview.create_window("DotAnalyst", f"http://127.0.0.1:{port}/", width=1400, height=900, min_size=(900, 600))
-    webview.start(private_mode=False)  # private mode would forget the window's local storage at every close
+    window = webview.create_window("DotAnalyst", f"http://127.0.0.1:{port}/", width=1400, height=900, min_size=(900, 600))
+    window.events.shown += lambda: paint_title_bar(window.native.Handle.ToInt32())
+    icon = Path(__file__).resolve().parent.parent / "packaging" / "dotanalyst.ico"  # from source; the exe carries its own
+    # private mode would forget the window's local storage at every close
+    webview.start(private_mode=False, icon=str(icon) if icon.exists() else None)
     server.should_exit = True
     thread.join()
     if pending:
