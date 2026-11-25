@@ -120,6 +120,8 @@
     const all = placed(kind)
     return all.length ? (100 * all.filter((w) => w.killed).length) / all.length : null
   }
+  // the map and its controls are two WardHeats bound together, so the controls can stand in a column beside the map
+  let heat = $state({ periods: [true, true, true, true, true], share: 0, chosen: [] as string[], moved: null })
   const wardLists = $derived([
     ['Observers', [
       ['Bought', mean(recent.map((r) => r.obs_bought)), 'tenths'],
@@ -543,13 +545,17 @@
   {/each}
   {:else}
   <p class="muted">Your wards and your averages per match over the {parsed} filtered matches with a parsed replay.<About>The wards and numbers of the {parsed} of these {recent.length} matches that have a parsed replay. Radiant and Dire ward different places, so the map shows one side's games at a time; the buttons above it switch sides and kinds. Uptime is the mean time from placing an observer to its expiry or its destruction; one still standing when the game ended is left out. Dewarded counts the wards an enemy hero, creep or building destroyed before they ran out.</About></p>
+  <!-- the numbers, the map, and the map's controls in a column of their own beside it -->
   <section class="card vision">
-    <div>
-      <WardHeat {wards} games={recent.filter((r) => r.replay_state === 'parsed')} counts={false} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches" />
-    </div>
     <div class="lists wards">
       {#each wardLists as [title, stats]}{@render list(title, stats)}{/each}
     </div>
+    {#each ['map', 'controls'] as const as only}
+      <div class={only}>
+        <WardHeat {only} {wards} games={recent.filter((r) => r.replay_state === 'parsed')} counts={false} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches"
+          bind:periods={heat.periods} bind:share={heat.share} bind:chosen={heat.chosen} bind:moved={heat.moved} />
+      </div>
+    {/each}
   </section>
   {/if}
 {/if}
@@ -857,14 +863,27 @@
   .vision {
     --map-max: 640px;
     display: grid;
-    grid-template-columns: minmax(280px, 640px) minmax(240px, 1fr);
-    gap: 8px 24px;
+    grid-template-columns: 230px minmax(280px, 640px) 280px;
+    align-items: start;
+    gap: 16px 20px;
     padding: 16px 18px;
     margin-bottom: 12px;
   }
+  /* narrower: the controls go under the map, then everything in one column */
+  @media (max-width: 1250px) {
+    .vision {
+      grid-template-columns: 230px minmax(0, 1fr);
+    }
+    .vision .controls {
+      grid-column: 2;
+    }
+  }
   @media (max-width: 900px) {
     .vision {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .vision .controls {
+      grid-column: auto;
     }
   }
   /* the lists beside the map: one column, no card of their own */

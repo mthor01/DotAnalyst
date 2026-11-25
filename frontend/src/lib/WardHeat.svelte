@@ -15,7 +15,7 @@
     share?: number
     moved?: { x: number; y: number; size: number } | null
     chosen?: string[]
-    /** Only the map with its counts, or only the controls and the legend (with a Reset view for the shared zoom) */
+    /** Only the map with its counts, or only the controls and the "?" (with a Reset view for the shared zoom) */
     only?: 'map' | 'controls'
     /** false when the page shows the ward counts itself */
     counts?: boolean
@@ -56,9 +56,6 @@
     ],
   } // prettier-ignore
   const KINDS = ['obs', 'sen'] as const
-  /** The legend's strip of a ramp, on black like the darkened map */
-  const strip = (ramp: number[][]) =>
-    `linear-gradient(90deg, ${ramp.map(([t, r, g, b, a]) => `rgb(${r} ${g} ${b} / ${a}) ${t * 100}%`).join(', ')}), #000`
 
   const shownOf = (on: Record<string, boolean>) =>
     wards.filter(
@@ -159,21 +156,20 @@
   </span>
   <button class="action" onclick={() => (periods = PERIODS.map(() => !every))}>{every ? 'All off' : 'All on'}</button>
 </p>
-<label class="share" title="Only the spots warded in at least this share of the chosen games">
-  Min % games warded
+<label class="share" title="Shows only the spots (squares of 2 × 2 map cells) warded in at least this share of the chosen games. A spot counts each game once, however many wards went into it. The chosen games are those the result, side and other dropdowns pick, games without a ward included; the timeline does not change them. 0% shows every warded spot.">
+  Quantity filter
   <input type="range" min="0" max="50" step="1" bind:value={share} />
   <b>{share ? `${share}%` : 'Every spot'}</b>
 </label>
 {/if}
+{#if only === 'map' ? counts : true}
 <p class="legend">
   {#if only !== 'controls' && counts}<span>{count('obs')} observers and {count('sen')} sentries.</span>{/if}
   {#if only !== 'map'}
-    {#each KINDS as kind}
-      <span class="scale">{KIND_NAMES[kind]} <i class="ramp" style:background={strip(RAMPS[kind])}></i></span>
-    {/each}
-    <About>Every ward warms the map around its spot: dark is a spot warded once, bright the spots warded most, each kind scaled to its own busiest spot. The buttons, dropdowns, slider and timeline choose which wards count. Scroll over the map to zoom (all the way out shows the whole map again), drag to move it, hover a spot for its numbers.</About>
+    <About>Every ward warms the map around its spot, observers in reds and yellows, sentries in blues: dark is a spot warded once, bright the spots warded most, each kind scaled to its own busiest spot. The buttons, dropdowns, timeline and quantity filter choose which wards count. Scroll over the map to zoom (all the way out shows the whole map again), drag to move it, hover a spot for its numbers.</About>
   {/if}
 </p>
+{/if}
 
 <style>
   .share {
@@ -233,16 +229,5 @@
     gap: 4px 14px;
     margin: 8px 0 0;
     max-width: var(--map-max, 520px);
-  }
-  .scale {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .ramp {
-    display: inline-block;
-    width: 70px;
-    height: 10px;
-    border-radius: 2px;
   }
 </style>
