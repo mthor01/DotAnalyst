@@ -95,7 +95,7 @@ def test_matches_carry_side_lane_and_company(session):
             Lane(match_id=1, player_slot=128, lane="mid"),  # hero 6, against me
             Lane(match_id=1, player_slot=129, lane="top"),
             Metric(match_id=1, player_slot=0, name="lane_nw_diff", value=-250),
-            Metric(match_id=1, player_slot=0, name="obs_bought", value=3),
+            Metric(match_id=1, player_slot=0, name="obs_destroyed", value=3),
             Metric(match_id=1, player_slot=0, name="obs_placed", value=2),  # a metric rows do not carry must not double them
         ]
     )
@@ -106,7 +106,7 @@ def test_matches_carry_side_lane_and_company(session):
         return tuple(rows[match_id][key] for key in ("radiant", "lane", "lane_nw_diff", "with_tracked"))
 
     assert extras(1) == (True, "mid", -250, True)
-    assert (rows[1]["obs_bought"], rows[1]["sen_bought"]) == (3, None)
+    assert (rows[1]["obs_destroyed"], rows[1]["sen_destroyed"]) == (3, None)
     assert rows[1]["position"] == 2  # the only one in mid
     assert (rows[1]["lane_enemies"], rows[2]["lane_enemies"]) == ([6], [])  # match 2 has no lanes
     assert {r["position"] for r in rows.values()} <= {1, 2, 3, 4, 5}

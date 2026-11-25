@@ -188,6 +188,7 @@ One function each in `dotanalyst/metrics.py`, stored per player and match in `me
 | `obs_placed`, `sen_placed` | Wards of that kind the player placed |
 | `obs_bought`, `sen_bought` | Wards of that kind the player bought (`ward_observer`, `ward_sentry` purchases). A `ward_dispenser` purchase is the game merging or splitting wards already bought and is not counted. Known limit: wards a teammate bought and handed over count for the buyer, not the one who placed them |
 | `wards_destroyed` | Enemy wards of either kind the player destroyed |
+| `obs_destroyed`, `sen_destroyed` | Enemy observers (sentries) the player destroyed: wards of that kind whose `killed_by` is the player's slot |
 | `obs_lifetime` | Mean seconds the player's observers stood. One still standing at the end is left out |
 | `camps_pulled_by_10` | Camps pulled before 10:00: the player's number in the 10:00 minute row. No value in a match shorter than 10 minutes. Lotuses collected (`player_minute.lotuses`) and twin gate trips (`player_minute.twin_gates`) are stored but not a metric |
 | `camps_stacked` | Camps stacked in the whole match: the player's replay count (see Camps stacked) in the last whole minute row, so a stack in the final partial minute is missed. No value without a minute row |
@@ -426,21 +427,20 @@ The match's `picks_bans` from Steam's answer, in draft order, so it is there wit
 
 ### Ward numbers (Profile)
 
-The Warding tab is one card in three columns: three lists on the left, the ward heatmap in the middle, and the map's controls in a column on its right. The controls are a second `WardHeat` (`only="controls"`, bound to the map as on Player comparison). Under 1250 px wide the controls go under the map. Under 900 px it is all one column: the lists, the map, then the controls. Only matches with a parsed replay count.
+The Warding tab is a card with three lists on the left and the ward heatmap beside them, and right of the card a box with the map's controls, drawn like the filter panel (`.filterbox` in app.css shares the panel's headings, button rows and dropdowns): Result, Side, Wards, Time, Quantity filter, Reset view. The controls are a second `WardHeat` (`only="controls"`, bound to the map as on Player comparison). Under 1250 px wide the box goes under the card, its blocks side by side. Under 900 px the card is one column too: the lists, then the map. Only matches with a parsed replay count.
 
-- **Observers:** bought, placed, placed in all, uptime, dewarded by the enemy.
-- **Sentries:** bought, placed, placed in all, dewarded by the enemy.
-- **Enemy wards:** destroyed.
+- **Observers:** placed, uptime, dewarded by the enemy.
+- **Sentries:** placed, dewarded by the enemy.
+- **Enemy wards destroyed:** observers, sentries.
 
 The rules:
 
-- **Bought and destroyed:** the mean of that metric (see Metrics) over the parsed matches that have it.
+- **Enemy wards destroyed:** the mean of `obs_destroyed` and `sen_destroyed` (see Metrics) over the parsed matches that have it.
 - **Placed:** the account's wards of that kind on the profile's map (`/api/wards`), divided by the parsed filtered matches.
-- **Placed in all:** the same wards, counted.
 - **Uptime:** the mean of the matches' `obs_lifetime`. A match with few observers weighs as much as one with many. An observer still standing at the end is left out.
 - **Dewarded by the enemy:** the share of those wards with `killed` set, meaning an enemy hero, a creep or a building destroyed them (see Wards). A ward that ran out or stood to the end is not dewarded.
 
-The heatmap's own ward count is hidden here (`counts={false}`), since the lists show it. The explanation sits behind the "?" buttons, one by the intro and one at the foot of the controls.
+The heatmap's own ward count is hidden here (`counts={false}`), since the lists show it. The heatmap's explanation (`HOW` in WardHeat.svelte) sits behind the intro's "?"; the controls box has none. On Player comparison it sits behind the "?" under the maps, and the box between the maps is the same `.filterbox`.
 
 Known limit: placed, placed in all and dewarded follow only the filters the map follows, not the map's own buttons. They count both sides, wins and losses, and every minute, whatever the buttons pick.
 

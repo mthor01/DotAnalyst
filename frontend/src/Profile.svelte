@@ -7,7 +7,7 @@
   import Matches from './Matches.svelte'
   import Teammates from './Teammates.svelte'
   import RoleWheel, { tally } from './lib/RoleWheel.svelte'
-  import WardHeat from './lib/WardHeat.svelte'
+  import WardHeat, { HOW } from './lib/WardHeat.svelte'
   import WinRate from './lib/WinRate.svelte'
   import Count from './lib/Count.svelte'
 
@@ -124,19 +124,18 @@
   let heat = $state({ periods: [true, true, true, true, true], share: 0, chosen: [] as string[], moved: null })
   const wardLists = $derived([
     ['Observers', [
-      ['Bought', mean(recent.map((r) => r.obs_bought)), 'tenths'],
       ['Placed', parsed ? placed('obs').length / parsed : null, 'tenths'],
-      ['Placed in all', placed('obs').length, ''],
       ['Uptime', mean(recent.map((r) => r.obs_lifetime)), 'clock'],
       ['Dewarded by the enemy', dewarded('obs'), 'percent'],
     ]],
     ['Sentries', [
-      ['Bought', mean(recent.map((r) => r.sen_bought)), 'tenths'],
       ['Placed', parsed ? placed('sen').length / parsed : null, 'tenths'],
-      ['Placed in all', placed('sen').length, ''],
       ['Dewarded by the enemy', dewarded('sen'), 'percent'],
     ]],
-    ['Enemy wards', [['Destroyed', mean(recent.map((r) => r.wards_destroyed)), 'tenths']]],
+    ['Enemy wards destroyed', [
+      ['Observers', mean(recent.map((r) => r.obs_destroyed)), 'tenths'],
+      ['Sentries', mean(recent.map((r) => r.sen_destroyed)), 'tenths'],
+    ]],
   ] as const) // prettier-ignore
 
   // ---- averages at the bottom of the Overview, in sections, each with its spread and its trend
@@ -544,19 +543,22 @@
     {/if}
   {/each}
   {:else}
-  <p class="muted">Your wards and your averages per match over the {parsed} filtered matches with a parsed replay.<About>The wards and numbers of the {parsed} of these {recent.length} matches that have a parsed replay. Radiant and Dire ward different places, so the map shows one side's games at a time; the buttons above it switch sides and kinds. Uptime is the mean time from placing an observer to its expiry or its destruction; one still standing when the game ended is left out. Dewarded counts the wards an enemy hero, creep or building destroyed before they ran out.</About></p>
+  <p class="muted">Your wards and your averages per match over the {parsed} filtered matches with a parsed replay.<About>The wards and numbers of the {parsed} of these {recent.length} matches that have a parsed replay. Radiant and Dire ward different places, so the map shows one side's games at a time; the box beside it switches sides and kinds. {HOW} Uptime is the mean time from placing an observer to its expiry or its destruction; one still standing when the game ended is left out. Dewarded counts the wards an enemy hero, creep or building destroyed before they ran out.</About></p>
   <!-- the numbers, the map, and the map's controls in a column of their own beside it -->
-  <section class="card vision">
-    <div class="lists wards">
-      {#each wardLists as [title, stats]}{@render list(title, stats)}{/each}
-    </div>
-    {#each ['map', 'controls'] as const as only}
-      <div class={only}>
-        <WardHeat {only} {wards} games={recent.filter((r) => r.replay_state === 'parsed')} counts={false} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches"
-          bind:periods={heat.periods} bind:share={heat.share} bind:chosen={heat.chosen} bind:moved={heat.moved} />
+  <div class="vision">
+    <section class="card">
+      <div class="lists wards">
+        {#each wardLists as [title, stats]}{@render list(title, stats)}{/each}
       </div>
-    {/each}
-  </section>
+      <div class="map">{@render heatmap('map')}</div>
+    </section>
+    <!-- the map's controls in a box of their own, like the filter panel -->
+    <div class="filterbox">{@render heatmap('controls')}</div>
+  </div>
+  {#snippet heatmap(only: 'map' | 'controls')}
+    <WardHeat {only} {wards} games={recent.filter((r) => r.replay_state === 'parsed')} counts={false} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches"
+      bind:periods={heat.periods} bind:share={heat.share} bind:chosen={heat.chosen} bind:moved={heat.moved} />
+  {/snippet}
   {/if}
 {/if}
 
@@ -860,30 +862,34 @@
     background: var(--radiant);
   }
 
+  /* the card of numbers and map, and the box of the map's controls beside it */
   .vision {
+    display: grid;
+    grid-template-columns: minmax(0, 926px) 300px; /* 926: the lists, the gap and a full 640px map in the card's padding */
+    align-items: start;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  .vision .card {
     --map-max: 640px;
     display: grid;
-    grid-template-columns: 230px minmax(280px, 640px) 280px;
+    grid-template-columns: 230px minmax(0, 640px);
     align-items: start;
     gap: 16px 20px;
     padding: 16px 18px;
-    margin-bottom: 12px;
   }
-  /* narrower: the controls go under the map, then everything in one column */
+  /* narrower: the controls go under the card, their blocks side by side as in the folded-out filter panel */
   @media (max-width: 1250px) {
-    .vision {
-      grid-template-columns: 230px minmax(0, 1fr);
-    }
-    .vision .controls {
-      grid-column: 2;
-    }
-  }
-  @media (max-width: 900px) {
     .vision {
       grid-template-columns: minmax(0, 1fr);
     }
-    .vision .controls {
-      grid-column: auto;
+    .vision .filterbox {
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+  }
+  @media (max-width: 900px) {
+    .vision .card {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
   /* the lists beside the map: one column, no card of their own */

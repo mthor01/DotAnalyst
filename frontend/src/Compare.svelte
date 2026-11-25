@@ -31,7 +31,7 @@
   import About from './lib/About.svelte'
   import { untrack } from 'svelte'
   import { get, percent, queryFor, type Account, type TeammateRow } from './lib/api'
-  import WardHeat from './lib/WardHeat.svelte'
+  import WardHeat, { HOW } from './lib/WardHeat.svelte'
 
   let { query, accounts }: { query: string; accounts: Account[] } = $props()
   // the two accounts compared, the first two tracked ones at first
@@ -111,11 +111,11 @@
 
       <h2>Wards</h2>
       <div class="maps">
-        <!-- one panel between the maps holds every control; the maps only show, and zoom together -->
+        <!-- one box between the maps holds every control; the maps only show, and zoom together -->
         {#each ['map', 'controls', 'map'] as const as only, k}
           {@const i = k ? 1 : 0}
           {@const a = account(chosen[i])}
-          <div class="card {only}">
+          <div class={only === 'controls' ? 'filterbox controls' : 'card map'}>
             <WardHeat
               {only}
               wards={only === 'map' ? sides[i].wards : []}
@@ -129,7 +129,7 @@
           </div>
         {/each}
       </div>
-      <p class="muted">Left the first player's wards, right the second's.<About>Left the first player's wards, right the second's; the panel in the middle and a zoom on either map apply to both.</About></p>
+      <p class="muted">Left the first player's wards, right the second's.<About>Left the first player's wards, right the second's; the box in the middle and a zoom on either map apply to both. {HOW}</About></p>
     {/if}
   </div>
 {/if}

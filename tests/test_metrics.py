@@ -85,6 +85,8 @@ def test_wards_destroyed(match):
     assert metrics.wards_destroyed(match, PHOENIX) == 4
     assert metrics.wards_destroyed(match, DAWNBREAKER) == 1  # Rubick's sentry at 13:15
     assert metrics.wards_destroyed(match, LUNA) == 0
+    assert (metrics.obs_destroyed(match, PHOENIX), metrics.sen_destroyed(match, PHOENIX)) == (2, 2)
+    assert (metrics.obs_destroyed(match, DAWNBREAKER), metrics.sen_destroyed(match, DAWNBREAKER)) == (0, 1)
 
 
 def test_observer_lifetime(match):

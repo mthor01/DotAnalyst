@@ -129,7 +129,7 @@ def _positions_in(session: Session, played) -> dict[tuple[int, int], int]:
 
 
 ROW_METRICS = (
-    "lane_nw_diff", "obs_bought", "sen_bought", "wards_destroyed", "obs_lifetime", "lane_cs_diff", "lane_dn_diff", "last_hits_at_10",
+    "lane_nw_diff", "obs_destroyed", "sen_destroyed", "obs_lifetime", "lane_cs_diff", "lane_dn_diff", "last_hits_at_10",
     "denies_at_10", "net_worth_at_10", "xp_at_10", "damage_at_10", "damage_taken_at_10", "lane_damage_at_10",
     "enemy_lane_damage_at_10", "kills_by_10", "deaths_by_10", "camps_pulled_by_10", "camps_stacked",
     "kill_participation", "fight_participation", "deaths_outside_fights",

@@ -83,9 +83,11 @@
     chosen?: string[]
     /** Only the picture, or only the row of controls: two maps bound together can share one row */
     only?: 'map' | 'controls'
+    /** With only the controls: a heading over each dropdown and button row, in their order, as in the filter panel */
+    titles?: string[]
   }
   let {
-    label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = [], controls, reset = true, children, only,
+    label, view = WHOLE, fallen, at = Infinity, layers = [], toggles = [], controls, reset = true, children, only, titles = [],
     moved = $bindable(null), chosen = $bindable([]),
   }: Props = $props() // prettier-ignore
 
@@ -142,26 +144,33 @@
   })
 </script>
 
-<div class="map">
-  {#if only !== 'map'}
+{#snippet pick(group: Record<string, string>, i: number)}
+  {#if i < layers.length}
+    <select aria-label={titles[i] ?? 'What the map shows'} value={picked[i]} onchange={(e) => choose(i, e.currentTarget.value)}>
+      {#each Object.entries(group) as [key, name] (key)}
+        <option value={key}>{name}</option>
+      {/each}
+    </select>
+  {:else}
+    <span class="choice" role="group" aria-label={Object.values(toggles[i - layers.length]).join(' or ')}>
+      {#each Object.entries(group) as [key, name] (key)}
+        <button aria-pressed={picked[i] === key} onclick={() => choose(i, key)}>{#if key}<i style:background={TINTS[key]}></i>{/if}{name}</button>
+      {/each}
+    </span>
+  {/if}
+{/snippet}
+
+<!-- with only the controls, each group is a block of the surrounding box (see .filterbox in app.css) -->
+<div class="map" class:column={only === 'controls'}>
+  {#if only === 'controls'}
+    {#each groups as group, i}
+      <div><h3>{titles[i]}</h3>{@render pick(group, i)}</div>
+    {/each}
+  {:else if only !== 'map'}
   <p>
     <span class="controls">
       {@render controls?.()}
-      {#each groups as group, i}
-        {#if i < layers.length}
-          <select aria-label="What the map shows" value={picked[i]} onchange={(e) => choose(i, e.currentTarget.value)}>
-            {#each Object.entries(group) as [key, name] (key)}
-              <option value={key}>{name}</option>
-            {/each}
-          </select>
-        {:else}
-          <span class="choice" role="group" aria-label={Object.values(toggles[i - layers.length]).join(' or ')}>
-            {#each Object.entries(group) as [key, name] (key)}
-              <button aria-pressed={picked[i] === key} onclick={() => choose(i, key)}>{#if key}<i style:background={TINTS[key]}></i>{/if}{name}</button>
-            {/each}
-          </span>
-        {/if}
-      {/each}
+      {#each groups as group, i}{@render pick(group, i)}{/each}
     </span>
     {#if reset}
       <button class="action" disabled={!moved || box(moved) === given} onclick={() => (moved = null)}>Reset view</button>
@@ -209,6 +218,9 @@
   .map {
     max-width: var(--map-max, 520px);
   }
+  .map.column {
+    display: contents;
+  }
   p {
     display: flex;
     flex-wrap: wrap;
@@ -226,7 +238,7 @@
   .controls :global(select) {
     margin-left: 0;
   }
-  .choice button {
+  p .choice button {
     padding: 3px 10px;
   }
   /* the dot in the key's colour */

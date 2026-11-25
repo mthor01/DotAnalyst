@@ -28,9 +28,8 @@ export type MatchRow = {
    *  lanes, `obs_lifetime` (mean seconds an observer stood) when none of the player's was removed before the end. */
   lane: 'top' | 'mid' | 'bot' | 'jungle' | null
   lane_nw_diff: number | null
-  obs_bought: number | null
-  sen_bought: number | null
-  wards_destroyed: number | null
+  obs_destroyed: number | null
+  sen_destroyed: number | null
   obs_lifetime: number | null
   /** the laning numbers at 10:00 (kills and deaths before it), see dotanalyst/metrics.py; null without a replay, in
    *  a match that ended before 10:00, and (lane_cs_diff, lane_dn_diff and the two lane damages) outside the three lanes */

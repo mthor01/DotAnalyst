@@ -1,3 +1,9 @@
+<script module lang="ts">
+  /** What the heatmap shows and how to use it: in the map's own "?" on a page with the whole map, else in the page's */
+  export const HOW =
+    'Every ward warms the map around its spot, observers in reds and yellows, sentries in blues: dark is a spot warded once, bright the spots warded most, each kind scaled to its own busiest spot. The buttons, dropdowns, timeline and quantity filter choose which wards count. Scroll over the map to zoom (all the way out shows the whole map again), drag to move it, hover a spot for its numbers.'
+</script>
+
 <script lang="ts">
   import type { WardSpot } from './api'
   import About from './About.svelte'
@@ -15,7 +21,8 @@
     share?: number
     moved?: { x: number; y: number; size: number } | null
     chosen?: string[]
-    /** Only the map with its counts, or only the controls and the "?" (with a Reset view for the shared zoom) */
+    /** Only the map with its counts, or only the controls: headed blocks for a .filterbox (app.css), with a Reset view
+     *  for the shared zoom; the page then explains the map itself */
     only?: 'map' | 'controls'
     /** false when the page shows the ward counts itself */
     counts?: boolean
@@ -26,6 +33,7 @@
     share = $bindable(0), // percent: only squares warded in at least this share of the chosen games
     moved = $bindable(null), chosen = $bindable([]),
   }: Props = $props() // prettier-ignore
+  const id = $props.id()
 
   const SQUARE = 2 // map cells to a side of the squares that tell, on hover, how many wards went there
   const SCALE = 2 // pixels of the heat picture per map cell
@@ -124,9 +132,22 @@
     return [...found.values()]
   }
   const count = (type: string) => wards.filter((w) => w.type === type).length
+  const SHARE_RULE =
+    'Shows only the spots (squares of 2 × 2 map cells) warded in at least this share of the chosen games. A spot counts each game once, however many wards went into it. The chosen games are those the result, side and other dropdowns pick, games without a ward included; the timeline does not change them. 0% shows every warded spot.'
 </script>
 
-<MiniMap bind:moved bind:chosen {only} reset={only === 'controls'} label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
+{#snippet timeline()}
+  <span class="choice" role="group" aria-label="When the wards were placed, in minutes" title="When the wards were placed, in minutes">
+    {#each PERIODS as name, i}
+      <button aria-pressed={periods[i]} onclick={() => (periods = periods.map((on, j) => on !== (i === j)))}>{name}</button>
+    {/each}
+  </span>
+{/snippet}
+{#snippet all()}
+  <button class="action" onclick={() => (periods = PERIODS.map(() => !every))}>{every ? 'All off' : 'All on'}</button>
+{/snippet}
+
+<MiniMap bind:moved bind:chosen {only} reset={false} titles={[...(byGame ? ['Games'] : []), 'Result', 'Side', 'Wards']} label="{label}: {count('obs')} observers and {count('sen')} sentries" toggles={TOGGLES} layers={[...(byGame ? [GAMES] : []), RESULTS]}>
   {#snippet children(_, on)}
     {@const of = tally(on)}
     {@const shown = common(shownOf(on), of)}
@@ -147,26 +168,30 @@
     {/each}
   {/snippet}
 </MiniMap>
-{#if only !== 'map'}
-<p class="timeline">
-  <span class="choice" role="group" aria-label="When the wards were placed, in minutes" title="When the wards were placed, in minutes">
-    {#each PERIODS as name, i}
-      <button aria-pressed={periods[i]} onclick={() => (periods = periods.map((on, j) => on !== (i === j)))}>{name}</button>
-    {/each}
-  </span>
-  <button class="action" onclick={() => (periods = PERIODS.map(() => !every))}>{every ? 'All off' : 'All on'}</button>
-</p>
-<label class="share" title="Shows only the spots (squares of 2 × 2 map cells) warded in at least this share of the chosen games. A spot counts each game once, however many wards went into it. The chosen games are those the result, side and other dropdowns pick, games without a ward included; the timeline does not change them. 0% shows every warded spot.">
+{#if only === 'controls'}
+  <div>
+    <div class="head"><h3>Time</h3>{@render all()}</div>
+    {@render timeline()}
+  </div>
+  <div title={SHARE_RULE}>
+    <h3><label for="{id}-share">Quantity filter</label></h3>
+    <p class="share"><input id="{id}-share" type="range" min="0" max="50" step="1" bind:value={share} /><b>{share ? `${share}%` : 'Every spot'}</b></p>
+  </div>
+  <!-- the map is shown whole at first, so any move is one to undo -->
+  <button class="action" disabled={!moved || moved.size >= 127} onclick={() => (moved = null)}>Reset view</button>
+{:else if only !== 'map'}
+<p class="timeline">{@render timeline()}{@render all()}</p>
+<label class="share" title={SHARE_RULE}>
   Quantity filter
   <input type="range" min="0" max="50" step="1" bind:value={share} />
   <b>{share ? `${share}%` : 'Every spot'}</b>
 </label>
 {/if}
-{#if only === 'map' ? counts : true}
+{#if only !== 'controls' && (only !== 'map' || counts)}
 <p class="legend">
-  {#if only !== 'controls' && counts}<span>{count('obs')} observers and {count('sen')} sentries.</span>{/if}
-  {#if only !== 'map'}
-    <About>Every ward warms the map around its spot, observers in reds and yellows, sentries in blues: dark is a spot warded once, bright the spots warded most, each kind scaled to its own busiest spot. The buttons, dropdowns, timeline and quantity filter choose which wards count. Scroll over the map to zoom (all the way out shows the whole map again), drag to move it, hover a spot for its numbers.</About>
+  {#if counts}<span>{count('obs')} observers and {count('sen')} sentries.</span>{/if}
+  {#if !only}
+    <About>{HOW}</About>
   {/if}
 </p>
 {/if}
@@ -185,6 +210,22 @@
   .share input {
     flex: 1;
     min-width: 80px;
+    margin: 0;
+  }
+  .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .head h3 {
+    margin: 0;
+  }
+  .head .action {
+    padding: 2px 10px;
+  }
+  p.share {
+    max-width: none;
     margin: 0;
   }
   .share b {

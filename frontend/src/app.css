@@ -148,21 +148,37 @@ nav a[aria-current='page'] {
   background: var(--surface);
   border-radius: 6px;
 }
-.panel h3 {
+/* a box of controls inside a page (the ward maps'), drawn like the filter panel */
+.filterbox {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  padding: 14px;
+  background: var(--surface);
+  border-radius: 6px;
+}
+.filterbox .action {
+  background: var(--page);
+  align-self: start;
+}
+.filterbox .action:not(:disabled):hover {
+  background: var(--raised);
+}
+:is(.panel, .filterbox) h3 {
   margin: 0 0 6px;
   color: var(--muted);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.panel h3 label {
+:is(.panel, .filterbox) h3 label {
   color: inherit;
 }
-.panel .choice {
+:is(.panel, .filterbox) .choice {
   display: flex;
   background: var(--page);
 }
-.panel .choice button {
+:is(.panel, .filterbox) .choice button {
   flex: 1 0 auto;
   padding: 4px 8px;
 }
@@ -185,7 +201,7 @@ nav a[aria-current='page'] {
   grid-template-columns: 1fr 1fr;
 }
 /* a dropdown that looks like the button rows around it: flat on the page colour, a drawn chevron */
-.panel select {
+:is(.panel, .filterbox) select {
   width: 100%;
   margin: 0;
   padding: 6px 28px 6px 10px;
@@ -199,10 +215,10 @@ nav a[aria-current='page'] {
   appearance: none;
   cursor: pointer;
 }
-.panel select:hover {
+:is(.panel, .filterbox) select:hover {
   background-color: var(--raised);
 }
-.panel select option {
+:is(.panel, .filterbox) select option {
   background: var(--surface);
 }
 .panel .day {
