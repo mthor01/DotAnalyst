@@ -196,33 +196,34 @@
   const afterLane = $derived.by(() => {
     const laned = laneGames.filter((r) => r.lane_nw_diff !== null)
     const kinds = [
-      ['After a won lane', laned.filter((r) => r.lane_nw_diff! > EVEN)],
-      ['After an even lane', laned.filter((r) => Math.abs(r.lane_nw_diff!) <= EVEN)],
-      ['After a lost lane', laned.filter((r) => r.lane_nw_diff! < -EVEN)],
+      ['Won lane', laned.filter((r) => r.lane_nw_diff! > EVEN)],
+      ['Even lane', laned.filter((r) => Math.abs(r.lane_nw_diff!) <= EVEN)],
+      ['Lost lane', laned.filter((r) => r.lane_nw_diff! < -EVEN)],
     ] as const
     return kinds.map(([label, games]) => [label, games.filter((r) => r.win).length, games.length] as const)
   })
+  // the time is said once, in the line above them, so no title repeats it
   const laning = $derived([
-    ['Farm, by 10:00', [
-      ['Last hits', at10('last_hits_at_10'), 'creeps and neutrals', ''],
-      ['Denies', at10('denies_at_10'), '', ''],
-      ['Net worth', at10('net_worth_at_10'), '', ''],
-      ['Experience', at10('xp_at_10'), '', ''],
-      ['Camps pulled', at10('camps_pulled_by_10'), '', 'tenths'],
+    ['Farm', [
+      ['Last hits', at10('last_hits_at_10'), ''],
+      ['Denies', at10('denies_at_10'), ''],
+      ['Net worth', at10('net_worth_at_10'), ''],
+      ['Experience', at10('xp_at_10'), ''],
+      ['Camps pulled', at10('camps_pulled_by_10'), 'tenths'],
     ]],
-    ['Fights, by 10:00', [
-      ['Kills', at10('kills_by_10'), '', 'tenths'],
-      ['Deaths', at10('deaths_by_10'), '', 'tenths'],
-      ['Damage dealt', at10('damage_at_10'), 'to enemy heroes', ''],
-      ['Damage taken', at10('damage_taken_at_10'), 'from enemy heroes', ''],
+    ['Fights', [
+      ['Kills', at10('kills_by_10'), 'tenths'],
+      ['Deaths', at10('deaths_by_10'), 'tenths'],
+      ['Damage dealt', at10('damage_at_10'), ''],
+      ['Damage taken', at10('damage_taken_at_10'), ''],
     ]],
-    ['Your lane vs the enemy lane, by 10:00', [
-      ['Net worth lead', at10('lane_nw_diff'), 'your lane minus theirs', 'signed'],
-      ['Last-hit lead', at10('lane_cs_diff'), 'your lane minus theirs', 'signed'],
-      ['Deny lead', at10('lane_dn_diff'), 'your lane minus theirs', 'signed'],
-      ['Your lane dealt', at10('lane_damage_at_10'), 'you and your lane partner, to enemy heroes', ''],
-      ['Enemy lane dealt', at10('enemy_lane_damage_at_10'), 'the heroes you laned against, to your side', ''],
-    ]],
+  ] as const) // prettier-ignore
+  const versus = $derived([
+    ['Net worth lead', at10('lane_nw_diff'), 'signed'],
+    ['Last-hit lead', at10('lane_cs_diff'), 'signed'],
+    ['Deny lead', at10('lane_dn_diff'), 'signed'],
+    ["Your lane's damage", at10('lane_damage_at_10'), ''],
+    ["Enemy lane's damage", at10('enemy_lane_damage_at_10'), ''],
   ] as const) // prettier-ignore
   // the matches with the biggest and smallest net worth lead; with few matches each list takes its half, so none is in both
   const extremes = $derived.by(() => {
@@ -425,57 +426,60 @@
 
   {:else if shown === 'laning'}
   <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a row to unfold the match, or its date to open it. The Hero filter in the panel narrows all of it to one hero.</About></p>
-  <!-- three lists of equal width: label left, number right, so every column lines up -->
-  <div class="lists">
-    {#each laning as [title, stats]}
-      <section class="card">
-        <h3>{title}</h3>
-        <dl>
-          {#each stats as [label, value, unit, kind]}
-            <div>
-              <dt>{label}{#if unit}<small>{unit}</small>{/if}</dt>
-              <dd class:good={kind === 'signed' && value !== null && value > 0} class:bad={kind === 'signed' && value !== null && value < 0}>
-                {shownStat(value, kind)}
-              </dd>
-            </div>
-          {/each}
-        </dl>
-      </section>
-    {/each}
-  </div>
-  <section class="card lists-one" title="A lane is won or lost by more than {EVEN} net worth at 10:00, even within it">
-    <h3>Lane result vs game result</h3>
-    <dl>
-      {#each afterLane as [label, won, games]}
-        <div>
-          <dt>{label}</dt>
-          <dd>{#if games}<WinRate wins={won} {games} />{:else}–{/if}</dd>
-          <dd class="muted">games won: {won} of {games}</dd>
-        </div>
-      {/each}
-    </dl>
-  </section>
-  <section class="card form">
-    <div class="strip" class:dense={laneGames.length > 25} class:packed={laneGames.length > 100}>
-      <!-- the scale: built like a column, so its labels line up with the bars -->
-      <span class="scale" aria-hidden="true">
-        <b></b>
-        <span class="lane"><small>+{(reach / 1000).toFixed(1)}k</small><small>0</small><small>−{(reach / 1000).toFixed(1)}k</small></span>
-      </span>
-      {#each strip as r (r.match_id)}
-        {@const nw = r.lane_nw_diff}
-        <a href="#match/{r.match_id}" title={note(r)} aria-label={note(r)}>
-          <img src={heroIcon(r.hero_id)} alt="" width="22" height="22" loading="lazy" />
-          <span class="lane">
-            {#if nw !== null}
-              <i class={nw < 0 ? 'behind' : 'ahead'} style:height="{Math.max(2, (50 * Math.abs(nw)) / reach)}%"></i>
-            {/if}
-          </span>
-          <i class="dot {r.win ? 'won' : 'lost'}"></i>
-        </a>
-      {/each}
+  {#snippet list(title: string, stats: readonly (readonly [string, number | null, string])[])}
+    <div>
+      <h3>{title}</h3>
+      <dl>
+        {#each stats as [label, value, kind]}
+          <div>
+            <dt>{label}</dt>
+            <dd class:good={kind === 'signed' && value !== null && value > 0} class:bad={kind === 'signed' && value !== null && value < 0}>{shownStat(value, kind)}</dd>
+          </div>
+        {/each}
+      </dl>
     </div>
-    <p class="muted">Lane net worth lead at 10:00, one column per match.<About>One column per match, the oldest on the left. The bar is the net worth lead of the player's lane at 10:00: up when ahead, down when behind. A match without a parsed replay has no bar. The dot is the result.</About></p>
+  {/snippet}
+  <!-- your own lane phase and what it meant for the game: one card, three lists of equal width -->
+  <section class="card lists">
+    {#each laning as [title, stats]}{@render list(title, stats)}{/each}
+    <div title="A lane is won or lost by more than {EVEN} net worth, even within it">
+      <h3>Lane result vs game result</h3>
+      <dl class="after">
+        {#each afterLane as [label, won, games]}
+          <div>
+            <dt>{label}</dt>
+            <dd>{#if games}<WinRate wins={won} {games} />{:else}–{/if}</dd>
+            <dd class="count" title="games won: {won} of {games}">{won} / {games}</dd>
+          </div>
+        {/each}
+      </dl>
+    </div>
+  </section>
+  <!-- your lane against the enemy lane: the means beside the lead of every match -->
+  <section class="card lists versus">
+    {@render list('Your lane vs the enemy lane', versus)}
+    <div>
+      <h3>Net worth lead per match<About>One column per match, the oldest on the left. The bar is the net worth lead of the player's lane: up when ahead, down when behind. A match without a parsed replay has no bar. The dot is the result.</About></h3>
+      <div class="strip" class:dense={laneGames.length > 25} class:packed={laneGames.length > 100}>
+        <!-- the scale: built like a column, so its labels line up with the bars -->
+        <span class="scale" aria-hidden="true">
+          <b></b>
+          <span class="lane"><small>+{(reach / 1000).toFixed(1)}k</small><small>0</small><small>−{(reach / 1000).toFixed(1)}k</small></span>
+        </span>
+        {#each strip as r (r.match_id)}
+          {@const nw = r.lane_nw_diff}
+          <a href="#match/{r.match_id}" title={note(r)} aria-label={note(r)}>
+            <img src={heroIcon(r.hero_id)} alt="" width="22" height="22" loading="lazy" />
+            <span class="lane">
+              {#if nw !== null}
+                <i class={nw < 0 ? 'behind' : 'ahead'} style:height="{Math.max(2, (50 * Math.abs(nw)) / reach)}%"></i>
+              {/if}
+            </span>
+            <i class="dot {r.win ? 'won' : 'lost'}"></i>
+          </a>
+        {/each}
+      </div>
+    </div>
   </section>
 
   {#each extremes as [title, games]}
@@ -605,10 +609,6 @@
     background: var(--raised);
   }
 
-  .form {
-    padding: 16px 18px 6px;
-    margin-bottom: 12px;
-  }
   .strip {
     display: flex;
     gap: 4px;
@@ -930,64 +930,63 @@
   .laning {
     max-width: 72ch;
   }
-  /* Laning: three lists of equal width, each row a label left and its number right */
+  /* Laning: cards of lists side by side, each row a label left and its number right */
   .lists {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: 20px 36px;
+    padding: 14px 18px 8px;
     margin: 16px 0 12px;
   }
+  .lists.versus {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    margin-top: 0;
+  }
   @media (max-width: 700px) {
-    .lists {
+    .lists,
+    .lists.versus {
       grid-template-columns: minmax(0, 1fr);
     }
   }
-  .lists section,
-  .lists-one {
-    padding: 14px 18px 6px;
-  }
-  .lists-one {
-    margin-bottom: 12px;
-  }
-  .lists h3,
-  .lists-one h3 {
+  .lists h3 {
     margin: 0 0 4px;
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-2);
   }
-  .lists dl,
-  .lists-one dl {
+  .lists dl {
     margin: 0;
   }
-  .lists dl div,
-  .lists-one dl div {
+  .lists dl div {
     display: flex;
     align-items: baseline;
     gap: 12px;
     padding: 8px 0;
     border-top: 1px solid var(--grid);
   }
-  .lists dt,
-  .lists-one dt {
+  .lists dt {
     flex: 1;
-  }
-  .lists small {
-    display: block;
-    color: var(--muted);
-    font-size: 12px;
+    white-space: nowrap;
   }
   .lists dt + dd {
     font-size: 20px;
   }
-  .lists-one dt + dd {
+  .lists .after dt + dd {
     font-size: 16px;
     font-weight: 700;
   }
-  .lists-one dd.muted {
-    width: 130px;
+  .lists .count {
+    width: 4.5em;
     text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .versus .strip {
+    padding-top: 8px;
+  }
+  /* as tall as the list beside it */
+  .versus .lane {
+    height: 180px;
   }
   .numbers {
     display: grid;
