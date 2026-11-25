@@ -38,3 +38,11 @@ def test_a_setup_that_does_not_match_its_checksum_is_not_kept(tmp_path):
 
 def test_a_run_from_the_repo_never_updates():
     assert update.installed_version() is None
+
+
+def test_an_update_from_the_tray_tells_the_setup_to_go_back_there(monkeypatch, tmp_path):
+    runs = []
+    monkeypatch.setattr(update.subprocess, "Popen", lambda args, **kw: runs.append(args))
+    update.install(tmp_path / "setup.exe")
+    update.install(tmp_path / "setup.exe", tray=True)
+    assert "/TRAY" not in runs[0] and runs[1][-1] == "/TRAY"

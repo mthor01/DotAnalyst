@@ -38,7 +38,8 @@ def download(client: httpx.Client, current: str, folder: Path) -> Path | None:
     return path
 
 
-def install(setup: Path) -> None:
-    """Run the setup on its own, so it outlives this process; it closes a DotAnalyst still running (CloseApplications)."""
+def install(setup: Path, tray: bool = False) -> None:
+    """Run the setup on its own, so it outlives this process; it closes a DotAnalyst still running. /TRAY: the app
+    was in the tray, so the setup starts it there again afterwards."""
     flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-    subprocess.Popen([setup, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], creationflags=flags)
+    subprocess.Popen([setup, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", *(["/TRAY"] if tray else [])], creationflags=flags)
