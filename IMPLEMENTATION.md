@@ -487,7 +487,9 @@ The task "Start DotAnalyst with Windows" writes the Run value `DotAnalyst` = `"<
 
 ### Taskbar icon
 
-The program sets its own taskbar id, `DotAnalyst.DotAnalyst` (`SetCurrentProcessExplicitAppUserModelID` in `app.py`, before the window), and the setup gives the Start menu and desktop shortcuts the same id (`AppUserModelID` in `dotanalyst.iss`), so a pinned shortcut and the running window are one button. Without it Windows files the window under the exe's path and shows the icon it remembers for that path, which after an update from 0.1.0 was PyInstaller's default; from source it fell under `python.exe` and showed Python's.
+The program sets its own taskbar id, `DotAnalyst.DotAnalyst` (`SetCurrentProcessExplicitAppUserModelID` in `app.py`, before the window), and the setup gives the Start menu and desktop shortcuts the same id (`AppUserModelID` in `dotanalyst.iss`), so a pinned shortcut and the running window are one button; from source, without the id, the window fell under `python.exe` and showed Python's icon.
+
+Explorer keeps the icons it has drawn in memory, keyed by file path, and does not notice when an update replaces the exe at the same path: after updating from 0.1.0 the taskbar kept showing 0.1.0's PyInstaller icon although the exe, the Start menu shortcut and the window all carried the logo (the Start menu is a separate process and was right). The setup therefore ends with Explorer's "icons changed" notice (`ChangesAssociations=yes` in `dotanalyst.iss`, which sends `SHCNE_ASSOCCHANGED`), and new taskbar buttons get the logo. A button that already exists keeps its icon until the window is closed and opened again.
 
 ### One instance
 

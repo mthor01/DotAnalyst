@@ -27,6 +27,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 SetupIconFile=dotanalyst.ico
 UninstallDisplayIcon={app}\DotAnalyst.exe
+; tells Explorer to drop its in-memory icons at the end: it keys them by path, and kept 0.1.0's PyInstaller icon for
+; DotAnalyst.exe on the taskbar after updates
+ChangesAssociations=yes
 ; the app's colours; the logo band is drawn in [Code]
 WizardStyle=modern dark hidebevels
 WizardBackColor=#151a21
