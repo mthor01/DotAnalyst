@@ -20,6 +20,7 @@ HISTORY_PAGES = 5  # Steam lists 100 games a page and at most 500 of a league
 STEAM_DETAILS = 20  # the newest games of an amateur preview whose details (teams' names, result) are asked for
 BEST_OF = {0: 1, 1: 3, 2: 5}  # series_type
 LIVE = "IDOTA2Match_570/GetLiveLeagueGames/v1/"
+LOGOS_PER_LOAD = 10  # new Steam logo lookups one page load may make (1 a second); the rest come on later loads
 
 
 def side(team_id, name) -> dict:
@@ -224,9 +225,18 @@ def page(session: Session, client: httpx.Client, key: str, league_id: int, data:
         found["heroes"], found["players"] = league_stats.heroes(rows), league_stats.players(rows, names)
         found["rosters"] = {str(k): v for k, v in league_stats.played_rosters(rows, names).items()}
         logos = league_stats.logo_ids(rows)
+        kept = data / "logos.json"
+        known = json.loads(kept.read_text()) if kept.exists() else {}
+        new = 0
         for t in found["teams"]:
-            if not t["logo"] and t["team_id"] in logos:  # Steam's logo, kept in data/logos.json
-                t["logo"] = steam.team_logo(client, key, logos[t["team_id"]], data)
+            ugc = logos.get(t["team_id"])
+            if t["logo"] or not ugc:
+                continue
+            if str(ugc) in known:  # Steam's logo, kept in data/logos.json
+                t["logo"] = known[str(ugc)]
+            elif new < LOGOS_PER_LOAD:
+                new += 1
+                t["logo"] = steam.team_logo(client, key, ugc, data)
     return found
 
 

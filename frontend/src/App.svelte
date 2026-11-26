@@ -24,7 +24,8 @@
   const profileTab = $derived(/^profile\/(\w+)$/.exec(hash)?.[1] ?? '') // #profile/matches is a tab of the profile
   const matchId = $derived(/^match\/(\d+)$/.exec(hash)?.[1]) // #match/123 is one match, outside the pages above
   const teamId = $derived(/^team\/(\d+)$/.exec(hash)?.[1]) // #team/123 is one league team, under Tournaments
-  const leagueId = $derived(/^league\/(\d+)$/.exec(hash)?.[1]) // #league/123 is one tournament, under Tournaments
+  const leagueRoute = $derived(/^league\/(\d+)(?:\/(\w+))?$/.exec(hash)) // #league/123[/tab] is one tournament, under Tournaments
+  const leagueId = $derived(leagueRoute?.[1])
   const tournamentsTab = $derived(/^tournaments\/(\w+)$/.exec(hash)?.[1] ?? '') // #tournaments/teams is its Teams tab
   // the league pages are about other people's games: no account and none of the filters apply
   const league = $derived(!!teamId || !!leagueId || (!matchId && page === 'tournaments'))
@@ -339,7 +340,7 @@
   {:else if matchId}
     <Match id={matchId} />
   {:else if leagueId}
-    <League id={leagueId} />
+    <League id={leagueId} tab={leagueRoute?.[2] ?? ''} />
   {:else if teamId}
     <Team id={teamId} {query} onshown={(s) => (selected = s)} />
   {:else if page === 'tournaments'}

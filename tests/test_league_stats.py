@@ -144,3 +144,16 @@ def test_stored_teams_get_their_steam_logo(session, tmp_path):
     assert logos == {3001: "https://example.invalid/77.png", 3002: None}
     assert not any("GetUGCFileDetails" in r.url.path for r in asked)  # from data/logos.json
     assert page["rosters"]["3001"][0]["account_id"] == 1001
+
+
+def test_a_page_load_asks_steam_for_few_new_logos(session, tmp_path, monkeypatch):
+    monkeypatch.setattr(league_page, "LOGOS_PER_LOAD", 2)
+    session.add(League(league_id=1003, name="Friday Amateur League S9"))
+    for i, (a, b) in enumerate([(3001, 3002), (3003, 3004)]):
+        session.add(game(9001 + i, radiant=a, dire=b, radiant_logo=70 + a, dire_logo=70 + b))
+    session.commit()
+    asked: list = []
+    league_page.page(session, client(asked), "key", 1003, tmp_path, NOW)
+    assert sum("GetUGCFileDetails" in r.url.path for r in asked) == 2  # the other two on a later load
+    league_page.page(session, client(asked), "key", 1003, tmp_path, NOW)
+    assert sum("GetUGCFileDetails" in r.url.path for r in asked) == 4

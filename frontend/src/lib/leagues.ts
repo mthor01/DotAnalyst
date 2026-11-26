@@ -37,6 +37,42 @@ export type LeagueGame = {
 }
 export type LeagueSeries = { series_id: number | null; best_of: number; teams: [Side, Side]; score: [number, number]; start_time: number; games: number }
 export type LeagueTeam = { team_id: number; name: string | null; logo: string | null; rating: number | null; seen: number; games: number; wins: number; series: number; series_wins: number }
+/** From Liquipedia's page source (lp_structure.py); a team Liquipedia names that no game of ours has gets team_id 0 */
+export type LpOpponent = { name: string | null; team_id: number }
+export type LpMap = { team1side: string | null; winner: 0 | 1 | null; match_id: number | null }
+export type LpMatch = {
+  id?: string // its bracket slot, R01-M001
+  opponents: [LpOpponent, LpOpponent]
+  time: number | null
+  match_ids: number[]
+  maps: LpMap[]
+  score: [number, number]
+  winner: 0 | 1 | null
+  feeders?: string[] // the slots whose teams it gets
+}
+export type LpBracket = { title: string; sections: { name: 'upper' | 'lower'; rounds: { name: string; matches: LpMatch[] }[] }[] }
+export type Record_ = { name: string | null; team_id: number; series_wins: number; series_losses: number; map_wins: number; map_losses: number }
+export type Liquipedia = {
+  page: string
+  brackets: LpBracket[]
+  groups: { title: string; rows: Record_[] }[]
+  upcoming: LpMatch[]
+  rosters: { name: string; team_id: number; players: { handle: string; role: string | null; sub: boolean }[] }[]
+}
+export type LiveGame = { match_id: number; radiant: Side; dire: Side; series: [number, number]; best_of: number; duration: number | null; score: [number | null, number | null] }
+export type HeroStat = { hero_id: number; picks: number; wins: number; bans: number; contested: number }
+export type PlayerStat = {
+  account_id: number; name: string | null; avatar: string | null; team_id: number; games: number; wins: number
+  kills: number; deaths: number; assists: number; kda: number; gpm: number; xpm: number; last_hits: number; hero_damage: number
+  heroes: number[]
+}
+export type Played = { account_id: number; name: string | null; avatar: string | null; games: number }
+export type HeadToHead = {
+  teams: [Side, Side]
+  games: number
+  wins: [number, number]
+  series: { league_id: number; league_name: string | null; start_time: number; score: [number, number] }[]
+}
 export type LeaguePage = {
   league: CatalogRow
   source: 'stored' | 'opendota' | 'steam' | 'none'
@@ -44,6 +80,12 @@ export type LeaguePage = {
   teams: LeagueTeam[]
   series: LeagueSeries[]
   games: LeagueGame[]
+  standings: Record_[]
+  liquipedia: Liquipedia | null
+  live: LiveGame[]
+  heroes?: HeroStat[] // the stats of a subscribed league, from its stored games
+  players?: PlayerStat[]
+  rosters?: Record<string, Played[]> // team id → the players seen playing for it
 }
 
 /** Follow a league or stop: the poller then fetches its games, or no more of them. */
@@ -67,3 +109,6 @@ export function dates(r: CatalogRow) {
   return from === null ? (to === null ? '' : `until ${day(to)}`) : to === null || day(from) === day(to) ? day(from) : `${day(from)} – ${day(to)}`
 }
 export const liquipedia = (page: string) => `https://liquipedia.net/dota2/${encodeURI(page.replaceAll(' ', '_'))}`
+/** 14 Nov, 18:00 in the viewer's time */
+export const moment = (seconds: number) =>
+  new Date(seconds * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })

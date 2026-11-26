@@ -61,7 +61,15 @@ export const DESIGN: Part[] = [
   part('tournaments', 'Tournaments', within('tournaments', [
     ['explore', 'Explore tab'], ['search', 'Search tab'], ['list', 'Subscribed tab'], ['teams', 'Teams tab'],
   ])),
-  { ...part('league', 'Tournament page', within('league', [['header', 'Facts'], ['teams', 'Teams'], ['series', 'Series'], ['games', 'Latest games']])), group: true },
+  { ...part('league', 'Tournament page', [
+    part('league.header', 'Facts'),
+    part('league.overview', 'Overview', within('league.overview', [
+      ['live', 'Live now'], ['upcoming', 'Upcoming'], ['bracket', 'Bracket'], ['groups', 'Groups and standings'],
+    ])),
+    part('league.teams', 'Teams'),
+    part('league.stats', 'Stats', within('league.stats', [['heroes', 'Heroes'], ['players', 'Players'], ['h2h', 'Head-to-head']])),
+    part('league.games', 'Games', within('league.games', [['series', 'Series'], ['latest', 'Latest games']])),
+  ]), group: true },
   { ...part('team', 'Team page', [
     part('team.overview', 'Overview', within('team.overview', [['stack', 'Main stack'], ['standins', 'Stand-ins'], ['history', 'Historical players']])),
     part('team.games', 'Games'),
