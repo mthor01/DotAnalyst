@@ -163,3 +163,9 @@ def test_empty_match_list_slots_are_read_from_their_match_pages():
     lp.identify(found, [won(9101, 3001, 3002), won(9102, 3002, 3001), won(9103, 3001, 3002)], [])
     rows = found["groups"][0]["rows"]
     assert [(r["name"], r["series_wins"], r["map_wins"], r["map_losses"]) for r in rows] == [("Team A", 1, 2, 1), ("Team B", 0, 1, 2)]
+
+
+def test_best_of_from_the_maps_listed_or_the_match():
+    (_, body), *_ = lp.blocks(EVENT, "Match")
+    assert lp.match(body)["best_of"] == 3  # three maps listed, one skipped
+    assert lp.match("Match|bestof=5|map1={{Map|winner=1}}")["best_of"] == 5

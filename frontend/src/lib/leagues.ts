@@ -49,6 +49,12 @@ export type LpMatch = {
   score: [number, number]
   winner: 0 | 1 | null
   feeders?: string[] // the slots whose teams it gets
+  best_of: number | null
+}
+/** One game of a series: result, length, and picks and bans of [Radiant, Dire]; picks null when no one has the draft */
+export type Draft = {
+  match_id: number; stored: boolean; duration: number | null; radiant_win: boolean | null
+  radiant_team_id: number | null; dire_team_id: number | null; picks: [number[], number[]] | null; bans: [number[], number[]] | null
 }
 export type LpBracket = { title: string; sections: { name: 'upper' | 'lower'; rounds: { name: string; matches: LpMatch[] }[] }[] }
 export type Record_ = { name: string | null; team_id: number; series_wins: number; series_losses: number; map_wins: number; map_losses: number }

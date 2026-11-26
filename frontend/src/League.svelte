@@ -1,6 +1,7 @@
 <script lang="ts">
   import { get } from './lib/api'
   import Bracket from './lib/Bracket.svelte'
+  import SeriesGames from './lib/SeriesGames.svelte'
   import { heroIcon, heroName } from './lib/constants.svelte'
   import {
     STATUS, dates, day, liquipedia, moment, money, subscribe, tierName,
@@ -42,10 +43,7 @@
   const gameLink = (matchId: number) => (page?.subscribed ? `#match/${matchId}` : `https://www.opendota.com/matches/${matchId}`)
   const logos = $derived(new Map(page?.teams.map((t) => [t.team_id, t.logo]) ?? []))
   const logo = (teamId: number) => logos.get(teamId) ?? null
-  const matchLink = (m: LpMatch) => {
-    const played = m.maps.find((p) => p.match_id && p.winner !== null)?.match_id ?? null
-    return played ? gameLink(played) : null
-  }
+  let picked = $state<LpMatch | null>(null) // the bracket series whose games are shown
   const percent = (x: number) => `${Math.round(x * 100)}%`
   const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
@@ -206,7 +204,7 @@
       <section data-block="league.overview.bracket">
         {#each lp.brackets as b, i (i)}
           <h3>{b.title}</h3>
-          <div class="card bracket"><Bracket bracket={b} {logo} link={matchLink} /></div>
+          <div class="card bracket"><Bracket bracket={b} {logo} onpick={(m) => (picked = m)} /></div>
         {/each}
       </section>
     {/if}
@@ -455,6 +453,9 @@
       </section>
     {/if}
   {/if}
+{/if}
+{#if picked}
+  <SeriesGames match={picked} {logo} link={gameLink} onclose={() => (picked = null)} />
 {/if}
 
 <style>

@@ -357,6 +357,18 @@ def league(session: Db, league_id: int) -> dict:
         return league_page.page(session, client, os.environ.get("STEAM_API_KEY", ""), league_id)
 
 
+MAX_DRAFTS = 7  # one series, Bo7 at most: each game not stored may be one OpenDota call
+
+
+@app.get("/api/drafts")
+def game_drafts(session: Db, ids: Annotated[list[int], Query()]) -> list[dict]:
+    """The games of one series: result, length, picks and bans."""
+    if not 0 < len(ids) <= MAX_DRAFTS:
+        raise HTTPException(422, f"ask for 1 to {MAX_DRAFTS} games")
+    with httpx.Client() as client:
+        return league_page.drafts(session, client, ids, DATA / "opendota")
+
+
 @app.delete("/api/leagues/{league_id}")
 def remove_tournament(session: Db, league_id: int) -> dict:
     """Stop following a tournament: no new games of it are fetched, nor replays of the stored ones; those stay."""

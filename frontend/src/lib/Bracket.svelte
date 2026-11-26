@@ -1,25 +1,31 @@
 <script lang="ts">
   import type { LpBracket, LpMatch, LpOpponent } from './leagues'
 
-  // a bracket tree from Liquipedia: one column per round, each match at the mean height of the matches feeding it
-  let { bracket, logo, link }: { bracket: LpBracket; logo: (teamId: number) => string | null; link: (m: LpMatch) => string | null } = $props()
+  // a bracket tree from Liquipedia: one column per round, each match at the mean height of the matches feeding it;
+  // a match with games played opens them (onpick)
+  let { bracket, logo, onpick }: { bracket: LpBracket; logo: (teamId: number) => string | null; onpick: (m: LpMatch) => void } = $props()
 
-  const BOX_W = 190
-  const GAP = 44 // between two columns, where the lines run
-  const ROW = 66 // height of one slot
-  const BOX_H = 52
-  const HEAD = 36 // the round names, two lines at most
+  const BOX_W = 200
+  const GAP = 48 // between two columns, where the lines run
+  const ROW = 74 // height of one slot
+  const BOX_H = 58
+  const HEAD = 30 // the round names
 
   type Placed = { m: LpMatch; x: number; y: number }
-  /** Each section's matches with their place; a match no same-section match feeds goes below the one above it */
+  /** Each section's matches with their place. A round's matches go in the order of the matches feeding them, so the
+   * lines never cross; a match no same-section match feeds keeps its place in the list, below the one above it. */
   function place(rounds: LpBracket['sections'][number]['rounds']) {
     const at = new Map<string, number>()
     const placed: Placed[] = []
     rounds.forEach((r, column) => {
-      let floor = -1
-      for (const m of r.matches) {
+      const keyed = r.matches.map((m, i) => {
         const fed = (m.feeders ?? []).map((f) => at.get(f)).filter((y) => y !== undefined)
-        const y = Math.max(fed.length ? fed.reduce((a, b) => a + b, 0) / fed.length : floor + 1, floor + 1)
+        return { m, fed, key: fed.length ? fed.reduce((a, b) => a + b, 0) / fed.length : i }
+      })
+      keyed.sort((a, b) => a.key - b.key)
+      let floor = -1
+      for (const { m, fed, key } of keyed) {
+        const y = Math.max(fed.length ? key : floor + 1, floor + 1)
         floor = y
         if (m.id) at.set(m.id, y)
         placed.push({ m, x: column * (BOX_W + GAP), y })
@@ -41,12 +47,15 @@
   }
   const top = (y: number) => HEAD + y * ROW + (ROW - BOX_H) / 2
   const SECTION = { upper: 'Upper bracket', lower: 'Lower bracket' }
+  // under an "Upper bracket" heading, "Upper Bracket Semifinals" says no more than "Semifinals"
+  const roundName = (name: string, split: boolean) => (split ? name.replace(/^(upper|lower) bracket /i, '') : name)
+  const playedAny = (m: LpMatch) => m.maps.some((p) => p.match_id || p.winner !== null)
 </script>
 
-{#snippet side(o: LpOpponent, score: number, won: boolean, played: boolean)}
+{#snippet side(o: LpOpponent, score: number, won: boolean, lost: boolean, played: boolean)}
   {@const src = o.team_id ? logo(o.team_id) : null}
-  <span class="opponent" class:won class:tbd={!o.name}>
-    <span class="logo">{#if src}<img {src} alt="" width="18" height="18" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />{/if}</span>
+  <span class="opponent" class:won class:lost class:tbd={!o.name}>
+    <span class="logo">{#if src}<img {src} alt="" width="20" height="20" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />{/if}</span>
     <span class="name" title={o.name ?? 'To be decided'}>{o.name ?? 'TBD'}</span>
     <span class="score">{played ? score : ''}</span>
   </span>
@@ -54,31 +63,33 @@
 
 {#each bracket.sections as section (section.name)}
   {@const { placed, lines, width, height } = place(section.rounds)}
-  {#if bracket.sections.length > 1}<h4>{SECTION[section.name]}</h4>{/if}
+  {@const split = bracket.sections.length > 1}
+  {#if split}<h4>{SECTION[section.name]}</h4>{/if}
   <div class="scroll">
     <div class="tree" style:width="{width}px" style:height="{height}px">
       {#each section.rounds as r, column}
-        <span class="round" style:left="{column * (BOX_W + GAP)}px" style:width="{BOX_W}px">{r.name}</span>
+        <span class="round" style:left="{column * (BOX_W + GAP)}px" style:width="{BOX_W}px" title={r.name}>{roundName(r.name, split)}</span>
       {/each}
       <svg {width} {height} aria-hidden="true">
         {#each lines as d}<path {d} />{/each}
       </svg>
       {#each placed as { m, x, y }}
-        {@const href = link(m)}
-        {@const played = m.maps.some((p) => p.winner !== null)}
+        {@const played = playedAny(m)}
+        {@const decided = m.winner !== null}
         <svelte:element
-          this={href ? 'a' : 'div'}
+          this={played ? 'button' : 'div'}
           class="match"
-          href={href ?? undefined}
-          target={href?.startsWith('http') ? '_blank' : undefined}
-          rel={href?.startsWith('http') ? 'noreferrer' : undefined}
+          type={played ? 'button' : undefined}
+          title={played ? 'Show the games' : undefined}
+          onclick={played ? () => onpick(m) : undefined}
+          role={played ? undefined : 'group'}
           style:left="{x}px"
           style:top="{top(y)}px"
           style:width="{BOX_W}px"
           style:height="{BOX_H}px"
         >
-          {@render side(m.opponents[0], m.score[0], m.winner === 0, played)}
-          {@render side(m.opponents[1], m.score[1], m.winner === 1, played)}
+          {@render side(m.opponents[0], m.score[0], m.winner === 0, decided && m.winner !== 0, played)}
+          {@render side(m.opponents[1], m.score[1], m.winner === 1, decided && m.winner !== 1, played)}
         </svelte:element>
       {/each}
     </div>
@@ -87,13 +98,19 @@
 
 <style>
   h4 {
-    margin: 14px 0 4px;
-    color: var(--text-2);
+    margin: 4px 0 8px;
     font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  h4:not(:first-child) {
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
   }
   .scroll {
     overflow-x: auto;
-    padding-bottom: 6px;
+    padding-bottom: 4px;
   }
   .tree {
     position: relative;
@@ -102,10 +119,11 @@
     position: absolute;
     top: 0;
     font-size: 12px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    line-height: 1.25;
+    font-weight: 600;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   svg {
     position: absolute;
@@ -114,34 +132,48 @@
   }
   path {
     fill: none;
-    stroke: var(--border);
-    stroke-width: 1.5;
+    stroke: var(--axis);
+    stroke-width: 2;
+    stroke-linejoin: round;
   }
   .match {
     position: absolute;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     box-sizing: border-box;
-    padding: 2px 8px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--surface);
-    box-shadow: inset 0 0 0 1px var(--border);
     color: var(--text);
-    text-decoration: none;
+    font: inherit;
+    text-align: left;
   }
-  a.match:hover {
-    box-shadow: inset 0 0 0 1px var(--series-1);
+  button.match {
+    cursor: pointer;
+  }
+  button.match:hover,
+  button.match:focus-visible {
+    border-color: var(--series-1);
+    outline: none;
   }
   .opponent {
     display: flex;
     align-items: center;
-    gap: 6px;
-    height: 22px;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+    padding-left: 8px;
     font-size: 13px;
+    color: var(--text-2);
+  }
+  .opponent + .opponent {
+    border-top: 1px solid var(--border);
   }
   .logo {
-    width: 18px;
+    width: 20px;
     flex: none;
   }
   .logo img {
@@ -156,15 +188,28 @@
     text-overflow: ellipsis;
   }
   .score {
+    align-self: stretch;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    flex: none;
+    background: var(--raised);
     font-variant-numeric: tabular-nums;
-    color: var(--text-2);
+    font-weight: 600;
   }
-  .won .name,
+  .won {
+    color: var(--text);
+    font-weight: 600;
+  }
   .won .score {
-    font-weight: 700;
+    background: color-mix(in srgb, var(--series-1) 35%, var(--surface));
     color: var(--text);
   }
-  .tbd {
+  .lost {
     color: var(--muted);
+  }
+  .tbd .name {
+    color: var(--muted);
+    font-style: italic;
   }
 </style>

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from . import catalog, league_stats, liquipedia, lp_structure, steam
 from .db import DATA, League, LeagueCatalog, LeagueMatch, PlayerName
 from .opendota import pace
+from .replay import opendota_match
 
 OPENDOTA = "https://api.opendota.com/api/leagues/{}/{}"
 PREVIEW_HOURS = 6  # a league still playing is fetched again after this; a finished one never
@@ -248,3 +249,33 @@ def names_of(session: Session, rows: list[LeagueMatch]) -> dict[int, tuple[str |
     seen = {p.get("account_id") for m in rows for p in m.raw_json.get("players", [])}
     stored = session.scalars(select(PlayerName).where(PlayerName.account_id.in_(seen - {None})))
     return {n.account_id: (n.name, n.avatar or None) for n in stored}
+
+
+def draft(m: dict) -> tuple[list[list[int]], list[list[int]]]:
+    """Picks and bans of each side (Radiant, Dire) in draft order; a game without a draft (All Pick) takes its players'
+    heroes as picks."""
+    order = sorted(m.get("picks_bans") or [], key=lambda d: d.get("order", 0))
+    if order:
+        return ([[d["hero_id"] for d in order if d["team"] == t and d["is_pick"]] for t in (0, 1)],
+                [[d["hero_id"] for d in order if d["team"] == t and not d["is_pick"]] for t in (0, 1)])  # fmt: skip
+    players = m.get("players") or []
+    return [[p["hero_id"] for p in players if (p.get("player_slot", 0) >= 128) == dire] for dire in (False, True)], [[], []]
+
+
+def drafts(session: Session, client: httpx.Client, match_ids: list[int], opendota_dir: Path) -> list[dict]:
+    """Each game's result, length and draft, for a series' window: a stored game from its row, any other from OpenDota
+    (kept like the poller keeps it, so never asked twice once it has a replay salt). `picks` is None when no one has it."""
+    found = []
+    for match_id in match_ids:
+        row = session.get(LeagueMatch, match_id)
+        if row:
+            m = row.raw_json | {"radiant_win": row.radiant_win, "radiant_team_id": row.radiant_team_id,
+                                "dire_team_id": row.dire_team_id}  # fmt: skip
+        else:
+            m = opendota_match(match_id, client, opendota_dir)
+        picks, bans = draft(m) if m else (None, None)
+        m = m or {}
+        found.append({"match_id": match_id, "stored": row is not None, "duration": m.get("duration"),
+                      "radiant_win": m.get("radiant_win"), "radiant_team_id": m.get("radiant_team_id"),
+                      "dire_team_id": m.get("dire_team_id"), "picks": picks, "bans": bans})  # fmt: skip
+    return found

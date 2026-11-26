@@ -193,3 +193,31 @@ def test_no_live_call_for_a_league_not_live(session, tmp_path):
     asked: list[httpx.Request] = []
     page = league_page.page(session, live_client(asked), "key", 1003, tmp_path, NOW)
     assert page["live"] == [] and not any("GetLiveLeagueGames" in r.url.path for r in asked)
+
+
+def test_drafts_of_stored_games_and_of_others_from_opendota(session, tmp_path):
+    session.add(LeagueMatch(match_id=9001, league_id=1003, start_time=NOW, radiant_team_id=3001, dire_team_id=3002,
+                            radiant_name="Team A", dire_name="Team B", radiant_win=True, raw_json={
+        "duration": 2000, "players": [],
+        "picks_bans": [{"hero_id": 3, "team": 1, "is_pick": False, "order": 0}, {"hero_id": 2, "team": 1, "is_pick": True, "order": 2},
+                       {"hero_id": 1, "team": 0, "is_pick": True, "order": 1}],
+    }))  # fmt: skip
+    session.commit()
+    asked: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(request)
+        if request.url.path.endswith("/9003"):
+            return httpx.Response(404)
+        return httpx.Response(200, json={"match_id": 9002, "duration": 1800, "radiant_win": False, "radiant_team_id": 3002,
+                                         "dire_team_id": 3001, "replay_salt": 1,
+                                         "players": [{"player_slot": 128, "hero_id": 6}, {"player_slot": 0, "hero_id": 5}]})  # fmt: skip
+
+    web = httpx.Client(transport=httpx.MockTransport(answer))
+    a, b, c = league_page.drafts(session, web, [9001, 9002, 9003], tmp_path)
+    assert (a["stored"], a["duration"], a["radiant_win"], a["picks"], a["bans"]) == (True, 2000, True, [[1], [2]], [[], [3]])
+    assert (b["stored"], b["radiant_win"], b["radiant_team_id"], b["picks"]) == (False, False, 3002, [[5], [6]])  # all pick
+    assert c["picks"] is None  # OpenDota does not have it
+    assert [r.url.path.rsplit("/", 1)[-1] for r in asked] == ["9002", "9003"]  # nothing asked for the stored game
+    league_page.drafts(session, web, [9002], tmp_path)
+    assert len(asked) == 2  # OpenDota's answer is kept

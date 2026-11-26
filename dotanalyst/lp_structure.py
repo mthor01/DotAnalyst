@@ -121,6 +121,8 @@ def match(body: str) -> dict:
         "opponents": [opponent(p.get("opponent1", "")), opponent(p.get("opponent2", ""))], "time": when(p.get("date", "")),
         "match_ids": [mp["match_id"] for mp in maps if mp["match_id"]] or list(ids.values()), "maps": maps,
         "score": [0, 0], "winner": int(p["winner"]) - 1 if p.get("winner") in ("1", "2") else None,
+        # Bo3 and the like: the match's `bestof=`, else every map listed, skipped ones too
+        "best_of": int(p["bestof"]) if p.get("bestof", "").isdigit() else len(numbered(p, "map")) or None,
     }  # fmt: skip
     return settle(m)
 
