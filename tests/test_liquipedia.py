@@ -71,6 +71,25 @@ def test_a_miss_is_kept_and_not_asked_again_for_a_week(session):
     assert not liquipedia.due(row, NOW + 8 * DAY)  # finished: never again
 
 
+def test_a_page_of_an_event_long_before_the_leagues_games_is_another_events(session):
+    # a lobby league (FACEIT's) once hosted a two-day qualifier whose page names its id; the league plays on for years
+    session.add(LeagueCatalog(league_id=1001, name="Lobby League", first_game=NOW + 200 * DAY, last_game=NOW + 300 * DAY))
+    assert not liquipedia.lookup(session, wiki([], "lp_found.json"), 1001, NOW + 300 * DAY)  # the page ends 2026-11-20
+    row = session.get(LeagueCatalog, 1001)
+    assert (row.lp_page, row.lp_tier, row.end_date, row.lp_checked) == (None, None, None, NOW + 300 * DAY)
+    # within MISMATCH_DAYS of its first game it is the league's own
+    row.first_game = liquipedia.catalog.day_end("2026-11-20") + 20 * DAY
+    assert liquipedia.lookup(session, wiki([], "lp_found.json"), 1001, NOW + 300 * DAY)
+
+
+def test_a_kept_page_that_does_not_fit_the_games_is_asked_again(session):
+    row = LeagueCatalog(league_id=1001, name="Lobby League", lp_page="Cup/Qualifier", lp_checked=NOW, start_date="2026-01-01",
+                        end_date="2026-01-02", first_game=NOW - 10 * DAY, last_game=NOW)  # fmt: skip
+    assert liquipedia.due(row, NOW + DAY)
+    row.end_date = row.start_date = None
+    assert not liquipedia.due(row, NOW + DAY)
+
+
 def test_a_league_liquipedia_was_never_asked_about_is_due(session):
     assert liquipedia.due(LeagueCatalog(league_id=1, name="x"), NOW)
 

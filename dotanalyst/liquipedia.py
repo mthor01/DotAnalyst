@@ -26,6 +26,14 @@ STRUCTURE_HOURS = 6  # brackets and groups of a league still playing are read ag
 MAX_PAGES = 50  # what one revisions request may ask for
 NOT_STAGES = ("Statistics",)  # a prizepool subpage names the winner
 VERSION = 7  # of the kept structure: one kept by another version is read again
+MISMATCH_DAYS = 30  # a page whose event ended this long before the league's first known game is another event's
+
+
+def fits(row: LeagueCatalog, start_date: str | None, end_date: str | None) -> bool:
+    """Whether a page with these dates can be the league's. A lobby league (FACEIT's) plays for years and once hosted
+    a two-day qualifier whose page names its id: an event over long before the league's games is not the league."""
+    end = catalog.day_end(end_date) or catalog.day_end(start_date)
+    return not (row.first_game and end and end < row.first_game - MISMATCH_DAYS * 86400)
 
 
 def pace() -> None:
@@ -75,6 +83,8 @@ def lookup(session: Session, client: httpx.Client, league_id: int, now: float | 
     found = dict.fromkeys(FIELDS)
     if page:
         found = infobox(page["revisions"][0]["slots"]["main"]["*"])
+        if not fits(row, found["start_date"], found["end_date"]):
+            page, found = None, dict.fromkeys(FIELDS)  # kept as a miss
     for name, value in found.items():
         setattr(row, name, value)
     row.lp_page, row.lp_checked = page["title"] if page else None, int(now or time.time())
@@ -83,8 +93,9 @@ def lookup(session: Session, client: httpx.Client, league_id: int, now: float | 
 
 
 def due(row: LeagueCatalog, now: float) -> bool:
-    """Never asked, or asked over RECHECK_DAYS ago while the league still plays."""
-    if row.lp_checked is None:
+    """Never asked, kept with a page that does not fit its games (found before fits was), or asked over RECHECK_DAYS
+    ago while the league still plays."""
+    if row.lp_checked is None or (row.lp_page and not fits(row, row.start_date, row.end_date)):
         return True
     return now - row.lp_checked > RECHECK_DAYS * 86400 and catalog.status(row, now) in ("live", "active")
 
