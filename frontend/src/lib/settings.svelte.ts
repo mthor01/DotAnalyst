@@ -58,9 +58,14 @@ export const DESIGN: Part[] = [
     part('profile.teammates', 'Teammates', within('profile.teammates', [['mates', 'With tracked accounts'], ['heroes', 'Heroes on my team and against me']])),
   ]),
   part('compare', 'Player comparison', within('compare', [['stats', 'Stats'], ['wards', 'Ward maps']])),
-  part('tournaments', 'Tournaments', within('tournaments', [
-    ['explore', 'Explore tab'], ['search', 'Search tab'], ['list', 'Subscribed tab'], ['teams', 'Teams tab'],
-  ])),
+  part('tournaments', 'Tournaments', [
+    part('tournaments.search', 'Search tab, with your tournaments'),
+    part('tournaments.explore', 'Explore tab', within('tournaments.explore', [
+      ['live', 'Live now'], ['upcoming', 'Upcoming'], ['results', 'Recent results'], ['soon', 'Starting soon'],
+      ['calendar', 'Calendar'], ['big', 'Biggest of the last 30 days'], ['finished', 'Recently finished'],
+    ])),
+    part('tournaments.teams', 'Teams tab'),
+  ]),
   { ...part('league', 'Tournament page', [
     part('league.header', 'Facts'),
     part('league.overview', 'Overview', within('league.overview', [

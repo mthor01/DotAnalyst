@@ -7,11 +7,12 @@
   import Teams from './Teams.svelte'
 
   let { tab }: { tab: string } = $props()
-  // the tabs by their Design id; #tournaments is Explore, #tournaments/subscribed the tracked ones (id list, as before)
-  const TABS = { explore: 'Explore', search: 'Search', list: 'Subscribed', teams: 'Teams' }
+  // the tabs by their Design id; #tournaments is Search, the home: your tournaments, and every other one by name.
+  // #tournaments/subscribed and #tournaments/search, from before, are Search too
+  const TABS = { search: 'Search', explore: 'Explore', teams: 'Teams' }
   type Tab = keyof typeof TABS
-  const HASH: Record<Tab, string> = { explore: 'tournaments', search: 'tournaments/search', list: 'tournaments/subscribed', teams: 'tournaments/teams' }
-  const wanted = $derived<Tab>(tab === 'subscribed' ? 'list' : tab in TABS ? (tab as Tab) : 'explore')
+  const HASH: Record<Tab, string> = { search: 'tournaments', explore: 'tournaments/explore', teams: 'tournaments/teams' }
+  const wanted = $derived<Tab>(tab in TABS ? (tab as Tab) : 'search')
   const shown = $derived(shownTab('tournaments', Object.keys(TABS) as Tab[], wanted)) // a hidden tab gives way
   let error = $state('')
 
@@ -21,9 +22,11 @@
     if (shown === 'explore') get<typeof explore>('explore').then((found) => (explore = found), (e) => (error = e.message))
   })
 
-  // ---- Search: asked of the server 300 ms after the last key, a page of 50 at a time
+  // ---- Search: asked of the server 300 ms after the last key, a page of 50 at a time; with nothing typed or picked,
+  // your tournaments instead
   const PAGE = 50
   let search = $state({ text: '', tier: '', state: '', sort: 'last' })
+  const asking = $derived(!!search.text.trim() || !!search.tier || !!search.state || search.sort !== 'last')
   let found = $state<CatalogRow[]>([])
   let more = $state(false) // a full page came: there may be more
   let searching = $state(false)
@@ -40,17 +43,17 @@
     searching = false
   }
   $effect(() => {
-    if (shown !== 'search') return
+    if (shown !== 'search' || !asking) return
     params(0) // read every field, so a change of any runs it again
     const timer = setTimeout(() => find(0), 300)
     return () => clearTimeout(timer)
   })
 
-  // ---- Subscribed
-  let rows = $state<TournamentRow[]>([])
+  // ---- Your tournaments, on Search with nothing asked
+  let rows = $state<TournamentRow[] | null>(null)
   const load = () => get<TournamentRow[]>('leagues').then((found) => (rows = found), (e) => (error = e.message))
   $effect(() => {
-    if (shown === 'list') load()
+    if (shown === 'search' && !asking) load()
   })
   async function unsubscribe(r: TournamentRow) {
     if (!confirm(`Unsubscribe from ${r.name}? Its stored games stay; no new ones are fetched.`)) return
@@ -69,6 +72,7 @@
       const found = await post<{ name: string }>('leagues', { league_id: leagueId })
       added = `${found.name} is subscribed. Its games load with the next check.`
       leagueId = ''
+      load() // it joins Your tournaments
       await loadConstants() // for the header's Tournament filter
     } catch (e) {
       added = `Could not add it: ${(e as Error).message}`
@@ -117,8 +121,36 @@
       </select>
     </label>
   </form>
-  <LeagueList rows={found} empty={searching ? 'Searching…' : 'No league with this name, tier and status.'} />
-  {#if more}<p><button class="action" disabled={searching} onclick={() => find(found.length)}>Show more</button></p>{/if}
+  {#if asking}
+    <LeagueList rows={found} empty={searching ? 'Searching…' : 'No league with this name, tier and status.'} />
+    {#if more}<p><button class="action" disabled={searching} onclick={() => find(found.length)}>Show more</button></p>{/if}
+  {:else}
+    <h2>Your tournaments</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th>Tournament</th><th class="num">Games</th><th class="num">Teams</th><th>First game</th><th>Last game</th><th></th></tr>
+        </thead>
+        <tbody>
+          {#each rows ?? [] as r (r.league_id)}
+            <tr>
+              <td><a href="#league/{r.league_id}">{r.name}</a> <span class="muted">{r.league_id}</span></td>
+              <td class="num">{r.games}</td>
+              <td class="num">{r.teams}</td>
+              <td class="muted">{day(r.first_game)}</td>
+              <td class="muted">{day(r.last_game)}</td>
+              <td class="num"><button class="action" onclick={() => unsubscribe(r)}>Unsubscribe</button></td>
+            </tr>
+          {:else}
+            <tr><td colspan="6" class="muted">
+              {rows ? 'You follow no tournament yet: type a name above, or find one under' : 'Loading…'}
+              {#if rows}<a href="#tournaments/explore">Explore</a>.{/if}
+            </td></tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {/if}
   <form class="filters byid" onsubmit={add}>
     <label>
       Not listed? Subscribe by league id
@@ -127,28 +159,6 @@
     <button class="action" disabled={adding}>{adding ? 'Adding…' : 'Subscribe'}</button>
     <span class="muted" role="status">{added}</span>
   </form>
-{:else}
-  <div class="card">
-    <table>
-      <thead>
-        <tr><th>Tournament</th><th class="num">Games</th><th class="num">Teams</th><th>First game</th><th>Last game</th><th></th></tr>
-      </thead>
-      <tbody>
-        {#each rows as r (r.league_id)}
-          <tr>
-            <td><a href="#league/{r.league_id}">{r.name}</a> <span class="muted">{r.league_id}</span></td>
-            <td class="num">{r.games}</td>
-            <td class="num">{r.teams}</td>
-            <td class="muted">{day(r.first_game)}</td>
-            <td class="muted">{day(r.last_game)}</td>
-            <td class="num"><button class="action" onclick={() => unsubscribe(r)}>Unsubscribe</button></td>
-          </tr>
-        {:else}
-          <tr><td colspan="6" class="muted">No subscribed tournaments: find one under Explore or Search.</td></tr>
-        {/each}
-      </tbody>
-    </table>
-  </div>
 {/if}
 
 <style>
