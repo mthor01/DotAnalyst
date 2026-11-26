@@ -111,16 +111,17 @@ def fetch_results(client: httpx.Client, data: Path, now: float) -> int:
 
 
 def series_of(games: list[dict], now: float) -> list[dict]:
-    """OpenDota's pro games as finished series, newest end first, each shaped like a Liquipedia match (the series
-    window reads it). One series: the same series id; without one, the same league and teams within SERIES_GAP, a Bo1
-    alone. Finished: a team won more than half its Bo, or its last game ended over DONE_AFTER ago."""
+    """Pro games (OpenDota's, or stored ones in their shape) as finished series, newest end first, each shaped like a
+    Liquipedia match (the series window reads it). One series: the same series id; without one, the same league and
+    teams within SERIES_GAP, a Bo1 alone. Best of: from series_type, None when no game has one (stored before it was
+    kept). Finished: a team won more than half its Bo, or its last game ended over DONE_AFTER ago."""
     groups: list[list[dict]] = []
     open_: dict = {}  # key -> its group, for games without a series id
     for g in sorted(games, key=lambda g: g.get("start_time") or 0):
         teams = tuple(sorted(str(g.get(f"{s}_team_id") or g.get(f"{s}_name") or "") for s in ("radiant", "dire")))
         if g.get("series_id"):
             key = ("id", g["series_id"])
-        elif (g.get("series_type") or 0) and all(teams):
+        elif g.get("series_type") != 0 and all(teams):  # a Bo3 or Bo5, or not known
             key = ("teams", g.get("leagueid"), teams)
         else:
             key = ("game", g.get("match_id"))
@@ -139,10 +140,11 @@ def series_of(games: list[dict], now: float) -> list[dict]:
             won = g.get("radiant_win")
             maps.append({"team1side": "radiant" if same else "dire", "match_id": g["match_id"],
                          "winner": None if won is None else 0 if won == same else 1})  # fmt: skip
-        best_of = BEST_OF.get(max(g.get("series_type") or 0 for g in group), 1)
+        types = [g["series_type"] for g in group if g.get("series_type") is not None]
+        best_of = BEST_OF.get(max(types), 1) if types else None
         score = [sum(m["winner"] == i for m in maps) for i in (0, 1)]
         end = max((g.get("start_time") or 0) + (g.get("duration") or 0) for g in group)
-        if max(score) > best_of / 2:
+        if best_of and max(score) > best_of / 2:
             winner = 0 if score[0] > score[1] else 1
         elif now - end > DONE_AFTER:
             winner = None if score[0] == score[1] else 0 if score[0] > score[1] else 1
@@ -190,6 +192,15 @@ def tournaments(session: Session, now: float) -> list[LeagueCatalog]:
     return sorted(found, key=lambda r: (catalog.status(r, now) != "live", r.lp_tier, -(r.prize_usd or 0), -r.league_id))
 
 
+def followed(session: Session, now: float) -> list[tuple[LeagueCatalog, bool]]:
+    """Every tournament whose Liquipedia structure is kept, with whether it is over: yours with a page (Home), then
+    Explore's tournaments. Over: Liquipedia's end date passed, or no game for over 30 days."""
+    mine = session.scalars(select(LeagueCatalog).join(League, League.league_id == LeagueCatalog.league_id)
+                           .where(LeagueCatalog.lp_page.is_not(None)).order_by(LeagueCatalog.league_id))  # fmt: skip
+    rows = {r.league_id: r for r in [*mine, *tournaments(session, now)]}
+    return [(r, ended(r, now) or catalog.status(r, now) == "finished") for r in rows.values()]
+
+
 def newcomers(session: Session, n: int = NEWCOMERS) -> list[int]:
     """The n newest leagues OpenDota lists as premium or professional with no game yet, never asked of Liquipedia:
     a tournament before its first game, which Explore's Starting soon needs a start date for."""
@@ -226,35 +237,12 @@ def answer(session: Session, data: Path, now: float | None = None) -> dict:
         return rows.get(league_id)
 
     known = logos(data)
-    by_name = {(v.get("name") or "").lower(): (int(k), v["logo"]) for k, v in known.items() if v.get("name")}
-    rank = lambda r: (r.lp_tier or 99, -(r.prize_usd or 0)) if r else (99, 0)  # noqa: E731
-
-    kept_live = _read(data / "explore" / "live.json")
-    live = []
-    if kept_live and now - kept_live.get("read", 0) <= catalog.LIVE_MINUTES * 60:
-        for g in kept_live.get("games", []):
-            for s in ("radiant", "dire"):
-                g[s]["logo"] = (known.get(str(g[s]["team_id"])) or {}).get("logo")
-            live.append(g)
-        live.sort(key=lambda g: (*rank(league(g["league_id"])), -(g["duration"] or 0)))
-
+    by_name = _by_name(known)
+    live = _live(data, now, known, league)
     followed = tournaments(session, now)
-    upcoming = []
-    for r in followed:
-        for m in (liquipedia.kept(r.league_id, data) or {}).get("upcoming", []):
-            names = [o["name"] if isinstance(o, dict) else o for o in m["opponents"]]
-            if None in names or not (now <= (m.get("time") or 0) <= now + UPCOMING_HOURS * 3600):
-                continue
-            teams = [by_name.get(n.lower(), (0, None)) for n in names]
-            upcoming.append({**m, "league_id": r.league_id,
-                             "opponents": [{"name": n, "team_id": t, "logo": logo} for n, (t, logo) in zip(names, teams)]})  # fmt: skip
-    upcoming = sorted(upcoming, key=lambda m: m["time"])[:SHOWN]
-
+    upcoming = _upcoming(followed, data, now, UPCOMING_HOURS, by_name)
     recent = (_read(data / "explore" / "results.json") or {}).get("games", [])
-    results = series_of(recent, now)[:SHOWN]
-    for s in results:
-        for o in s["opponents"]:
-            o["logo"] = (known.get(str(o["team_id"])) or {}).get("logo")
+    results = _with_logos(series_of(recent, now)[:SHOWN], known)
 
     every = list(session.scalars(select(LeagueCatalog).where(or_(
         LeagueCatalog.start_date.is_not(None), LeagueCatalog.end_date.is_not(None), LeagueCatalog.first_game.is_not(None)))))  # fmt: skip
@@ -281,8 +269,85 @@ def answer(session: Session, data: Path, now: float | None = None) -> dict:
     for league_id in [g["league_id"] for g in live] + [m["league_id"] for m in upcoming] + [s["league_id"] for s in results] \
             + [r.league_id for r in soon] + [f["league_id"] for f in finished] + big:  # fmt: skip
         league(league_id)
-    leagues = {str(i): {**catalog.row(r, now, subscribed), "online": (r.location or "").startswith("Online")} for i, r in rows.items()}
     return {
-        "leagues": leagues, "live": live, "upcoming": upcoming, "results": results, "soon": [r.league_id for r in soon],
-        "calendar": calendar, "big": big, "finished": finished,
+        "leagues": _rows(rows, now, subscribed), "live": live, "upcoming": upcoming, "results": results,
+        "soon": [r.league_id for r in soon], "calendar": calendar, "big": big, "finished": finished,
     }  # fmt: skip
+
+
+HOME_DAYS = 7  # Home's upcoming matches and results: this many days ahead and back
+
+
+def home(session: Session, data: Path, now: float | None = None) -> dict:
+    """GET /api/home: Explore of your tournaments, from what is kept only. Their live games, their Liquipedia matches of
+    the next HOME_DAYS, the series of their stored games of the last HOME_DAYS, and the tournaments themselves (mine),
+    live first, then by last game."""
+    now = now or time.time()
+    names = dict(session.execute(select(League.league_id, League.name)).all())
+    # a league subscribed by id that no list has gets a row of its name only
+    rows = {i: session.get(LeagueCatalog, i) or LeagueCatalog(league_id=i, name=n) for i, n in names.items()}
+    known = logos(data)
+    live = _live(data, now, known, rows.get, set(rows))
+    upcoming = _upcoming([r for r in rows.values() if r.lp_page], data, now, HOME_DAYS * 24, _by_name(known))
+    stored = session.scalars(select(LeagueMatch).where(LeagueMatch.league_id.in_(names), LeagueMatch.start_time >= now - HOME_DAYS * 86400))
+    games = [{
+        "match_id": m.match_id, "start_time": m.start_time, "duration": m.raw_json.get("duration"), "leagueid": m.league_id,
+        "league_name": rows[m.league_id].name, "radiant_team_id": m.radiant_team_id, "radiant_name": m.radiant_name,
+        "dire_team_id": m.dire_team_id, "dire_name": m.dire_name, "radiant_win": m.radiant_win,
+        "series_id": m.raw_json.get("series_id"), "series_type": m.raw_json.get("series_type"),
+    } for m in stored]  # fmt: skip
+    mine = sorted(rows.values(), key=lambda r: (catalog.status(r, now) != "live", -(r.last_game or 0), r.name))
+    return {
+        "leagues": _rows(rows, now, set(names)), "live": live, "upcoming": upcoming,
+        "results": _with_logos(series_of(games, now)[:SHOWN], known), "mine": [r.league_id for r in mine],
+    }  # fmt: skip
+
+
+def _by_name(known: dict) -> dict[str, tuple[int, str]]:
+    """Team logos by the team's name in lower case, for Liquipedia's teams, which have only a name."""
+    return {(v.get("name") or "").lower(): (int(k), v["logo"]) for k, v in known.items() if v.get("name")}
+
+
+def _live(data: Path, now: float, known: dict, league, only: set[int] | None = None) -> list[dict]:
+    """The kept live games (of the leagues `only`, when given), when the look is at most LIVE_MINUTES old, with logos:
+    by the league's tier and prize pool (`league`: id to its catalog row), then the longest running."""
+    kept = _read(data / "explore" / "live.json")
+    if not kept or now - kept.get("read", 0) > catalog.LIVE_MINUTES * 60:
+        return []
+    rank = lambda r: (r.lp_tier or 99, -(r.prize_usd or 0)) if r else (99, 0)  # noqa: E731
+    live = []
+    for g in kept.get("games", []):
+        if only is not None and g["league_id"] not in only:
+            continue
+        r = league(g["league_id"])
+        for s in ("radiant", "dire"):
+            g[s]["logo"] = (known.get(str(g[s]["team_id"])) or {}).get("logo")
+        live.append((rank(r), g))
+    return [g for _, g in sorted(live, key=lambda x: (*x[0], -(x[1]["duration"] or 0)))]
+
+
+def _upcoming(rows: list[LeagueCatalog], data: Path, now: float, hours: int, by_name: dict) -> list[dict]:
+    """The kept Liquipedia matches of these tournaments starting within `hours`, both teams named, soonest first, at
+    most SHOWN; a team's logo found by its name."""
+    found = []
+    for r in rows:
+        for m in (liquipedia.kept(r.league_id, data) or {}).get("upcoming", []):
+            names = [o["name"] if isinstance(o, dict) else o for o in m["opponents"]]
+            if None in names or not (now <= (m.get("time") or 0) <= now + hours * 3600):
+                continue
+            teams = [by_name.get(n.lower(), (0, None)) for n in names]
+            found.append({**m, "league_id": r.league_id,
+                          "opponents": [{"name": n, "team_id": t, "logo": logo} for n, (t, logo) in zip(names, teams)]})  # fmt: skip
+    return sorted(found, key=lambda m: m["time"])[:SHOWN]
+
+
+def _with_logos(series: list[dict], known: dict) -> list[dict]:
+    for s in series:
+        for o in s["opponents"]:
+            o["logo"] = (known.get(str(o["team_id"])) or {}).get("logo")
+    return series
+
+
+def _rows(rows: dict[int, LeagueCatalog], now: float, subscribed: set[int]) -> dict[str, dict]:
+    """The leagues a page names, as the browser reads them: the catalog row, its region and whether online."""
+    return {str(i): {**catalog.row(r, now, subscribed), "online": (r.location or "").startswith("Online")} for i, r in rows.items()}

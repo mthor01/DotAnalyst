@@ -59,7 +59,9 @@ export const DESIGN: Part[] = [
   ]),
   part('compare', 'Player comparison', within('compare', [['stats', 'Stats'], ['wards', 'Ward maps']])),
   part('tournaments', 'Tournaments', [
-    part('tournaments.search', 'Search tab, with your tournaments'),
+    part('tournaments.home', 'Home tab, your tournaments and search', within('tournaments.home', [
+      ['live', 'Live now'], ['upcoming', 'Coming up'], ['results', 'Recent results'], ['mine', 'Your tournaments'],
+    ])),
     part('tournaments.explore', 'Explore tab', within('tournaments.explore', [
       ['live', 'Live now'], ['upcoming', 'Upcoming'], ['results', 'Recent results'], ['soon', 'Starting soon'],
       ['calendar', 'Calendar'], ['big', 'Biggest of the last 30 days'], ['finished', 'Recently finished'],

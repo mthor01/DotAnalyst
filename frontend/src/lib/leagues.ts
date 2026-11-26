@@ -137,6 +137,8 @@ export type ExploreAnswer = {
   big: number[]
   finished: { league_id: number; winner: { name: string; logo: string | null } | null }[]
 }
+/** GET /api/home (explore.home): Explore of your tournaments; mine are their ids, live first, then by last game */
+export type HomeAnswer = Pick<ExploreAnswer, 'leagues' | 'live' | 'upcoming' | 'results'> & { mine: number[] }
 /** Explore's tier groups and their colour, the same on cards and calendar bars */
 export const TIER_GROUPS = { '1': 'Tier 1', '2': 'Tier 2', '3': 'Tier 3', lower: 'Lower' } as const
 export type TierGroup = keyof typeof TIER_GROUPS

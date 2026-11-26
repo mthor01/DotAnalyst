@@ -350,13 +350,13 @@ def catalog_step(session: Session, client: httpx.Client, setup: Setup, now: floa
     for done, league_id in enumerate(due[:LOOKUPS]):
         doing("catalog", f"asking Liquipedia about league {league_id}", done, min(len(due), LOOKUPS))
         liquipedia.lookup(session, client, league_id, now)
-    read = 0  # Explore's upcoming matches and winners: the structures due, live tournaments first
-    for row in explore.tournaments(session, now):
+    read = 0  # upcoming matches and winners of Home and Explore: the structures due, yours first
+    for row, over in explore.followed(session, now):
         if read >= STRUCTURES:
             break
-        if liquipedia.structure_due(row, setup.data, now, explore.ended(row, now)):
+        if liquipedia.structure_due(row, setup.data, now, over):
             doing("catalog", f"reading Liquipedia's bracket of {row.name}", read, STRUCTURES)
-            liquipedia.structure(client, row, setup.data, now, explore.ended(row, now))
+            liquipedia.structure(client, row, setup.data, now, over)
             read += 1
     return min(len(due), LOOKUPS)
 

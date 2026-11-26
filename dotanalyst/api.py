@@ -341,6 +341,12 @@ def explore_page(session: Db) -> dict:
     return explore.answer(session, DATA)
 
 
+@app.get("/api/home")
+def home_page(session: Db) -> dict:
+    """Home: your tournaments, their live games, upcoming matches and recent results, from what is kept (explore.py)."""
+    return explore.home(session, DATA)
+
+
 @app.get("/api/teams/{a}/vs/{b}")
 def head_to_head(session: Db, a: int, b: int) -> dict:
     """Two teams' record against each other over every stored league game."""

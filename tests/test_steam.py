@@ -316,6 +316,8 @@ def test_league_sync_stores_each_game_with_its_teams_and_draft(session, tracked)
     assert (game.radiant_team_id, game.radiant_name) == (9906479, "Sayonara")
     assert (game.dire_team_id, game.dire_name) == (9635282, "New Kidz Doto")
     assert len(game.raw_json["picks_bans"]) == 24 and len(game.raw_json["players"]) == 10
+    # the details have no series; the history list does, and Home groups the games by it
+    assert (game.raw_json["series_id"], game.raw_json["series_type"]) == (1037904, 1)
 
 
 def test_league_sync_reads_on_past_a_page_that_says_nothing_remains(session, tracked):

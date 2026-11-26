@@ -271,3 +271,61 @@ def test_finished_winner_decided_by_our_games(session, tmp_path):
     preview = tmp_path / "leagues" / "1004.json"
     preview.write_text(json.dumps({"games": [{"match_id": 9302, "radiant_win": True}]}))
     assert explore.answer(session, tmp_path, NOW)["finished"] == [{"league_id": 1004, "winner": {"name": "Team B", "logo": None}}]
+
+
+# ---- Home: Explore of your tournaments
+from dotanalyst.db import League, LeagueMatch  # noqa: E402
+
+
+def stored(match_id, league, start, radiant, dire, radiant_win, series=None) -> LeagueMatch:
+    raw = {"duration": 2000, **({"series_id": series[0], "series_type": series[1]} if series else {})}
+    return LeagueMatch(match_id=match_id, league_id=league, start_time=start, radiant_team_id=radiant[0], dire_team_id=dire[0],
+                       radiant_name=radiant[1], dire_name=dire[1], radiant_win=radiant_win, raw_json=raw)  # fmt: skip
+
+
+def test_home_shows_only_your_tournaments(session, tmp_path):
+    fill(tmp_path)
+    keep(tmp_path, 1001, {"upcoming": [upcoming(NOW + 6 * DAY), upcoming(NOW + 2 * HOUR), upcoming(NOW + 8 * DAY)]}, "Big Live")
+    session.add_all([
+        League(league_id=1001, name="Big Live"), League(league_id=1007, name="No Page"),
+        stored(9401, 1001, NOW - 5 * HOUR, A, B, True, (701, 1)), stored(9402, 1001, NOW - 4 * HOUR, B, A, False, (701, 1)),
+        stored(9403, 1007, NOW - 8 * DAY, A, B, True),  # over 7 days ago
+        stored(9404, 1002, NOW - 5 * HOUR, A, B, True),  # not yours
+    ])  # fmt: skip
+    session.commit()
+    h = explore.home(session, tmp_path, NOW)
+    assert [g["match_id"] for g in h["live"]] == [9001, 9007]
+    assert [u["time"] for u in h["upcoming"]] == [NOW + 2 * HOUR, NOW + 6 * DAY]  # 7 days
+    (r,) = h["results"]
+    assert (r["match_ids"], r["score"], r["winner"], r["best_of"]) == ([9401, 9402], [2, 0], 0, 3)
+    assert (r["league_id"], r["league_name"], r["opponents"][0]["logo"]) == (1001, "Big Live", "a.png")
+    assert h["mine"] == [1001, 1007] and set(h["leagues"]) == {"1001", "1007"}
+
+
+def test_home_results_without_series_ids(session, tmp_path):
+    # stored before the series id was kept: the same teams within 6 hours are one series, of a length not known
+    session.add_all([
+        League(league_id=1002, name="Active Two"),
+        stored(9501, 1002, NOW - 6 * HOUR, A, B, True), stored(9502, 1002, NOW - 5 * HOUR, B, A, True),
+        stored(9503, 1002, NOW - HOUR, C, D, True),  # may go on: not a result yet
+    ])  # fmt: skip
+    session.commit()
+    (r,) = explore.home(session, tmp_path, NOW)["results"]
+    assert (r["match_ids"], r["score"], r["winner"], r["best_of"]) == ([9501, 9502], [1, 1], None, None)
+
+
+def test_home_without_tournaments(session, tmp_path):
+    assert explore.home(session, tmp_path, NOW) == {"leagues": {}, "live": [], "upcoming": [], "results": [], "mine": []}
+
+
+def test_catalog_step_reads_your_tournaments_brackets_first(monkeypatch, tmp_path, session):
+    read: list[tuple[int, bool]] = []
+    monkeypatch.setattr(poll.catalog, "refresh", lambda s, c, now: 0)
+    monkeypatch.setattr(poll.explore, "fetch_results", lambda c, data, now: 0)
+    monkeypatch.setattr(poll.liquipedia, "lookup", lambda s, c, league_id, now: False)
+    monkeypatch.setattr(poll.liquipedia, "structure", lambda c, row, data, now, finished: read.append((row.league_id, finished)))
+    session.add_all([League(league_id=1006, name="Tier Four"), League(league_id=1005, name="Old")])  # tier 4; over 100 days ago
+    session.commit()
+    poll.catalog_step(session, httpx.Client(), poll.Setup("key", None, tmp_path), NOW)
+    assert read[:2] == [(1005, True), (1006, False)]  # yours, though Explore follows neither; a finished one read once
+    assert [i for i, _ in read[2:]] == [1001, 1004, 1002, 1003]

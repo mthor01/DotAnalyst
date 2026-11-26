@@ -191,7 +191,8 @@ def sync_leagues(session: Session, client: httpx.Client, key: str, newest_only: 
                 found = details(client, key, entry)
                 if found is None:
                     continue
-                store_league_match(session, found)
+                # the details have no series; the history list has (Home groups the games by it)
+                store_league_match(session, {**found, "series_id": entry.get("series_id"), "series_type": entry.get("series_type")})
                 session.commit()  # per match, so an interrupted backfill keeps its progress
                 new += 1
             # shortcut: Steam lists only the newest 500 games of a league (season 7 has 561), and about 1 game in 400
