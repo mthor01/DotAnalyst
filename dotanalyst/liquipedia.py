@@ -25,6 +25,7 @@ FIELDS = ("lp_tier", "prize_usd", "start_date", "end_date", "location")
 STRUCTURE_HOURS = 6  # brackets and groups of a league still playing are read again after this; a finished one's never
 MAX_PAGES = 50  # what one revisions request may ask for
 NOT_STAGES = ("Statistics", "prizepool")
+VERSION = 2  # of the kept structure: one kept by another version is read again
 
 
 def pace() -> None:
@@ -127,6 +128,13 @@ def pages(client: httpx.Client, title: str, league_id: int) -> dict[str, str] | 
         own = re.search(r"\|\s*leagueid\s*=\s*(\d+)", text) if "{{Infobox league" in text else None
         if name != title and "{{Infobox league" in text and not (own and int(own[1]) == league_id):
             del found[name]
+    wanted = lp_structure.match_pages(found)  # the matches a bracket keeps on pages of their own
+    for i in range(0, len(wanted), MAX_PAGES):
+        more = _get(client, API, {"action": "query", "prop": "revisions", "rvprop": "content", "rvslots": "main",
+                                  "titles": "|".join(wanted[i : i + MAX_PAGES])})  # fmt: skip
+        if more is None:
+            return None
+        found.update(_texts(more))
     return found
 
 
@@ -152,7 +160,7 @@ def structure(client: httpx.Client, row: LeagueCatalog, data: Path, now: float, 
     failed request keeps what was read before."""
     stored = data / "leagues" / f"{row.league_id}.lp.json"
     cached = json.loads(stored.read_text()) if stored.exists() else None
-    if cached and cached["page"] != row.lp_page:  # Liquipedia's search found another page since
+    if cached and (cached["page"] != row.lp_page or cached.get("version") != VERSION):  # another page, or kept older
         cached = None
     if cached and (finished or now - cached["fetched"] < STRUCTURE_HOURS * 3600):
         return cached["found"]
@@ -161,5 +169,5 @@ def structure(client: httpx.Client, row: LeagueCatalog, data: Path, now: float, 
         return cached["found"] if cached else None
     found = lp_structure.structure(got, layouts(client, lp_structure.layout_names(got), data), now)
     stored.parent.mkdir(parents=True, exist_ok=True)
-    stored.write_text(json.dumps({"fetched": now, "page": row.lp_page, "found": found}))
+    stored.write_text(json.dumps({"version": VERSION, "fetched": now, "page": row.lp_page, "found": found}))
     return found

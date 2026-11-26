@@ -100,3 +100,66 @@ def test_group_members_match_their_matches_in_any_case():
     pool = [{"opponents": ["Team A", "TEAM B"], "score": [2, 1]}]
     rows = lp.group_rows(["team a", "Team B"], pool)
     assert [(r["name"], r["series_wins"]) for r in rows] == [("team a", 1), ("Team B", 0)]
+
+
+# newer Liquipedia pages leave a bracket slot empty and keep the match on a page of its own, whose games name only
+# their Dota match id: who won comes from our games
+NEW_STYLE = """==={{Stage|Playoffs}}===
+{{Bracket|Bracket/4DE|id=QQQQ
+|R1M1={{Match}}
+|R1M2={{Match
+|opponent1={{TeamOpponent|Team C}}
+|opponent2={{TeamOpponent|Team D}}
+|map1={{Map|team1side=radiant|winner=1}}
+}}
+}}
+===Group A===
+{{GroupStandings|{{TeamOpponent|Team A}}|{{TeamOpponent|Team B}}}}
+{{Matchlist|id=LLLL|M1={{Match|opponent1={{TeamOpponent|Team A}}|opponent2={{TeamOpponent|Team B}}|map1={{ApiMap|matchid=9201}}}}}}
+"""
+MATCH_PAGE = """{{MatchPage
+|opponent1={{TeamOpponent|Team A}}
+|opponent2={{TeamOpponent|Team B}}
+|date=November 25, 2026 - 11:15 {{Abbr/CET}}
+|map1={{ApiMap|matchid=9101}}
+|map2={{ApiMap|matchid=9102|reversed=true}}
+|map3={{ApiMap|matchid=9103}}
+}}"""
+NEW_PAGES = {"Pro Series 6": NEW_STYLE, "Match:ID QQQQ R01-M001": MATCH_PAGE}
+
+
+def won(match_id, radiant, dire, radiant_win=True) -> dict:
+    return {"match_id": match_id, "radiant": {"team_id": radiant}, "dire": {"team_id": dire}, "radiant_win": radiant_win}
+
+
+def test_empty_bracket_slots_name_their_match_pages():
+    assert lp.match_pages({"Pro Series 6": NEW_STYLE}) == ["Match:ID QQQQ R01-M001"]
+
+
+def test_a_match_page_fills_its_slot_and_api_maps_read_their_side():
+    found = lp.structure(NEW_PAGES, {"Bracket/4DE": LAYOUT}, NOV_20)
+    assert found["brackets"][0]["title"] == "Playoffs"  # {{Stage|Playoffs}} as its text
+    m = found["brackets"][0]["sections"][0]["rounds"][0]["matches"][0]
+    assert names(m) == ["Team A", "Team B"]
+    assert [(p["match_id"], p["team1side"]) for p in m["maps"]] == [(9101, "radiant"), (9102, "dire"), (9103, "radiant")]
+    assert all(names(u) != ["Team A", "Team B"] for u in found["upcoming"])  # its games were played
+
+
+def test_map_winners_come_from_our_games():
+    found = lp.structure(NEW_PAGES, {"Bracket/4DE": LAYOUT}, NOV_20)
+    games = [won(9101, 3001, 3002), won(9102, 3002, 3001), won(9103, 3001, 3002), won(9201, 3001, 3002)]
+    lp.identify(found, games, [])
+    m = found["brackets"][0]["sections"][0]["rounds"][0]["matches"][0]
+    assert [o["team_id"] for o in m["opponents"]] == [3001, 3002]
+    assert m["score"] == [2, 1] and m["winner"] == 0  # the reversed second game went to Team B, Radiant there
+    (group,) = found["groups"]
+    assert [(r["name"], r["series_wins"], r["map_wins"]) for r in group["rows"]] == [("Team A", 1, 1), ("Team B", 0, 0)]
+
+
+def test_empty_match_list_slots_are_read_from_their_match_pages():
+    text = "===Group B===\n{{GroupStandings|{{TeamOpponent|Team A}}|{{TeamOpponent|Team B}}}}\n{{Matchlist|id=MMMM|M1={{Match}}}}"
+    assert lp.match_pages({"Pro Series 6": text}) == ["Match:ID MMMM 0001"]
+    found = lp.structure({"Pro Series 6": text, "Match:ID MMMM 0001": MATCH_PAGE}, {}, NOV_20)
+    lp.identify(found, [won(9101, 3001, 3002), won(9102, 3002, 3001), won(9103, 3001, 3002)], [])
+    rows = found["groups"][0]["rows"]
+    assert [(r["name"], r["series_wins"], r["map_wins"], r["map_losses"]) for r in rows] == [("Team A", 1, 2, 1), ("Team B", 0, 1, 2)]

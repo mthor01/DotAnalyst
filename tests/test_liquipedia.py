@@ -139,3 +139,32 @@ def test_a_failed_refresh_keeps_the_old_structure(tmp_path):
     again = liquipedia.structure(structure_client(asked, fail=True), row(), tmp_path, NOW + 7 * 3600, finished=False)
     assert asked and again == old
     assert liquipedia.structure(structure_client([], fail=True), row(), tmp_path / "empty", NOW, finished=False) is None
+
+
+def test_empty_bracket_slots_are_read_from_their_match_pages(tmp_path):
+    from tests.test_lp_structure import MATCH_PAGE, NEW_STYLE
+
+    def revisions(pages: dict) -> dict:
+        return {"query": {"pages": {str(i): {"title": t, "revisions": [{"slots": {"main": {"*": x}}}]} for i, (t, x) in enumerate(pages.items())}}}
+
+    asked: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(request)
+        if request.url.params.get("list") == "allpages":
+            return httpx.Response(200, json={"query": {"allpages": []}})
+        if "Match:ID" in request.url.params.get("titles", ""):
+            return httpx.Response(200, json=revisions({"Match:ID QQQQ R01-M001": MATCH_PAGE}))
+        return httpx.Response(200, json=revisions({"Pro Series 6": NEW_STYLE}))
+
+    found = liquipedia.pages(httpx.Client(transport=httpx.MockTransport(answer)), "Pro Series 6", 1002)
+    assert len(asked) == 3 and asked[2].url.params["titles"] == "Match:ID QQQQ R01-M001"
+    assert set(found) == {"Pro Series 6", "Match:ID QQQQ R01-M001"}
+
+
+def test_a_structure_kept_by_an_older_version_is_read_again(tmp_path):
+    (tmp_path / "leagues").mkdir()
+    (tmp_path / "leagues" / "1002.lp.json").write_text(json.dumps({"fetched": NOW, "page": "Pro Series 5", "found": {}}))
+    asked: list[httpx.Request] = []
+    found = liquipedia.structure(structure_client(asked), row(), tmp_path, NOW, finished=True)
+    assert asked and found["brackets"]

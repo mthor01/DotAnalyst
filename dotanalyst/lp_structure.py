@@ -102,8 +102,10 @@ def numbered(p: dict, prefix: str) -> list[tuple[int, str]]:
 
 
 def match(body: str) -> dict:
-    """One match: the two teams, its time, its Dota match ids, the maps played (skipped ones dropped), the score and
-    the winner (0, 1): the Match's own `winner=`, else a team that won more than half the listed maps."""
+    """One match (a `{{Match}}` or a match page's `{{MatchPage}}`): the two teams, its time, its Dota match ids, the
+    maps (skipped ones dropped), the score and the winner (0, 1): the Match's own `winner=`, else a team that won more
+    than half the listed maps. A `{{ApiMap|matchid=…|reversed=true}}` names only its game, the first team Dire when
+    reversed: who won comes from our games (identify)."""
     p = params(body)
     ids = {n: int(v) for n, v in numbered(p, "matchid") if v.isdigit()}
     maps = []
@@ -111,24 +113,74 @@ def match(body: str) -> dict:
         mp = params(inner(value))
         if mp.get("finished") == "skip":
             continue
-        won = mp.get("winner")
-        maps.append({"team1side": mp.get("team1side") or None, "winner": int(won) - 1 if won in ("1", "2") else None,
-                     "match_id": ids.get(n)})  # fmt: skip
-    score = [sum(m["winner"] == i for m in maps) for i in (0, 1)]
-    if p.get("winner") in ("1", "2"):
-        winner = int(p["winner"]) - 1
-    elif maps and max(score) > len(maps) / 2:
-        winner = 0 if score[0] > score[1] else 1
-    else:
-        winner = None
-    return {
-        "opponents": [opponent(p.get("opponent1", "")), opponent(p.get("opponent2", ""))],
-        "time": when(p.get("date", "")), "match_ids": list(ids.values()), "maps": maps, "score": score, "winner": winner,
+        won, own = mp.get("winner"), mp.get("matchid", "")
+        side = mp.get("team1side") or (("dire" if mp.get("reversed") == "true" else "radiant") if own else None)
+        maps.append({"team1side": side, "winner": int(won) - 1 if won in ("1", "2") else None,
+                     "match_id": int(own) if own.isdigit() else ids.get(n)})  # fmt: skip
+    m = {
+        "opponents": [opponent(p.get("opponent1", "")), opponent(p.get("opponent2", ""))], "time": when(p.get("date", "")),
+        "match_ids": [mp["match_id"] for mp in maps if mp["match_id"]] or list(ids.values()), "maps": maps,
+        "score": [0, 0], "winner": int(p["winner"]) - 1 if p.get("winner") in ("1", "2") else None,
     }  # fmt: skip
+    return settle(m)
+
+
+def settle(m: dict) -> dict:
+    """The score from the maps won, and the winner when not given: a team that won more than half the listed maps."""
+    maps = m["maps"]
+    m["score"] = [sum(mp["winner"] == i for mp in maps) for i in (0, 1)]
+    if m["winner"] is None and maps and max(m["score"]) > len(maps) / 2:
+        m["winner"] = 0 if m["score"][0] > m["score"][1] else 1
+    return m
 
 
 def played(m: dict) -> bool:
-    return any(mp["winner"] is not None for mp in m["maps"]) or m["winner"] is not None
+    """A map with a winner or with a Dota match id has been played (or is being played)."""
+    return m["winner"] is not None or any(mp["winner"] is not None or mp["match_id"] for mp in m["maps"])
+
+
+def heading(text: str) -> str:
+    """A heading's text: `{{Stage|Playoffs}}` is Playoffs, `[[Page|Group A]]` Group A."""
+    text = re.sub(r"\{\{[^{}]*?\|([^{}|]*)\}\}", r"\1", text)
+    return re.sub(r"\[\[(?:[^|\]]*\|)?([^\]]*)\]\]", r"\1", text).strip()
+
+
+def slot(key: str) -> str | None:
+    """`R1M2` is the layout's `R01-M002`; RxMBR stays."""
+    if key == "RxMBR":
+        return key
+    m = re.fullmatch(r"R(\d+)M(\d+)", key)
+    return f"R{int(m[1]):02d}-M{int(m[2]):03d}" if m else None
+
+
+def empty(value: str) -> bool:
+    return not any(k.startswith("opponent") or k.startswith("map") for k in params(inner(value)))
+
+
+def listed(key: str) -> str | None:
+    """A match list's `M3` is `0003` on its match page."""
+    return f"{int(key[1:]):04d}" if re.fullmatch(r"M\d+", key) else None
+
+
+def body_of(value: str, page: str | None) -> str:
+    """What a slot's match is read from: its own `{{MatchPage}}` when the slot is empty and that page was read."""
+    own = next((b for _, b in blocks(page, "MatchPage")), None) if page and empty(value) else None
+    return own or inner(value)
+
+
+def match_pages(pages: dict[str, str]) -> list[str]:
+    """The pages of the matches a bracket or match list leaves empty: newer Liquipedia pages keep each on
+    `Match:ID <bracket> R01-M001` or `Match:ID <list> 0001`."""
+    found = []
+    for text in pages.values():
+        for template, name in (("Bracket", slot), ("Matchlist", listed)):
+            for _, body in blocks(COMMENT.sub("", text), template):
+                p = params(body)
+                for key, value in p.items():
+                    sid = name(key)
+                    if sid and p.get("id") and empty(value):
+                        found.append(f"Match:ID {p['id']} {sid}")
+    return list(dict.fromkeys(found))
 
 
 def layout(wikitext: str) -> list[dict]:
@@ -157,32 +209,29 @@ def round_name(code: str | None, index: int) -> str:
     return f"Round {index}"
 
 
-def bracket(body: str, slots: list[dict]) -> dict:
+def bracket(body: str, slots: list[dict], pages: dict[str, str] | None = None) -> dict:
     """The tree: per section (upper, lower) its rounds in order, each with its matches and the ids feeding them. A
     round is named by the page's own `R<r>M<m>header=`, else by the layout's header code. The bracket reset shows only
     when it was played."""
     p = params(body)
     matches, headers = {}, {}
     for key, value in p.items():
-        m = re.fullmatch(r"R(\d+)M(\d+)(header)?", key)
-        if key == "RxMBR":
-            matches["RxMBR"] = match(inner(value))
-        elif m and m[3]:
-            headers[f"R{int(m[1]):02d}-M{int(m[2]):03d}"] = value
-        elif m:
-            matches[f"R{int(m[1]):02d}-M{int(m[2]):03d}"] = match(inner(value))
+        if key.endswith("header") and slot(key.removesuffix("header")):
+            headers[slot(key.removesuffix("header"))] = value
+        elif sid := slot(key):
+            matches[sid] = match(body_of(value, (pages or {}).get(f"Match:ID {p.get('id')} {sid}")))
     sections: dict[str, dict[int, dict]] = {}
-    for slot in slots:
-        sid = slot["id"] or ""
+    for spot in slots:
+        sid = spot["id"] or ""
         m = matches.get(sid) or match("Match")
         if sid == "RxMBR" and not played(m):
             continue
         number = re.match(r"R(\d+)", sid)
         index = 999 if sid == "RxMBR" or not number else int(number[1])
-        r = sections.setdefault(slot["section"], {}).setdefault(index, {"page": None, "code": None, "matches": []})
+        r = sections.setdefault(spot["section"], {}).setdefault(index, {"page": None, "code": None, "matches": []})
         r["page"] = r["page"] or headers.get(sid)
-        r["code"] = r["code"] or slot["header"]
-        r["matches"].append({**m, "id": sid, "feeders": [f for f in (slot["toupper"], slot["tolower"]) if f]})
+        r["code"] = r["code"] or spot["header"]
+        r["matches"].append({**m, "id": sid, "feeders": [f for f in (spot["toupper"], spot["tolower"]) if f]})
     return {"sections": [
         {"name": name, "rounds": [
             {"name": "Bracket Reset" if i == 999 else r["page"] or round_name(r["code"], i), "matches": r["matches"]}
@@ -219,7 +268,10 @@ def structure(pages: dict[str, str], layouts: dict[str, list[dict]], now: float)
     group is titled by the nearest heading above it, else by its page's last part."""
     texts = {title: COMMENT.sub("", t) for title, t in pages.items()}
     lists = {
-        title: [match(inner(v)) for _, b in blocks(text, "Matchlist") for k, v in params(b).items() if re.fullmatch(r"M\d+", k)]
+        title: [
+            match(body_of(v, pages.get(f"Match:ID {p.get('id')} {listed(k)}")))
+            for _, b in blocks(text, "Matchlist") for p in [params(b)] for k, v in p.items() if listed(k)
+        ]
         for title, text in texts.items()
     }  # fmt: skip
     found: dict = {"brackets": [], "groups": [], "upcoming": [], "rosters": [], "matches": [m for ms in lists.values() for m in ms]}
@@ -228,12 +280,12 @@ def structure(pages: dict[str, str], layouts: dict[str, list[dict]], now: float)
         heads = [(h.start(), h[2]) for h in HEADING.finditer(text)]
 
         def titled(at: int) -> str:
-            return next((h for o, h in reversed(heads) if o < at), title.rsplit("/", 1)[-1])
+            return next((heading(h) for o, h in reversed(heads) if o < at), title.rsplit("/", 1)[-1])
 
         for at, body in blocks(text, "Bracket"):
             slots = layouts.get(params(body).get("1", "").strip())
             if slots:
-                tree = bracket(body, slots)
+                tree = bracket(body, slots, pages)
                 found["brackets"].append({"title": titled(at), **tree})
                 found["matches"] += [m for s in tree["sections"] for r in s["rounds"] for m in r["matches"]]
         for at, body in blocks(text, "GroupStandings"):
@@ -241,7 +293,8 @@ def structure(pages: dict[str, str], layouts: dict[str, list[dict]], now: float)
             members = [n for n in (opponent(v) for k, v in p.items() if k.isdigit()) if n]
             stage = p.get("stages", "").replace("{{FULLPAGENAME}}", title).replace("_", " ").strip()
             pool = lists[title] + (lists.get(stage, []) if stage != title else [])  # groups play as match lists
-            found["groups"].append({"title": titled(at), "rows": group_rows(members, pool)})
+            # members and pool stay until identify has the games' winners; the page leaves them out
+            found["groups"].append({"title": titled(at), "rows": group_rows(members, pool), "members": members, "pool": pool})
         for _, body in blocks(text, "TeamParticipants"):
             for _, team in blocks(body, "Opponent"):
                 p = params(team)
@@ -283,11 +336,19 @@ def identify(found: dict, games: list[dict], teams: list[dict]) -> dict:
     def fix(m: dict) -> None:
         m["opponents"] = [o if isinstance(o, dict) else {"name": o, "team_id": team_id(o)} for o in m["opponents"]]
 
-    every = found["matches"] + found["upcoming"]
+    every = found["matches"] + found["upcoming"] + [m for g in found["groups"] for m in g.get("pool", [])]
     every += [m for b in found["brackets"] for s in b["sections"] for r in s["rounds"] for m in r["matches"]]
+    for m in every:
+        for mp in m["maps"]:  # a game Liquipedia names only by its id: who won, from ours
+            g = by_game.get(mp["match_id"])
+            if mp["winner"] is None and g and g.get("radiant_win") is not None and mp["team1side"] in ("radiant", "dire"):
+                mp["winner"] = 0 if (mp["team1side"] == "radiant") == g["radiant_win"] else 1
+        settle(m)
     for m in every:
         fix(m)
     for g in found["groups"]:
+        if "pool" in g:
+            g["rows"] = group_rows(g["members"], [{**m, "opponents": [label(o) for o in m["opponents"]]} for m in g["pool"]])
         for r in g["rows"]:
             r["team_id"] = team_id(r["name"])
     for r in found["rosters"]:
