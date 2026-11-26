@@ -31,9 +31,11 @@ MISMATCH_DAYS = 30  # a page whose event ended this long before the league's fir
 
 def fits(row: LeagueCatalog, start_date: str | None, end_date: str | None) -> bool:
     """Whether a page with these dates can be the league's. A lobby league (FACEIT's) plays for years and once hosted
-    a two-day qualifier whose page names its id: an event over long before the league's games is not the league."""
-    end = catalog.day_end(end_date) or catalog.day_end(start_date)
-    return not (row.first_game and end and end < row.first_game - MISMATCH_DAYS * 86400)
+    a two-day qualifier whose page names its id: an event over long before the league's games is not the league. Its
+    games: the first known, else when Steam last saw it live (an amateur league's games are known once its page is
+    opened)."""
+    end, played = catalog.day_end(end_date) or catalog.day_end(start_date), row.first_game or row.live_seen
+    return not (played and end and end < played - MISMATCH_DAYS * 86400)
 
 
 def pace() -> None:

@@ -90,6 +90,13 @@ def test_a_kept_page_that_does_not_fit_the_games_is_asked_again(session):
     assert not liquipedia.due(row, NOW + DAY)
 
 
+def test_a_league_seen_live_long_after_the_pages_event_has_another_page():
+    # an amateur league's games are known only once its page is opened; Steam's live list still saw it playing
+    row = LeagueCatalog(league_id=1001, name="Lobby League", live_seen=NOW)
+    assert not liquipedia.fits(row, "2026-01-01", "2026-01-02")
+    assert liquipedia.fits(row, "2026-11-01", None)  # started under 30 days before
+
+
 def test_a_league_liquipedia_was_never_asked_about_is_due(session):
     assert liquipedia.due(LeagueCatalog(league_id=1, name="x"), NOW)
 
