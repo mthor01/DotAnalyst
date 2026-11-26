@@ -252,11 +252,32 @@ Known limits: most matches have no parsed replay and so no position until the po
 
 ### Tracked tournaments (Tournaments page)
 
-The tracked tournaments are the `leagues` table, league id to name. A new database tracks none. The add form on the Tournaments page takes a league id; the name is OpenDota's (`/leagues/{id}`), or "League {id}" when OpenDota has none or does not answer. The league sync reads every tracked tournament, so a new one is read in full on the poller's next round for league games, up to Steam's newest 500 games of a league.
+The tracked (subscribed) tournaments are the `leagues` table, league id to name. A new database tracks none. Subscribe on the tournament browser (Explore, Search, a tournament page) or by league id under Search; the name is the catalog's, else OpenDota's (`/leagues/{id}`), or "League {id}" when OpenDota has none or does not answer. The league sync reads every tracked tournament, so a new one is read in full on the poller's next round for league games, up to Steam's newest 500 games of a league.
 
-Taking a tournament off (Settings, Accounts) deletes its row in `leagues`: its games are no longer read from Steam, and those not yet copied into `matches` are not copied, so no more of its replays are downloaded. Its stored games, their replays and the team pages built from them stay; adding it again reads it in full.
+Unsubscribing (the tournament browser, the Subscribed tab, or Settings, Accounts) deletes its row in `leagues`: its games are no longer read from Steam, and those not yet copied into `matches` are not copied, so no more of its replays are downloaded. Its stored games, their replays and the team pages built from them stay; adding it again reads it in full.
 
-The list gives per tournament its stored games, the teams that played in them (a side without a team is none), and the start of its first and last stored game. The Teams tab of the page is the League teams list.
+The Subscribed tab gives per tournament its stored games, the teams that played in them (a side without a team is none), and the start of its first and last stored game. The Teams tab of the page is the League teams list.
+
+### Tournament browser (Tournaments page: Explore, Search, tournament page)
+
+The browser finds any league, pro or amateur, without knowing its id. It works on `league_catalog` (`catalog.py`), a row per league, filled from three sources:
+
+| What | Source | When |
+|---|---|---|
+| Every league: id, name, tier | OpenDota `/api/leagues` (about 10,400 leagues) | the `catalog` poll step, once a day (`STALE`) |
+| Games, first and last game of the pro leagues | one OpenDota explorer query over its pro matches of the last 365 days (`ACTIVITY_DAYS`) | with the list |
+| Leagues playing right now, amateur ones too | Steam `GetLiveLeagueGames` | the `live` poll step, every 5 minutes |
+| Prize pool, Liquipedia tier, dates, place, page | Liquipedia, one search for `insource:"leagueid=<id>"` with the page's wikitext (`liquipedia.py`) | see below |
+
+OpenDota's tier "excluded" is where most amateur leagues are; OpenDota has no games of them, only their name. The refresh adds and updates rows and never deletes one, so a league seen live that the list lacks keeps its row ("League <id>").
+
+- **Status**: *live* when seen in Steam's live list in the last 15 minutes (`LIVE_MINUTES`); else *active* when its last game is at most 30 days old (`ACTIVE_DAYS`), *finished* when older, *unknown* without a date. Liquipedia's end date stands in for the last game when no game date is known.
+- **Explore**: *Live now*, the live leagues, most live games first; *Biggest of the last 30 days*, the live and active leagues by Liquipedia tier (1 first, none last), then prize pool, then games, at most 20 (`BIG`). An amateur league gets dates and games only when it is opened or subscribed, so before that it ranks by nothing and comes last.
+- **Search** (`/api/catalog`): the name holds the text, any case, `%` and `_` taken literally; tier premium, professional or amateur (amateur, excluded or none); a status; sorted by last game, games, prize pool (unknown last), newest (highest id) or name; ties keep the newest first. 50 a page.
+- **Liquipedia**: asked about every league in Explore and every subscribed league by the `catalog` step (at most 30 a round), and about a league whose page is opened; again only after 7 days (`RECHECK_DAYS`) and only while it plays; a miss is kept as well (`lp_checked`). Requests are 2 seconds apart and send `User-Agent: DotAnalyst/<version> (+https://github.com/mthor01/DotAnalyst)` and gzip, as Liquipedia's terms ask. The infobox gives `liquipediatier`, `prizepoolusd` ("$50,000" or "TBA" read as written, a non-number as none), `sdate`, `edate` (only full YYYY-MM-DD dates) and the place from `city`, `country` and `type=Online`. A league can be matched to a page that only mentions its id; the tournament page links the page it used. The page credits Liquipedia (CC BY-SA 3.0).
+- **Tournament page** (`#league/<id>`, `league_page.py`): a subscribed league shows its stored games; their series ids come from Steam's history list of the league (stored games have none), up to 5 requests. Any other league gets a preview: OpenDota's games and teams of the league when it has any; else, with a Steam key, Steam's history list (up to 5 pages of 100) and the details of its newest 20 games (`STEAM_DETAILS`) for team names and results. The preview is kept as `data/leagues/<id>.json` and fetched again only after 6 hours (`PREVIEW_HOURS`) and only while the league plays; a finished league's never. Preview games never go into `league_matches`. Opening a page updates the league's games, first and last game in the catalog.
+- **Series**: games grouped by series id (a game without one is a series of its own); the first team is the first game's Radiant; the score counts games with a known result; Bo1/Bo3/Bo5 from `series_type` 0/1/2.
+- **Team records** count only games with a known result: the older games of an amateur preview, without details, list the teams but give them no record ("–"). OpenDota's teams add rating and logo; a logo that does not load is hidden.
 
 ### League teams
 
@@ -312,7 +333,7 @@ The Whose column names the tracked accounts that played the match (their label a
 
 ### Poll steps (Queue page)
 
-The poller is eight steps, in `STEP_FUNCS` in `poll.py`: new matches of the accounts, new league games, usual games of checked players, replays in the Dota client folder, replay ids (salts) from Valve, replay downloads and parsing, game lists of league players, stats of parsed matches. Since 2026-11-20 each runs on a thread of its own (`start`, called when the server starts), side by side, none waiting for another: a round does all the work the step finds, then the step looks again 10 seconds (`LOOP_SECONDS`) after that round ended; the two steps that ask Steam for new games wait the settings' interval instead, when it is longer (`wait_after`). While the poller is paused in the settings, every step only waits. So downloads start right after a restart, while the accounts step is still reading Steam, and a match the accounts step stores is picked up by the downloads step within 10 seconds. Before, one poll ran the steps in order every minute.
+The poller is ten steps, in `STEP_FUNCS` in `poll.py`: new matches of the accounts, new league games, usual games of checked players, replays in the Dota client folder, replay ids (salts) from Valve, replay downloads and parsing, game lists of league players, stats of parsed matches, and for the tournament browser the leagues playing now (`live`, every 5 minutes) and the tournament list with its Liquipedia lookups (`catalog`, every 10 minutes; OpenDota's list itself once a day). A single run of every step (`poll_once`, the `poll` command) leaves out those last two: they only serve the site. Since 2026-11-20 each runs on a thread of its own (`start`, called when the server starts), side by side, none waiting for another: a round does all the work the step finds, then the step looks again 10 seconds (`LOOP_SECONDS`) after that round ended; the two steps that ask Steam for new games wait the settings' interval instead, when it is longer (`wait_after`). While the poller is paused in the settings, every step only waits. So downloads start right after a restart, while the accounts step is still reading Steam, and a match the accounts step stores is picked up by the downloads step within 10 seconds. Before, one poll ran the steps in order every minute.
 
 - **Rules that keep the steps apart.** Each round has its own database session and HTTP client. A match a step downloads, parses or computes is claimed in `WORKING` (`claim` / `release`): another step, or the site's Request replay, leaves a claimed match alone. Each step and the button that does the same work by hand (`refresh`, `refresh_leagues`, `refresh_players`) share a lock, so they never run at once. SQLite lets one writer at a time; a step waits up to 30 seconds for another's write (`timeout` in `db.py`).
 - **Rate limits across threads.** OpenDota's calls share one pacer, one a second; Steam's calls share another (`pace` in `steam.py`), one a second. `salts.json` is written to a temporary file and swapped in whole, since the downloads step reads it while the salts step writes it.
@@ -347,7 +368,7 @@ Known limit: a list loaded before a replay finished keeps its old state for that
 
 ### Storage (Queue page)
 
-`storage` in `poll.py` adds up the size of every file in the data folder by its top-level part: `raw` is the parser output, `dotanalyst.db` with its `-wal` and `-shm` files the database, `opendota` and `steam` the cached API answers, `tmp` the replays being fetched; anything else is Other. Sizes are shown in binary units (1 GB = 2³⁰ bytes), as the file manager counts them. The parts always come in that order with their fixed colour, an empty part included in the table but left out of the donut.
+`storage` in `poll.py` adds up the size of every file in the data folder by its top-level part: `raw` is the parser output, `dotanalyst.db` with its `-wal` and `-shm` files the database, `opendota` and `steam` the cached API answers, `tmp` the replays being fetched, `leagues` the tournament previews; anything else is Other. Sizes are shown in binary units (1 GB = 2³⁰ bytes), as the file manager counts them. The parts always come in that order with their fixed colour, an empty part included in the table but left out of the donut.
 
 ## On the site
 
@@ -500,7 +521,7 @@ The settings are lines in `.env` beside the Steam key (`settings.py`, written by
 The Design tab hides parts of the site: a page, a tab, a block on a tab, or a filter of the filter panel. Each part has a dotted id (`profile.laning.versus`, `team.general.blood`, `filters.role`; the list is `DESIGN` in `settings.svelte.ts`), and `HIDDEN` holds the hidden ids joined by commas. The elements of a part carry `data-block="<id>"`, and the app adds a style rule that hides `[data-block="<id>"]` and every `[data-block^="<id>."]`, so hiding a tab hides all its blocks. Where a part has no element of its own (the team page's blocks), a `display: contents` wrapper carries the mark without changing the layout.
 
 - A hidden tab gives way to the first shown tab of its page (`shownTab`); the match page leaves hidden tabs out of its tab bar. A hidden page leaves the top bar, and the site opens the first page still shown.
-- The team and match pages are opened from links, so they cannot be hidden as a whole, only their tabs and blocks. A match unfolded on another page (Laning's best lanes, a team's games) hides the same blocks as the match page.
+- The team, match and tournament pages are opened from links, so they cannot be hidden as a whole, only their tabs and blocks. The Tournaments tabs keep their ids: `tournaments.list` is the Subscribed tab. A match unfolded on another page (Laning's best lanes, a team's games) hides the same blocks as the match page.
 - A hidden filter counts as its default: the pages are no longer narrowed by it (Matches counts as 100, the others as all).
 - Hiding is only display: what a hidden part needs is still fetched and computed.
 
