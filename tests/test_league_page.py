@@ -149,3 +149,18 @@ def test_games_without_a_result_do_not_count_in_a_teams_record():
     found = {t["team_id"]: t for t in league_page.teams(games, [])}
     assert (found[1]["games"], found[1]["wins"], found[1]["series"], found[1]["series_wins"]) == (1, 1, 1, 1)
     assert (found[3]["games"], found[3]["series"], found[3]["seen"]) == (0, 0, 1)  # listed, with no record
+
+
+def test_page_has_no_liquipedia_without_a_page(session, tmp_path):
+    page = league_page.page(session, client([]), "key", 1002, tmp_path, NOW)
+    assert page["liquipedia"] is None
+
+
+def test_page_reads_liquipedia_and_names_its_teams(session, tmp_path, monkeypatch):
+    found = {"brackets": [], "groups": [{"title": "Group A", "rows": [{"name": "team a", "series_wins": 1,
+             "series_losses": 0, "map_wins": 2, "map_losses": 0}]}], "upcoming": [], "rosters": [], "matches": []}  # fmt: skip
+    monkeypatch.setattr(league_page.liquipedia, "structure", lambda client, row, data, now, finished: json.loads(json.dumps(found)))
+    session.get(LeagueCatalog, 1002).lp_page = "Pro Series 5"
+    page = league_page.page(session, client([]), "key", 1002, tmp_path, NOW)
+    assert page["liquipedia"]["page"] == "Pro Series 5" and "matches" not in page["liquipedia"]
+    assert page["liquipedia"]["groups"][0]["rows"][0]["team_id"] == 3001  # by name among OpenDota's teams

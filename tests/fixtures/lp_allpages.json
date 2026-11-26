@@ -1,0 +1,32 @@
+{
+ "batchcomplete": "",
+ "query": {
+  "allpages": [
+   {
+    "pageid": 600,
+    "ns": 0,
+    "title": "Pro Series 5/Playoffs"
+   },
+   {
+    "pageid": 601,
+    "ns": 0,
+    "title": "Pro Series 5/Region"
+   },
+   {
+    "pageid": 602,
+    "ns": 0,
+    "title": "Pro Series 5/Region/Open Qualifier"
+   },
+   {
+    "pageid": 603,
+    "ns": 0,
+    "title": "Pro Series 5/Statistics"
+   },
+   {
+    "pageid": 604,
+    "ns": 0,
+    "title": "Pro Series 5/prizepool"
+   }
+  ]
+ }
+}

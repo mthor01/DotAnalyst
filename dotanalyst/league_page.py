@@ -10,7 +10,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import catalog, league_stats, liquipedia, steam
+from . import catalog, league_stats, liquipedia, lp_structure, steam
 from .db import DATA, League, LeagueCatalog, LeagueMatch, PlayerName
 from .opendota import pace
 
@@ -188,8 +188,14 @@ def page(session: Session, client: httpx.Client, key: str, league_id: int, data:
     found = {
         "league": catalog.row(row, now, {league_id} if subscribed else set()), "source": source, "subscribed": subscribed,
         "teams": teams(games, cached.get("teams", [])), "series": grouped, "games": games,
-        "standings": league_stats.standings(grouped),
+        "standings": league_stats.standings(grouped), "liquipedia": None,
     }  # fmt: skip
+    if row.lp_page:
+        lp = liquipedia.structure(client, row, data, now, catalog.status(row, now) == "finished")
+        if lp:
+            lp_structure.identify(lp, games, found["teams"])
+            lp.pop("matches")  # only needed to name the teams
+            found["liquipedia"] = {**lp, "page": row.lp_page}
     if subscribed:
         names = names_of(session, rows)
         found["heroes"], found["players"] = league_stats.heroes(rows), league_stats.players(rows, names)

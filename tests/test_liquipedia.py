@@ -91,3 +91,51 @@ def test_lookups_keep_two_seconds_apart(monkeypatch):
     for t in threads:
         t.join()
     assert time.monotonic() - start >= 0.1
+
+
+def structure_client(asked: list[httpx.Request], fail: bool = False) -> httpx.Client:
+    """Liquipedia's subpage list, the event page with its subpages in one answer, and the commons bracket layout."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(request)
+        if fail:
+            return httpx.Response(500)
+        if request.url.host == "liquipedia.net" and request.url.path.startswith("/commons/"):
+            return httpx.Response(200, content=(FIXTURES / "lp_layout.json").read_bytes())
+        if request.url.params.get("list") == "allpages":
+            return httpx.Response(200, content=(FIXTURES / "lp_allpages.json").read_bytes())
+        return httpx.Response(200, content=(FIXTURES / "lp_pages.json").read_bytes())
+
+    return httpx.Client(transport=httpx.MockTransport(answer))
+
+
+def row() -> LeagueCatalog:
+    return LeagueCatalog(league_id=1002, name="Pro Series 5", lp_page="Pro Series 5", lp_checked=NOW)
+
+
+def test_structure_fetches_pages_and_layouts_once(tmp_path):
+    asked: list[httpx.Request] = []
+    found = liquipedia.structure(structure_client(asked), row(), tmp_path, NOW, finished=False)
+    assert len(asked) == 3 and found["brackets"][0]["title"] == "Playoffs"
+    titles = asked[1].url.params["titles"].split("|")
+    assert titles == ["Pro Series 5", "Pro Series 5/Playoffs", "Pro Series 5/Region"]  # no Statistics, nothing deeper
+    assert any(m["time"] and m["opponents"] == ["Team A", "Team B"] for m in found["upcoming"])  # from the subpage
+    liquipedia.structure(structure_client(asked), row(), tmp_path, NOW + 5 * 3600, finished=False)
+    assert len(asked) == 3  # within 6 hours: from data/leagues/1002.lp.json
+    liquipedia.structure(structure_client(asked), row(), tmp_path, NOW + 7 * 3600, finished=False)
+    assert len(asked) == 5  # pages again, the layout not: it never changes
+    liquipedia.structure(structure_client(asked), row(), tmp_path, NOW + 90 * DAY, finished=True)
+    assert len(asked) == 5
+
+
+def test_a_qualifier_child_is_dropped(tmp_path):
+    found = liquipedia.structure(structure_client([]), row(), tmp_path, NOW, finished=False)
+    assert [g["title"] for g in found["groups"]] == ["Group A"]  # not Group Q of the Region qualifier (league 1999)
+
+
+def test_a_failed_refresh_keeps_the_old_structure(tmp_path):
+    old = liquipedia.structure(structure_client([]), row(), tmp_path, NOW, finished=False)
+    asked: list[httpx.Request] = []
+    again = liquipedia.structure(structure_client(asked, fail=True), row(), tmp_path, NOW + 7 * 3600, finished=False)
+    assert asked and again == old
+    assert liquipedia.structure(structure_client([], fail=True), row(), tmp_path / "empty", NOW, finished=False) is None

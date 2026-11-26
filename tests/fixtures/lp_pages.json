@@ -1,0 +1,52 @@
+{
+ "batchcomplete": "",
+ "query": {
+  "pages": {
+   "500": {
+    "pageid": 500,
+    "ns": 0,
+    "title": "Pro Series 5",
+    "revisions": [
+     {
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "*": "{{Infobox league\n|name=Pro Series 5\n|leagueid=1002\n|sdate=2026-11-10\n|edate=2026-12-01\n}}\n\n==Participants==\n{{TeamParticipants|showplayerinfo=true\n|{{Opponent|Team A\n|players={{Persons\n|{{Person|role=1|Player 1}}\n|{{Person|role=5|Player 2|status=sub|results=false}}\n}}\n|qualification={{Qualification|method=invite}}\n}}\n}}\n\n==Group Stage==\n===Group A===\n{{GroupStandings|importopponents=false|format=srr|points=win=1\n|tiebreakers={{Json|matchwins|manual}}\n|title=Standings\n|{{TeamOpponent|Team A}}\n|{{TeamOpponent|Team B|tiebreaker=1}}\n|{{TeamOpponent|Team C}}\n|edate=November 20, 2026 - 23:00 {{Abbr/CET}}\n}}\n{{Matchlist|id=aaaa|title=November 13|width=330px\n|M1={{Match\n|opponent1={{TeamOpponent|Team A}}\n|opponent2={{TeamOpponent|Team B}}\n|date=November 13, 2026 - 11:00 {{Abbr/CET}}\n|twitch=Some Stream\n|matchid1=9001\n|matchid2=9002\n|map1={{Map\n|team1side=radiant\n|t1h1=puck|t1h2=lion\n|length=40m10s|winner=1\n}}\n|map2={{Map|team1side=dire|winner=1}}\n|map3={{Map|finished=skip}}\n}}\n|M2={{Match\n|opponent1={{TeamOpponent|Team B}}\n|opponent2={{TeamOpponent|Team C}}\n|date=November 14, 2026 - 15:00 {{Abbr/CET}}\n|matchid1=9003|matchid2=9004|matchid3=9005\n|map1={{Map|team1side=radiant|winner=1}}\n|map2={{Map|team1side=dire|winner=2}}\n|map3={{Map|team1side=radiant|winner=1}}\n}}\n|M3={{Match\n|opponent1={{TeamOpponent|Team A}}\n|opponent2={{TeamOpponent|Team C}}\n|date=November 30, 2026 - 18:00 {{Abbr/CEST}}\n|map1={{Map}}\n|map2={{Map}}\n}}\n}}\n\n==Playoffs==\n{{Bracket|Bracket/4DE|id=bbbb\n|R1M1header=Semifinals\n<!-- Upper Bracket Semifinals -->\n|R1M1={{Match\n|opponent1={{TeamOpponent|Team A}}\n|opponent2={{TeamOpponent|Team B}}\n|date=November 21, 2026 - 12:00 {{Abbr/CET}}\n|map1={{Map|team1side=radiant|winner=1}}\n|map2={{Map|team1side=radiant|winner=1}}\n}}\n|R1M2={{Match\n|opponent1={{TeamOpponent|Team C}}\n|opponent2={{TeamOpponent|Team Z}}\n|date=November 21, 2026 - 16:00 {{Abbr/CET}}\n|map1={{Map|team1side=dire|winner=2}}\n|map2={{Map|team1side=dire|winner=2}}\n}}\n|R2M1={{Match\n|opponent1={{TeamOpponent|Team A}}\n|opponent2={{TeamOpponent|Team Z}}\n|date=December 1, 2026 - 12:00 {{Abbr/CET}}\n}}\n|R2M2={{Match\n|opponent1={{TeamOpponent|Team B}}\n|opponent2={{TeamOpponent|Team C}}\n|date=November 22, 2026 - 12:00 {{Abbr/CET}}\n|map1={{Map|team1side=radiant|winner=2}}\n|map2={{Map|team1side=radiant|winner=2}}\n}}\n|R3M1={{Match\n|opponent1={{TeamOpponent|TBD}}\n|opponent2={{TeamOpponent|TBD}}\n}}\n|R4M1={{Match\n|opponent1={{TeamOpponent|}}\n|opponent2={{TeamOpponent|TBD}}\n|date=December 1, 2026 - 18:00 {{Abbr/CET}}\n}}\n}}\n"
+       }
+      }
+     }
+    ]
+   },
+   "600": {
+    "pageid": 600,
+    "ns": 0,
+    "title": "Pro Series 5/Playoffs",
+    "revisions": [
+     {
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "*": "==Finals==\n{{Matchlist|id=cccc\n|M1={{Match\n|opponent1={{TeamOpponent|Team A}}\n|opponent2={{TeamOpponent|Team B}}\n|date=December 1, 2026 - 20:00 {{Abbr/CET}}\n}}\n}}\n"
+       }
+      }
+     }
+    ]
+   },
+   "601": {
+    "pageid": 601,
+    "ns": 0,
+    "title": "Pro Series 5/Region",
+    "revisions": [
+     {
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "*": "{{Infobox league\n|name=Pro Series 5 Region Qualifier\n|leagueid=1999\n}}\n===Group Q===\n{{GroupStandings|title=Standings\n|{{TeamOpponent|Team Q}}\n|{{TeamOpponent|Team R}}\n}}\n"
+       }
+      }
+     }
+    ]
+   }
+  }
+ }
+}

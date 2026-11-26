@@ -1,24 +1,30 @@
 """A league's prize pool, Liquipedia tier, dates and place, from Liquipedia's wiki: one search for the page whose
 source holds `leagueid=<id>`, with that page's wikitext in the same answer. Liquipedia asks for a User-Agent that
 says who asks, gzip, and at most one request every 2 seconds. Its data is CC BY-SA 3.0: the site credits it."""
+import json
 import re
 import threading
 import time
+from pathlib import Path
 
 import httpx
 from sqlalchemy.orm import Session
 
-from . import catalog
+from . import catalog, lp_structure
 from .db import LeagueCatalog
 from .update import installed_version
 
 API = "https://liquipedia.net/dota2/api.php"
+COMMONS = "https://liquipedia.net/commons/api.php"  # bracket layouts live on the shared wiki
 AGENT = f"DotAnalyst/{installed_version() or 'dev'} (+https://github.com/mthor01/DotAnalyst)"
 PAUSE = 2.0  # seconds between Liquipedia requests, from whatever thread
 RECHECK_DAYS = 7  # a league still playing is asked again after this, as prize pools and dates change
 _paced = {"last": 0.0}
 _pace_lock = threading.Lock()
 FIELDS = ("lp_tier", "prize_usd", "start_date", "end_date", "location")
+STRUCTURE_HOURS = 6  # brackets and groups of a league still playing are read again after this; a finished one's never
+MAX_PAGES = 50  # what one revisions request may ask for
+NOT_STAGES = ("Statistics", "prizepool")
 
 
 def pace() -> None:
@@ -79,3 +85,81 @@ def due(row: LeagueCatalog, now: float) -> bool:
     if row.lp_checked is None:
         return True
     return now - row.lp_checked > RECHECK_DAYS * 86400 and catalog.status(row, now) in ("live", "active")
+
+
+def _get(client: httpx.Client, url: str, params: dict) -> dict | None:
+    """One paced Liquipedia request; None when it failed."""
+    pace()
+    try:
+        response = client.get(url, params={**params, "format": "json"}, headers={"User-Agent": AGENT, "Accept-Encoding": "gzip"}, timeout=30)
+        body = response.json() if response.status_code == 200 else None
+    except (httpx.HTTPError, ValueError):
+        body = None
+    return body if isinstance(body, dict) else None
+
+
+def _texts(body: dict) -> dict[str, str]:
+    found = {}
+    for page in body.get("query", {}).get("pages", {}).values():
+        text = (page.get("revisions") or [{}])[0].get("slots", {}).get("main", {}).get("*")
+        if text is not None:
+            found[page["title"]] = text
+    return found
+
+
+def pages(client: httpx.Client, title: str, league_id: int) -> dict[str, str] | None:
+    """The wikitext of the event page and its direct subpages (its stages), in one request after the list of them. A
+    subpage with an infobox of its own is another tournament (a qualifier) unless it names this league. None on a
+    failed request."""
+    listed = _get(client, API, {"action": "query", "list": "allpages", "apprefix": f"{title}/", "aplimit": 500})
+    if listed is None:
+        return None
+    children = [
+        p["title"] for p in listed.get("query", {}).get("allpages", [])
+        if "/" not in p["title"][len(title) + 1 :] and p["title"].rsplit("/", 1)[-1] not in NOT_STAGES
+    ]  # fmt: skip
+    body = _get(client, API, {"action": "query", "prop": "revisions", "rvprop": "content", "rvslots": "main",
+                              "titles": "|".join([title, *children][:MAX_PAGES])})  # fmt: skip
+    if body is None:
+        return None
+    found = _texts(body)
+    for name, text in list(found.items()):
+        own = re.search(r"\|\s*leagueid\s*=\s*(\d+)", text) if "{{Infobox league" in text else None
+        if name != title and "{{Infobox league" in text and not (own and int(own[1]) == league_id):
+            del found[name]
+    return found
+
+
+def layouts(client: httpx.Client, names: set[str], data: Path) -> dict[str, list[dict]]:
+    """The bracket layouts, from data/leagues/brackets.json; one asked of commons only while it is not there, as a
+    layout never changes."""
+    stored = data / "leagues" / "brackets.json"
+    known = json.loads(stored.read_text()) if stored.exists() else {}
+    missing = sorted(n for n in names if n not in known)
+    if missing:
+        body = _get(client, COMMONS, {"action": "query", "prop": "revisions", "rvprop": "content", "rvslots": "main",
+                                      "titles": "|".join(f"Template:{n}" for n in missing[:MAX_PAGES])})  # fmt: skip
+        for name, text in _texts(body or {}).items():
+            known[name.removeprefix("Template:")] = lp_structure.layout(text)
+        stored.parent.mkdir(parents=True, exist_ok=True)
+        stored.write_text(json.dumps(known))
+    return {n: known[n] for n in names if n in known}
+
+
+def structure(client: httpx.Client, row: LeagueCatalog, data: Path, now: float, finished: bool) -> dict | None:
+    """The league's brackets, groups, upcoming matches and rosters (lp_structure.structure), kept in
+    data/leagues/<id>.lp.json: read again after STRUCTURE_HOURS while the league plays, a finished league's never. A
+    failed request keeps what was read before."""
+    stored = data / "leagues" / f"{row.league_id}.lp.json"
+    cached = json.loads(stored.read_text()) if stored.exists() else None
+    if cached and cached["page"] != row.lp_page:  # Liquipedia's search found another page since
+        cached = None
+    if cached and (finished or now - cached["fetched"] < STRUCTURE_HOURS * 3600):
+        return cached["found"]
+    got = pages(client, row.lp_page, row.league_id)
+    if got is None:
+        return cached["found"] if cached else None
+    found = lp_structure.structure(got, layouts(client, lp_structure.layout_names(got), data), now)
+    stored.parent.mkdir(parents=True, exist_ok=True)
+    stored.write_text(json.dumps({"fetched": now, "page": row.lp_page, "found": found}))
+    return found
