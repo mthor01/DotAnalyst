@@ -164,3 +164,32 @@ def test_page_reads_liquipedia_and_names_its_teams(session, tmp_path, monkeypatc
     page = league_page.page(session, client([]), "key", 1002, tmp_path, NOW)
     assert page["liquipedia"]["page"] == "Pro Series 5" and "matches" not in page["liquipedia"]
     assert page["liquipedia"]["groups"][0]["rows"][0]["team_id"] == 3001  # by name among OpenDota's teams
+
+
+def live_client(asked: list[httpx.Request]) -> httpx.Client:
+    """client(), plus Steam's live league games."""
+    base = client(asked, opendota_games=False)._transport.handler  # type: ignore[attr-defined]
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if "GetLiveLeagueGames" in request.url.path:
+            asked.append(request)
+            return httpx.Response(200, content=(FIXTURES / "steam_live.json").read_bytes())
+        return base(request)
+
+    return httpx.Client(transport=httpx.MockTransport(answer))
+
+
+def test_a_live_league_shows_its_live_games(session, tmp_path):
+    row = session.get(LeagueCatalog, 1003)
+    row.live_seen, row.live_games = NOW, 2
+    session.commit()
+    page = league_page.page(session, live_client([]), "key", 1003, tmp_path, NOW)
+    first, second = page["live"]  # not league 1099's game
+    assert (first["radiant"]["name"], first["dire"]["name"], first["series"], first["best_of"]) == ("Team A", "Team B", [0, 1], 3)
+    assert second["radiant"]["name"] == "Team C" and second["series"] == [0, 0]
+
+
+def test_no_live_call_for_a_league_not_live(session, tmp_path):
+    asked: list[httpx.Request] = []
+    page = league_page.page(session, live_client(asked), "key", 1003, tmp_path, NOW)
+    assert page["live"] == [] and not any("GetLiveLeagueGames" in r.url.path for r in asked)

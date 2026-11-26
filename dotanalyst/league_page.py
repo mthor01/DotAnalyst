@@ -19,6 +19,7 @@ PREVIEW_HOURS = 6  # a league still playing is fetched again after this; a finis
 HISTORY_PAGES = 5  # Steam lists 100 games a page and at most 500 of a league
 STEAM_DETAILS = 20  # the newest games of an amateur preview whose details (teams' names, result) are asked for
 BEST_OF = {0: 1, 1: 3, 2: 5}  # series_type
+LIVE = "IDOTA2Match_570/GetLiveLeagueGames/v1/"
 
 
 def side(team_id, name) -> dict:
@@ -105,6 +106,27 @@ def teams(games: list[dict], known: list[dict]) -> list[dict]:
     return sorted((t for t in found.values() if t["seen"]), key=lambda t: (-t["seen"], (t["name"] or "").lower()))
 
 
+def live(client: httpx.Client, key: str, league_id: int) -> list[dict]:
+    """The league's games on Steam right now: teams, series score, and the clock and kills when Steam sends them."""
+    try:
+        games = steam.call(client, key, LIVE, league_id=league_id).get("games", [])
+    except steam.SteamError:
+        return []
+    found = []
+    for g in games:
+        if g.get("league_id") != league_id:
+            continue
+        board = g.get("scoreboard") or {}
+        team = lambda s: side((g.get(f"{s}_team") or {}).get("team_id"), (g.get(f"{s}_team") or {}).get("team_name"))  # noqa: E731
+        found.append({
+            "match_id": g.get("match_id"), "radiant": team("radiant"), "dire": team("dire"),
+            "series": [g.get("radiant_series_wins") or 0, g.get("dire_series_wins") or 0],
+            "best_of": BEST_OF.get(g.get("series_type") or 0, 1), "duration": board.get("duration"),
+            "score": [(board.get("radiant") or {}).get("score"), (board.get("dire") or {}).get("score")],
+        })  # fmt: skip
+    return found
+
+
 def _opendota(client: httpx.Client, league_id: int, what: str) -> list:
     pace()
     try:
@@ -189,6 +211,7 @@ def page(session: Session, client: httpx.Client, key: str, league_id: int, data:
         "league": catalog.row(row, now, {league_id} if subscribed else set()), "source": source, "subscribed": subscribed,
         "teams": teams(games, cached.get("teams", [])), "series": grouped, "games": games,
         "standings": league_stats.standings(grouped), "liquipedia": None,
+        "live": live(client, key, league_id) if key and catalog.status(row, now) == "live" else [],
     }  # fmt: skip
     if row.lp_page:
         lp = liquipedia.structure(client, row, data, now, catalog.status(row, now) == "finished")
