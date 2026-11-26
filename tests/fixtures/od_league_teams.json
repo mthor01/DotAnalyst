@@ -1,0 +1,32 @@
+[
+ {
+  "team_id": 3001,
+  "rating": 1200.5,
+  "wins": 0,
+  "losses": 0,
+  "last_match_time": 1795000000,
+  "name": "Team A",
+  "tag": "A",
+  "logo_url": "https://example.invalid/3001.png"
+ },
+ {
+  "team_id": 3002,
+  "rating": 1100.0,
+  "wins": 0,
+  "losses": 0,
+  "last_match_time": 1795000000,
+  "name": "Team B",
+  "tag": "B",
+  "logo_url": "https://example.invalid/3002.png"
+ },
+ {
+  "team_id": 3003,
+  "rating": 950.25,
+  "wins": 0,
+  "losses": 0,
+  "last_match_time": 1795000000,
+  "name": "Team C",
+  "tag": "C",
+  "logo_url": "https://example.invalid/3003.png"
+ }
+]
