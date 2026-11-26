@@ -1,6 +1,7 @@
 <script lang="ts">
   import { get, post, type TournamentRow } from './lib/api'
   import { loadConstants } from './lib/constants.svelte'
+  import Explore from './Explore.svelte'
   import LeagueList from './lib/LeagueList.svelte'
   import { day, subscribe, type CatalogRow } from './lib/leagues'
   import { shownTab } from './lib/settings.svelte'
@@ -16,11 +17,6 @@
   const shown = $derived(shownTab('tournaments', Object.keys(TABS) as Tab[], wanted)) // a hidden tab gives way
   let error = $state('')
 
-  // ---- Explore
-  let explore = $state<{ live: CatalogRow[]; big: CatalogRow[] } | null>(null)
-  $effect(() => {
-    if (shown === 'explore') get<typeof explore>('explore').then((found) => (explore = found), (e) => (error = e.message))
-  })
 
   // ---- Search: asked of the server 300 ms after the last key, a page of 50 at a time; with nothing typed or picked,
   // your tournaments instead
@@ -92,16 +88,7 @@
 {#if shown === 'teams'}
   <Teams />
 {:else if shown === 'explore'}
-  {#if !explore}
-    <p class="muted">Loading…</p>
-  {:else}
-    <h2>Live now</h2>
-    <p class="muted">Leagues with a game on Steam right now, amateur ones too. A league that plays rarely shows up here only while it plays.</p>
-    <LeagueList rows={explore.live} empty="No league game is live right now, or Steam was not asked yet: the site asks every 5 minutes." />
-    <h2>Biggest of the last 30 days</h2>
-    <p class="muted">By Liquipedia tier, then prize pool, then games played. Amateur leagues count once they were seen live or opened.</p>
-    <LeagueList rows={explore.big} empty="No league played in the last 30 days, or OpenDota's list was not read yet: it is read once a day." />
-  {/if}
+  <Explore />
 {:else if shown === 'search'}
   <form class="filters" onsubmit={(e) => e.preventDefault()}>
     <input class="text" bind:value={search.text} type="search" placeholder="Tournament name" aria-label="Tournament name" />

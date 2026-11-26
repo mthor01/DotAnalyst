@@ -211,6 +211,17 @@ def round_name(code: str | None, index: int) -> str:
     return f"Round {index}"
 
 
+def final_slot(slots: list[dict]) -> str | None:
+    """The layout's final: its one root, else the one match that feeds no other. None when there are several, as in a
+    qualifier, where each advances a team."""
+    roots = [s["id"] for s in slots if s["root"]]
+    if roots:
+        return roots[0] if len(roots) == 1 else None
+    fed = {f for s in slots for f in (s["toupper"], s["tolower"]) if f}
+    last = [s["id"] for s in slots if s["id"] and s["id"] != "RxMBR" and s["id"] not in fed]
+    return last[0] if len(last) == 1 else None
+
+
 def bracket(body: str, slots: list[dict], pages: dict[str, str] | None = None) -> dict:
     """The tree: per section (upper, lower) its rounds in order, each with its matches and the ids feeding them. A
     round is named by the page's own `R<r>M<m>header=`, else by the layout's header code. The bracket reset shows only
@@ -223,6 +234,8 @@ def bracket(body: str, slots: list[dict], pages: dict[str, str] | None = None) -
         elif sid := slot(key):
             matches[sid] = match(body_of(value, (pages or {}).get(f"Match:ID {p.get('id')} {sid}")))
     sections: dict[str, dict[int, dict]] = {}
+    final = None  # the final, or the bracket reset once played: its winner wins the bracket
+    final_id = final_slot(slots)
     for spot in slots:
         sid = spot["id"] or ""
         m = matches.get(sid) or match("Match")
@@ -234,7 +247,9 @@ def bracket(body: str, slots: list[dict], pages: dict[str, str] | None = None) -
         r["page"] = r["page"] or headers.get(sid)
         r["code"] = r["code"] or spot["header"]
         r["matches"].append({**m, "id": sid, "feeders": [f for f in (spot["toupper"], spot["tolower"]) if f]})
-    return {"sections": [
+        if final_id and sid in (final_id, "RxMBR"):
+            final = m
+    return {"final": final, "sections": [
         {"name": name, "rounds": [
             {"name": "Bracket Reset" if i == 999 else r["page"] or round_name(r["code"], i), "matches": r["matches"]}
             for i, r in sorted(sections[name].items())]}
@@ -313,8 +328,27 @@ def structure(pages: dict[str, str], layouts: dict[str, list[dict]], now: float)
          if None not in m["opponents"] and m["time"] is not None and m["time"] >= now - STALE and not played(m)),
         key=lambda m: m["time"],
     )[:UPCOMING]  # fmt: skip
-    found["winner"] = winner(pages)
+    # the last bracket final (a group may be a bracket too) names the winner; one whose games name only their ids is
+    # kept, for Explore to decide from our games (decide)
+    finals = [b.pop("final") for b in found["brackets"] if b.get("final")]
+    found["final"] = max(enumerate(finals), key=lambda f: (f[1]["time"] or 0, f[0]))[1] if finals else None
+    found["winner"] = winner(pages) or (decide(found["final"], []) if found["final"] else None)
     return found
+
+
+def decide(final: dict, games: list[dict]) -> str | None:
+    """The winner of a final: its own, else from these games' results (match_id, radiant_win) for maps without one."""
+    known = {g["match_id"]: g.get("radiant_win") for g in games}
+    m = {**final, "maps": [dict(mp) for mp in final["maps"]]}
+    for mp in m["maps"]:
+        won = known.get(mp["match_id"])
+        if mp["winner"] is None and won is not None and mp["team1side"] in ("radiant", "dire"):
+            mp["winner"] = 0 if (mp["team1side"] == "radiant") == won else 1
+    settle(m)
+    if m["winner"] is None:
+        return None
+    name = m["opponents"][m["winner"]]
+    return name if isinstance(name, str) else (name or {}).get("name")
 
 
 def winner(pages: dict[str, str]) -> str | None:

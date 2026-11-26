@@ -184,3 +184,36 @@ def test_structure_names_the_winner():
     pages = {"Pro Series 5": EVENT + "\n{{Slot|place=1|{{TeamOpponent|Team A}}}}"}
     assert lp.structure(pages, {"Bracket/4DE": LAYOUT}, NOV_20)["winner"] == "Team A"
     assert lp.structure({"Pro Series 5": EVENT}, {"Bracket/4DE": LAYOUT}, NOV_20)["winner"] is None
+
+
+def final(winner: str, date: str) -> str:
+    return ("{{Bracket|Bracket/4DE|id=FFFF\n|R4M1={{Match|opponent1={{TeamOpponent|Team A}}|opponent2={{TeamOpponent|Team B}}"
+            f"|winner={winner}|date={date}}}}}\n}}}}\n")
+
+
+def test_winner_of_the_bracket_final_when_the_prize_pool_names_nobody():
+    # newer pages: {{TeamPrizePool|import=true}} with empty slots, Liquipedia fills them from the bracket
+    pages = {"E": "{{TeamPrizePool|import=true\n|{{Slot|usdprize=100}}\n}}\n" + final("2", "November 25, 2026 - 18:00")}
+    assert lp.structure(pages, {"Bracket/4DE": LAYOUT}, NOV_20)["winner"] == "Team B"
+    # a group played as a bracket earlier: the latest final names the winner
+    pages = {"E": final("2", "November 25, 2026 - 18:00"), "E/Groups": final("1", "November 15, 2026 - 18:00")}
+    assert lp.structure(pages, {"Bracket/4DE": LAYOUT}, NOV_20)["winner"] == "Team B"
+    assert lp.structure({"E": final("", "November 25, 2026")}, {"Bracket/4DE": LAYOUT}, NOV_20)["winner"] is None
+
+
+def test_an_undecided_final_is_kept_and_decided_by_our_games():
+    pages = {"E": "{{Bracket|Bracket/4DE|id=QQQQ\n|R4M1={{Match}}\n}}", "Match:ID QQQQ R04-M001": MATCH_PAGE}
+    found = lp.structure(pages, {"Bracket/4DE": LAYOUT}, NOV_20)
+    assert found["winner"] is None and [m["match_id"] for m in found["final"]["maps"]] == [9101, 9102, 9103]
+    # 9101: Team A Radiant, Dire won; 9102 reversed: Team B Radiant, Radiant won. Team B 2-0
+    games = [{"match_id": 9101, "radiant_win": False}, {"match_id": 9102, "radiant_win": True}]
+    assert lp.decide(found["final"], games) == "Team B"
+    assert lp.decide(found["final"], games[:1]) is None  # one game of a Bo3 known
+
+
+def test_final_without_a_root_is_the_match_that_feeds_none_and_two_roots_name_nobody():
+    no_root = [{**s, "root": False} for s in LAYOUT]
+    pages = {"E": final("2", "November 25, 2026 - 18:00")}
+    assert lp.structure(pages, {"Bracket/4DE": no_root}, NOV_20)["winner"] == "Team B"
+    two = [{**s, "root": s["id"] in ("R04-M001", "R03-M001")} for s in LAYOUT]  # a qualifier: each root advances a team
+    assert lp.structure(pages, {"Bracket/4DE": two}, NOV_20)["winner"] is None

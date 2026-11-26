@@ -9,8 +9,8 @@ import httpx
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from . import catalog, liquipedia, steam
-from .db import League, LeagueCatalog
+from . import catalog, liquipedia, lp_structure, steam
+from .db import League, LeagueCatalog, LeagueMatch
 from .opendota import pace
 
 PRO_MATCHES = "https://api.opendota.com/api/proMatches"
@@ -206,6 +206,13 @@ def missing_region(session: Session) -> list[int]:
     return list(session.scalars(query.order_by(LeagueCatalog.league_id.desc())))
 
 
+def games_of(session: Session, data: Path, league_id: int) -> list[dict]:
+    """The league's games we know a result of (match_id, radiant_win): stored, and its tournament page's preview."""
+    stored = session.execute(select(LeagueMatch.match_id, LeagueMatch.radiant_win).where(LeagueMatch.league_id == league_id))
+    preview = (_read(data / "leagues" / f"{league_id}.json") or {}).get("games", [])
+    return [{"match_id": i, "radiant_win": w} for i, w in stored] + preview
+
+
 def answer(session: Session, data: Path, now: float | None = None) -> dict:
     """GET /api/explore, from what is kept only: every section and the leagues they name (with region and whether
     online), for the browser to filter."""
@@ -243,7 +250,8 @@ def answer(session: Session, data: Path, now: float | None = None) -> dict:
                              "opponents": [{"name": n, "team_id": t, "logo": logo} for n, (t, logo) in zip(names, teams)]})  # fmt: skip
     upcoming = sorted(upcoming, key=lambda m: m["time"])[:SHOWN]
 
-    results = series_of((_read(data / "explore" / "results.json") or {}).get("games", []), now)[:SHOWN]
+    recent = (_read(data / "explore" / "results.json") or {}).get("games", [])
+    results = series_of(recent, now)[:SHOWN]
     for s in results:
         for o in s["opponents"]:
             o["logo"] = (known.get(str(o["team_id"])) or {}).get("logo")
@@ -263,7 +271,9 @@ def answer(session: Session, data: Path, now: float | None = None) -> dict:
         league(r.league_id)
     finished = []
     for r in sorted((r for r in followed if ended(r, now)), key=lambda r: -(catalog.day_end(r.end_date) or 0)):
-        name = (liquipedia.kept(r.league_id, data) or {}).get("winner")
+        kept = liquipedia.kept(r.league_id, data) or {}
+        name = kept.get("winner") or (lp_structure.decide(kept["final"], games_of(session, data, r.league_id) + recent)
+                                      if kept.get("final") else None)  # fmt: skip
         finished.append({"league_id": r.league_id,
                          "winner": {"name": name, "logo": by_name.get(name.lower(), (0, None))[1]} if name else None})  # fmt: skip
     big = [r["league_id"] for r in catalog.explore(session, now)["big"]]

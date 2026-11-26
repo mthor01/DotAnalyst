@@ -208,6 +208,7 @@ def page(session: Session, client: httpx.Client, key: str, league_id: int, data:
         if lp:
             lp_structure.identify(lp, games, found["teams"])
             lp.pop("matches")  # only needed to name the teams
+            lp.pop("final", None)  # Explore's
             for g in lp["groups"]:  # members and pool only work out the rows
                 g.pop("members", None)
                 g.pop("pool", None)

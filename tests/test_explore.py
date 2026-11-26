@@ -256,3 +256,18 @@ def test_catalog_step_fills_explore(monkeypatch, tmp_path, session):
     assert {2001, 2002, 1002} <= set(calls["lookups"])  # newcomers, and a region never asked
     assert 1003 not in calls["lookups"]  # asked a day ago, region said none
     assert calls["structures"] == [1001, 1004]  # the first two due, live first
+
+
+def test_finished_winner_decided_by_our_games(session, tmp_path):
+    from dotanalyst.db import LeagueMatch
+
+    final = {"opponents": ["Team A", "Team B"], "time": NOW - 10 * DAY, "match_ids": [9301, 9302], "score": [0, 0],
+             "winner": None, "best_of": 3, "maps": [{"team1side": "radiant", "winner": None, "match_id": 9301},
+                                                    {"team1side": "dire", "winner": None, "match_id": 9302}]}  # fmt: skip
+    keep(tmp_path, 1004, {"upcoming": [], "winner": None, "final": final}, "Done")
+    session.add(LeagueMatch(match_id=9301, league_id=1004, start_time=NOW - 10 * DAY, radiant_team_id=3001, dire_team_id=3002,
+                            radiant_win=False, raw_json={}))
+    session.commit()
+    preview = tmp_path / "leagues" / "1004.json"
+    preview.write_text(json.dumps({"games": [{"match_id": 9302, "radiant_win": True}]}))
+    assert explore.answer(session, tmp_path, NOW)["finished"] == [{"league_id": 1004, "winner": {"name": "Team B", "logo": None}}]

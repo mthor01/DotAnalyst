@@ -25,7 +25,7 @@ FIELDS = ("lp_tier", "prize_usd", "start_date", "end_date", "location", "region"
 STRUCTURE_HOURS = 6  # brackets and groups of a league still playing are read again after this; a finished one's never
 MAX_PAGES = 50  # what one revisions request may ask for
 NOT_STAGES = ("Statistics",)  # a prizepool subpage names the winner
-VERSION = 4  # of the kept structure: one kept by another version is read again
+VERSION = 7  # of the kept structure: one kept by another version is read again
 
 
 def pace() -> None:

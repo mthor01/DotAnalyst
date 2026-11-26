@@ -345,8 +345,8 @@ def catalog_step(session: Session, client: httpx.Client, setup: Setup, now: floa
     found = catalog.explore(session, now)
     wanted = [r["league_id"] for r in found["live"] + found["big"]] + list(session.scalars(select(League.league_id)))
     due = [i for i in dict.fromkeys(wanted) if (row := session.get(catalog.LeagueCatalog, i)) is None or liquipedia.due(row, now)]
-    # then tournaments before their first game, and pages asked before regions were read
-    due += [i for i in explore.newcomers(session) + explore.missing_region(session) if i not in due]
+    # then pages asked before regions were read (Explore's filters), then tournaments before their first game
+    due += [i for i in explore.missing_region(session) + explore.newcomers(session) if i not in due]
     for done, league_id in enumerate(due[:LOOKUPS]):
         doing("catalog", f"asking Liquipedia about league {league_id}", done, min(len(due), LOOKUPS))
         liquipedia.lookup(session, client, league_id, now)

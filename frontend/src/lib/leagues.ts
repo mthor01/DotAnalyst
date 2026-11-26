@@ -118,3 +118,27 @@ export const liquipedia = (page: string) => `https://liquipedia.net/dota2/${enco
 /** 14 Nov, 18:00 in the viewer's time */
 export const moment = (seconds: number) =>
   new Date(seconds * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+
+/** GET /api/explore (explore.py): every section, and the leagues they name with region and whether online */
+export type ExploreLeague = CatalogRow & { region: string | null; online: boolean }
+export type ExploreTeam = LpOpponent & { logo: string | null }
+export type LiveSeries = {
+  league_id: number; match_id: number; radiant: ExploreTeam; dire: ExploreTeam; series: [number, number]; best_of: number
+  duration: number | null; score: [number | null, number | null]
+}
+export type ExploreMatch = Omit<LpMatch, 'opponents'> & { opponents: [ExploreTeam, ExploreTeam]; league_id: number; league_name?: string }
+export type ExploreAnswer = {
+  leagues: Record<string, ExploreLeague>
+  live: LiveSeries[]
+  upcoming: ExploreMatch[]
+  results: ExploreMatch[]
+  soon: number[]
+  calendar: { league_id: number; start: number; end: number; open: boolean }[]
+  big: number[]
+  finished: { league_id: number; winner: { name: string; logo: string | null } | null }[]
+}
+/** Explore's tier groups and their colour, the same on cards and calendar bars */
+export const TIER_GROUPS = { '1': 'Tier 1', '2': 'Tier 2', '3': 'Tier 3', lower: 'Lower' } as const
+export type TierGroup = keyof typeof TIER_GROUPS
+export const tierGroup = (lpTier: number | null): TierGroup => (lpTier && lpTier <= 3 ? (String(lpTier) as TierGroup) : 'lower')
+export const TIER_COLOR: Record<TierGroup, string> = { '1': 'var(--series-4)', '2': 'var(--series-1)', '3': 'var(--series-3)', lower: 'var(--axis)' }
