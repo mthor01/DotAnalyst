@@ -463,7 +463,7 @@ def test_storage_counts_each_part_of_the_data_folder(tmp_path):
     assert poll.storage(tmp_path) == [
         {"name": "Parser output", "bytes": 100}, {"name": "Database", "bytes": 15},
         {"name": "OpenDota answers", "bytes": 3}, {"name": "Steam answers", "bytes": 0},
-        {"name": "Replays being fetched", "bytes": 7}, {"name": "Other", "bytes": 2},
+        {"name": "Replays being fetched", "bytes": 7}, {"name": "Tournament previews", "bytes": 0}, {"name": "Other", "bytes": 2},
     ]  # fmt: skip
     assert {p["bytes"] for p in poll.storage(tmp_path / "nowhere")} == {0}
 
@@ -510,7 +510,7 @@ def test_the_steps_count_what_is_planned_and_what_they_finished(session, tmp_pat
     session.commit()
 
     steps = {s["key"]: s for s in poll.queue(session, tmp_path / "nowhere", tmp_path, now)["steps"]}
-    assert list(steps) == ["accounts", "leagues", "usual", "folder", "salts", "downloads", "players", "stats"]
+    assert list(steps) == ["accounts", "leagues", "usual", "folder", "salts", "downloads", "players", "stats", "live", "catalog"]
     assert steps["accounts"]["planned"] == "off: no STEAM_API_KEY"
     assert steps["salts"]["planned"] == "off: no STEAM_ALT_USER"
     assert steps["downloads"]["planned"] == "12 replays, 1 waiting for a retry"  # the 100 days old one is left alone

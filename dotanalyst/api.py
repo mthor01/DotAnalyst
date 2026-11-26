@@ -12,8 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import derive, load_env, opendota, parser, poll, queries, save_env, settings, update
-from .db import DATA, Ability, Account, Hero, Item, League, open_engine
+from . import catalog, derive, league_page, load_env, opendota, parser, poll, queries, save_env, settings, update
+from .db import DATA, Ability, Account, Hero, Item, League, LeagueCatalog, open_engine
 from .replay import ReplayError
 from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, store_avatars, store_names, team_logo
 
@@ -312,16 +312,41 @@ def tournaments(session: Db) -> list[dict]:
 
 @app.post("/api/leagues")
 def add_tournament(session: Db, league_id: Annotated[int, Body(embed=True)]) -> dict:
-    """Track a tournament by its league id: the poller then stores its games. Its name comes from OpenDota, once."""
+    """Track a tournament by its league id: the poller then stores its games. Its name comes from the tournament
+    browser's catalog, else from OpenDota, once."""
     if league_id <= 0:
         raise HTTPException(422, f"{league_id} is not a league id")
     known = leagues(session)
     if league_id not in known:
-        with httpx.Client() as client:
-            known[league_id] = opendota.league_name(client, league_id) or f"League {league_id}"
+        listed = session.get(LeagueCatalog, league_id)
+        if listed is not None and listed.name != f"League {league_id}":
+            known[league_id] = listed.name
+        else:
+            with httpx.Client() as client:
+                known[league_id] = opendota.league_name(client, league_id) or f"League {league_id}"
         session.add(League(league_id=league_id, name=known[league_id]))
         session.commit()
     return {"league_id": league_id, "name": known[league_id]}
+
+
+@app.get("/api/catalog")
+def league_search(session: Db, text: str = "", tier: str = "", state: str = "", sort: str = "last", offset: int = 0) -> list[dict]:
+    """The tournament browser's Search: every league OpenDota lists or Steam showed live, see catalog.search."""
+    return catalog.search(session, text, tier, state, sort, max(0, offset))
+
+
+@app.get("/api/explore")
+def explore(session: Db) -> dict:
+    return catalog.explore(session)
+
+
+@app.get("/api/leagues/{league_id}/page")
+def league(session: Db, league_id: int) -> dict:
+    """A tournament page: may ask OpenDota, Steam and Liquipedia the first time, up to half a minute for an amateur league."""
+    if league_id <= 0:
+        raise HTTPException(422, f"{league_id} is not a league id")
+    with httpx.Client() as client:
+        return league_page.page(session, client, os.environ.get("STEAM_API_KEY", ""), league_id)
 
 
 @app.delete("/api/leagues/{league_id}")

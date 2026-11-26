@@ -14,14 +14,14 @@ from sqlalchemy.orm import Session
 from .db import (
     DATA, Account, League, LeagueMatch, Match, MatchPlayer, PlayerGame, PlayerGameList, PlayerMinute, PlayerName,
 )  # fmt: skip
-from . import settings
+from . import catalog, liquipedia, settings
 from .derive import derive_match
 from .opendota import fetch_player_games, player_games, store_player_games, unlisted_players, usual_match
 from .replay import (
     DOWNLOADED, DOWNLOADING, PARSER_URL, ReplayError, download_and_parse, fetch_replay, mark_tried, opendota_match, parse_dem,
     max_age_days, replay_complete, settle, steam_salts,
 )  # fmt: skip
-from .steam import store_match, sync, sync_leagues
+from .steam import call, store_match, sync, sync_leagues
 
 log = logging.getLogger("uvicorn.error")  # the logger uvicorn already prints
 REPLAY_DIR = Path(r"C:\Program Files (x86)\Steam\steamapps\common\dota 2 beta\game\dota\replays")
@@ -44,7 +44,11 @@ CHECKED: dict[str, float] = {}  # per step: when its last round ended, with work
 FINISHED: Counter[str] = Counter()  # per step: what its rounds finished since the server started (see run_step)
 # what takes room in the data folder, in the order the storage chart colours it; everything else is "Other"
 STORAGE = {"raw": "Parser output", "dotanalyst.db": "Database", "opendota": "OpenDota answers",
-           "steam": "Steam answers", "tmp": "Replays being fetched"}  # fmt: skip
+           "steam": "Steam answers", "tmp": "Replays being fetched", "leagues": "Tournament previews"}  # fmt: skip
+LIVE = "IDOTA2Match_570/GetLiveLeagueGames/v1/"
+LIVE_SECONDS = 300  # Steam's live league games, for the tournament browser's Live now
+CATALOG_SECONDS = 600  # the catalog step looks this often; OpenDota's list itself is read once a day
+LOOKUPS = 30  # Liquipedia lookups in one catalog round, 2 seconds apart
 
 
 @dataclass
@@ -318,11 +322,36 @@ def stats_step(session: Session, client: httpx.Client, setup: Setup) -> int:
     return done
 
 
+def live_step(session: Session, client: httpx.Client, setup: Setup) -> int:
+    """Note the leagues playing right now, amateur ones too, from Steam's live league games. Returns how many."""
+    if not setup.key:
+        return 0
+    doing("live", "asking Steam for the league games played right now")
+    return catalog.record_live(session, call(client, setup.key, LIVE).get("games", []), time.time())
+
+
+def catalog_step(session: Session, client: httpx.Client, setup: Setup, now: float | None = None) -> int:
+    """OpenDota's league list once a day, then Liquipedia for the leagues of Explore and the subscribed ones that it
+    was never asked about, or not for a week while they play. Returns the Liquipedia lookups."""
+    now = now or time.time()
+    doing("catalog", "reading OpenDota's league list")
+    catalog.refresh(session, client, now)
+    found = catalog.explore(session, now)
+    wanted = [r["league_id"] for r in found["live"] + found["big"]] + list(session.scalars(select(League.league_id)))
+    due = [i for i in dict.fromkeys(wanted) if (row := session.get(catalog.LeagueCatalog, i)) is None or liquipedia.due(row, now)]
+    for done, league_id in enumerate(due[:LOOKUPS]):
+        doing("catalog", f"asking Liquipedia about league {league_id}", done, min(len(due), LOOKUPS))
+        liquipedia.lookup(session, client, league_id, now)
+    return min(len(due), LOOKUPS)
+
+
 # in the order poll_once runs them, which is also the order the queue page lists them
 STEP_FUNCS = {
     "accounts": accounts_step, "leagues": leagues_step, "usual": usual_step, "folder": folder_step,
     "salts": salts_step, "downloads": downloads_step, "players": players_step, "stats": stats_step,
+    "live": live_step, "catalog": catalog_step,
 }  # fmt: skip
+BROWSER_STEPS = ("live", "catalog")
 LOCKS = {key: threading.Lock() for key in STEP_FUNCS}  # a step and the same work asked for from the site never overlap
 
 
@@ -345,7 +374,8 @@ def poll_once(
     if not key:
         log.warning("STEAM_API_KEY is not set, skipping sync")
     setup = Setup(key, replay_dir, data, alt, retry_seconds, newest_only)
-    found = {step: run_step(step, session, client, setup) for step in STEP_FUNCS}
+    # the tournament browser's steps only serve the site: the server runs them (start), a single run does not
+    found = {step: run_step(step, session, client, setup) for step in STEP_FUNCS if step not in BROWSER_STEPS}
     return found["accounts"] + found["leagues"], found["folder"] + found["downloads"]
 
 
@@ -373,6 +403,8 @@ def loop(engine: Engine, key: str, stop: threading.Event) -> None:
 
 def wait_after(key: str) -> int:
     """Seconds between two rounds of a step: Steam is asked for new games at the settings' interval."""
+    if key in ("live", "catalog"):
+        return LIVE_SECONDS if key == "live" else CATALOG_SECONDS
     return max(LOOP_SECONDS, settings.number("check_seconds")) if key in ("accounts", "leagues") else LOOP_SECONDS
 
 
@@ -531,6 +563,8 @@ def steps(session: Session, replay_dir: Path, data: Path, waiting: list[Match], 
                       f"{len(due)} replays" + (f", {later} waiting for a retry" if later else ""), "replays"),
         "players": ("Game lists of league players", f"{players} players", "players"),
         "stats": ("Stats of parsed matches", f"{derive} matches", "matches"),
+        "live": ("Leagues playing now", "Steam's live league games" if key else "off: no STEAM_API_KEY", "leagues live"),
+        "catalog": ("Tournament list and Liquipedia", "OpenDota's list daily, Liquipedia for Explore", "lookups"),
     }  # fmt: skip
     return [
         # with the running round's own count: a downloads round can last hours
