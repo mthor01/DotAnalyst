@@ -9,7 +9,7 @@ import httpx
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from . import catalog, liquipedia
+from . import catalog, liquipedia, steam
 from .db import League, LeagueCatalog
 from .opendota import pace
 
@@ -18,6 +18,7 @@ RESULTS_SECONDS = 600  # OpenDota's recent pro games are asked at most this ofte
 DONE_AFTER = 3 * 3600  # a series whose last game ended this long ago is over, whatever its score
 SERIES_GAP = 6 * 3600  # games without a series id: the same teams' games this close together are one series
 BEST_OF = {0: 1, 1: 3, 2: 5}  # series_type
+LOGOS_PER_ROUND = 10  # new Steam logo lookups one live round may make
 
 
 def _read(path: Path) -> dict | None:
@@ -69,6 +70,25 @@ def remember_logos(data: Path, teams: list[dict]) -> None:
     new = {str(t["team_id"]): {"name": t.get("name"), "logo": t["logo"]} for t in teams if t.get("team_id") and t.get("logo")}
     if any(known.get(k) != v for k, v in new.items()):
         _write(data / "team_logos.json", known | new)
+
+
+def live_logos(client: httpx.Client, key: str, games: list[dict], data: Path) -> None:
+    """The logos of the live games' teams, up to LOGOS_PER_ROUND not asked before (steam.team_logo keeps every answer),
+    noted in team_logos.json."""
+    asked = set(_read(data / "logos.json") or {})
+    teams, new = [], 0
+    for g in games:
+        for s in ("radiant", "dire"):
+            team, ugc = g[s], g[s].get("logo_ugc")
+            if not team["team_id"] or not ugc:
+                continue
+            if str(ugc) not in asked:
+                if new >= LOGOS_PER_ROUND:
+                    continue
+                new += 1
+                asked.add(str(ugc))
+            teams.append({"team_id": team["team_id"], "name": team["name"], "logo": steam.team_logo(client, key, ugc, data)})
+    remember_logos(data, teams)
 
 
 def fetch_results(client: httpx.Client, data: Path, now: float) -> int:
@@ -149,7 +169,7 @@ def _start(r: LeagueCatalog) -> int | None:
     return end - 86399 if end else r.first_game
 
 
-def _ended(r: LeagueCatalog, now: float) -> bool:
+def ended(r: LeagueCatalog, now: float) -> bool:
     """Over by Liquipedia's end date. A league counts as active 30 days after its last game (catalog.status), so the
     end date is what tells a finished tournament from one with a few days off."""
     end = catalog.day_end(r.end_date)
@@ -162,9 +182,9 @@ def tournaments(session: Session, now: float) -> list[LeagueCatalog]:
     found = []
     for r in session.scalars(select(LeagueCatalog).where(LeagueCatalog.lp_page.is_not(None), LeagueCatalog.lp_tier.between(1, 3))):
         start, end = _start(r), catalog.day_end(r.end_date)
-        recent = _ended(r, now) and end >= now - FINISHED_DAYS * 86400
+        recent = ended(r, now) and end >= now - FINISHED_DAYS * 86400
         soon = start is not None and now <= start <= now + SOON_DAYS * 86400
-        playing = catalog.status(r, now) in ("live", "active") and not _ended(r, now)
+        playing = catalog.status(r, now) in ("live", "active") and not ended(r, now)
         if recent or soon or playing:
             found.append(r)
     return sorted(found, key=lambda r: (catalog.status(r, now) != "live", r.lp_tier, -(r.prize_usd or 0), -r.league_id))
@@ -242,7 +262,7 @@ def answer(session: Session, data: Path, now: float | None = None) -> dict:
         calendar.append({"league_id": r.league_id, "start": start, "end": end or max(now, start), "open": end is None})
         league(r.league_id)
     finished = []
-    for r in sorted((r for r in followed if _ended(r, now)), key=lambda r: -(catalog.day_end(r.end_date) or 0)):
+    for r in sorted((r for r in followed if ended(r, now)), key=lambda r: -(catalog.day_end(r.end_date) or 0)):
         name = (liquipedia.kept(r.league_id, data) or {}).get("winner")
         finished.append({"league_id": r.league_id,
                          "winner": {"name": name, "logo": by_name.get(name.lower(), (0, None))[1]} if name else None})  # fmt: skip

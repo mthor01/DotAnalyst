@@ -146,7 +146,7 @@ def test_explore_ranks_by_liquipedia_tier_then_prize_then_games(session):
     assert names(found["live"]) == [1003, 1099]  # most live games first
 
 
-def test_live_step_records_the_live_leagues(session, monkeypatch):
+def test_live_step_records_the_live_leagues(session, monkeypatch, tmp_path):
     from dotanalyst import poll, steam
 
     monkeypatch.setattr(steam, "PAUSE", 0)
@@ -156,10 +156,10 @@ def test_live_step_records_the_live_leagues(session, monkeypatch):
         asked.append(request.url.path)
         return httpx.Response(200, content=(FIXTURES / "steam_live.json").read_bytes())
 
-    setup = poll.Setup("key", None)
+    setup = poll.Setup("key", None, tmp_path)  # never the real data folder
     assert poll.live_step(session, httpx.Client(transport=httpx.MockTransport(answer)), setup) == 2
     assert asked == ["/IDOTA2Match_570/GetLiveLeagueGames/v1/"] and session.get(LeagueCatalog, 1099).live_games == 1
-    assert poll.live_step(session, httpx.Client(transport=httpx.MockTransport(answer)), poll.Setup("", None)) == 0
+    assert poll.live_step(session, httpx.Client(transport=httpx.MockTransport(answer)), poll.Setup("", None, tmp_path)) == 0
 
 
 def test_new_steps_wait_their_own_interval():
@@ -168,7 +168,7 @@ def test_new_steps_wait_their_own_interval():
     assert poll.wait_after("live") == 300 and poll.wait_after("catalog") == 600
 
 
-def test_catalog_step_looks_up_explores_and_subscribed_leagues_once(session):
+def test_catalog_step_looks_up_explores_and_subscribed_leagues_once(session, tmp_path):
     from dotanalyst import poll
     from dotanalyst.db import League
 
@@ -185,9 +185,10 @@ def test_catalog_step_looks_up_explores_and_subscribed_leagues_once(session):
         return httpx.Response(200, content=(FIXTURES / "od_leagues.json").read_bytes())
 
     client = httpx.Client(transport=httpx.MockTransport(answer))
-    assert poll.catalog_step(session, client, poll.Setup("", None), NOW) == 2
-    assert sorted(wiki) == ['insource:"leagueid=1002"', 'insource:"leagueid=1003"']  # active and subscribed
-    assert poll.catalog_step(session, client, poll.Setup("", None), NOW + 60) == 0 and len(wiki) == 2
+    assert poll.catalog_step(session, client, poll.Setup("", None, tmp_path), NOW) == 3
+    # active, subscribed, and a pro league with no game yet (Explore's starting soon)
+    assert sorted(wiki) == ['insource:"leagueid=1001"', 'insource:"leagueid=1002"', 'insource:"leagueid=1003"']
+    assert poll.catalog_step(session, client, poll.Setup("", None, tmp_path), NOW + 60) == 0 and len(wiki) == 3
 
 
 def test_region_from_infobox_region_then_country():

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from .db import (
     DATA, Account, League, LeagueMatch, Match, MatchPlayer, PlayerGame, PlayerGameList, PlayerMinute, PlayerName,
 )  # fmt: skip
-from . import catalog, liquipedia, settings
+from . import catalog, explore, liquipedia, settings
 from .derive import derive_match
 from .opendota import fetch_player_games, player_games, store_player_games, unlisted_players, usual_match
 from .replay import (
@@ -49,6 +49,7 @@ LIVE = "IDOTA2Match_570/GetLiveLeagueGames/v1/"
 LIVE_SECONDS = 300  # Steam's live league games, for the tournament browser's Live now
 CATALOG_SECONDS = 600  # the catalog step looks this often; OpenDota's list itself is read once a day
 LOOKUPS = 30  # Liquipedia lookups in one catalog round, 2 seconds apart
+STRUCTURES = 15  # Liquipedia structures of Explore's tournaments read in one catalog round (2 to 3 requests each)
 
 
 @dataclass
@@ -327,7 +328,10 @@ def live_step(session: Session, client: httpx.Client, setup: Setup) -> int:
     if not setup.key:
         return 0
     doing("live", "asking Steam for the league games played right now")
-    return catalog.record_live(session, call(client, setup.key, LIVE).get("games", []), time.time())
+    games, now = call(client, setup.key, LIVE).get("games", []), time.time()
+    explore.keep_live(games, setup.data, now)  # Explore's Live now
+    explore.live_logos(client, setup.key, explore.parse_live(games), setup.data)
+    return catalog.record_live(session, games, now)
 
 
 def catalog_step(session: Session, client: httpx.Client, setup: Setup, now: float | None = None) -> int:
@@ -336,12 +340,24 @@ def catalog_step(session: Session, client: httpx.Client, setup: Setup, now: floa
     now = now or time.time()
     doing("catalog", "reading OpenDota's league list")
     catalog.refresh(session, client, now)
+    doing("catalog", "asking OpenDota for the recent pro games")
+    explore.fetch_results(client, setup.data, now)
     found = catalog.explore(session, now)
     wanted = [r["league_id"] for r in found["live"] + found["big"]] + list(session.scalars(select(League.league_id)))
     due = [i for i in dict.fromkeys(wanted) if (row := session.get(catalog.LeagueCatalog, i)) is None or liquipedia.due(row, now)]
+    # then tournaments before their first game, and pages asked before regions were read
+    due += [i for i in explore.newcomers(session) + explore.missing_region(session) if i not in due]
     for done, league_id in enumerate(due[:LOOKUPS]):
         doing("catalog", f"asking Liquipedia about league {league_id}", done, min(len(due), LOOKUPS))
         liquipedia.lookup(session, client, league_id, now)
+    read = 0  # Explore's upcoming matches and winners: the structures due, live tournaments first
+    for row in explore.tournaments(session, now):
+        if read >= STRUCTURES:
+            break
+        if liquipedia.structure_due(row, setup.data, now, explore.ended(row, now)):
+            doing("catalog", f"reading Liquipedia's bracket of {row.name}", read, STRUCTURES)
+            liquipedia.structure(client, row, setup.data, now, explore.ended(row, now))
+            read += 1
     return min(len(due), LOOKUPS)
 
 
@@ -564,7 +580,7 @@ def steps(session: Session, replay_dir: Path, data: Path, waiting: list[Match], 
         "players": ("Game lists of league players", f"{players} players", "players"),
         "stats": ("Stats of parsed matches", f"{derive} matches", "matches"),
         "live": ("Leagues playing now", "Steam's live league games" if key else "off: no STEAM_API_KEY", "leagues live"),
-        "catalog": ("Tournament list and Liquipedia", "OpenDota's list daily, Liquipedia for Explore", "lookups"),
+        "catalog": ("Tournament list and Liquipedia", "OpenDota's list daily, recent results, Liquipedia for Explore", "lookups"),
     }  # fmt: skip
     return [
         # with the running round's own count: a downloads round can last hours

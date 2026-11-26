@@ -219,3 +219,40 @@ def test_calendar_uses_game_dates_and_open_end(session, tmp_path):
     assert cal[1003]["start"] == liquipedia.catalog.day_end(date(NOW + 5 * DAY)) - 86399 and not cal[1003]["open"]
     assert cal[1004]["end"] == liquipedia.catalog.day_end(date(NOW - 10 * DAY))
     assert 1005 not in cal  # out of the window
+
+
+# ---- the poller fills it
+from dotanalyst import poll  # noqa: E402
+
+
+def test_live_step_keeps_games(monkeypatch, tmp_path, session):
+    monkeypatch.setattr(poll, "call", lambda client, key, path, **kw: {"games": [live_game(1001, 9001, ugc=7001)]})
+    asked = []
+    monkeypatch.setattr(explore.steam, "team_logo", lambda client, key, ugc, data: asked.append(ugc) or f"{ugc}.png")
+    assert poll.live_step(session, httpx.Client(), poll.Setup("key", None, tmp_path)) == 1
+    assert json.loads((tmp_path / "explore" / "live.json").read_text())["games"][0]["match_id"] == 9001
+    assert asked == [7001] and explore.logos(tmp_path) == {"3001": {"name": "Team A", "logo": "7001.png"}}
+
+
+def test_live_logos_capped(monkeypatch, tmp_path):
+    asked = []
+    monkeypatch.setattr(explore.steam, "team_logo", lambda client, key, ugc, data: asked.append(ugc) or "x.png")
+    games = explore.parse_live([live_game(1001, 9000 + i, ugc=7000 + i) for i in range(12)])
+    for i, g in enumerate(games):
+        g["radiant"]["team_id"] = 3100 + i
+    explore.live_logos(httpx.Client(), "key", games, tmp_path)
+    assert len(asked) == explore.LOGOS_PER_ROUND
+
+
+def test_catalog_step_fills_explore(monkeypatch, tmp_path, session):
+    calls: dict[str, list] = {"results": [], "lookups": [], "structures": []}
+    monkeypatch.setattr(poll.catalog, "refresh", lambda s, c, now: 0)
+    monkeypatch.setattr(poll.explore, "fetch_results", lambda c, data, now: calls["results"].append(data) or 0)
+    monkeypatch.setattr(poll.liquipedia, "lookup", lambda s, c, league_id, now: calls["lookups"].append(league_id) or False)
+    monkeypatch.setattr(poll.liquipedia, "structure", lambda c, row, data, now, finished: calls["structures"].append(row.league_id))
+    monkeypatch.setattr(poll, "STRUCTURES", 2)
+    poll.catalog_step(session, httpx.Client(), poll.Setup("key", None, tmp_path), NOW)
+    assert calls["results"] == [tmp_path]
+    assert {2001, 2002, 1002} <= set(calls["lookups"])  # newcomers, and a region never asked
+    assert 1003 not in calls["lookups"]  # asked a day ago, region said none
+    assert calls["structures"] == [1001, 1004]  # the first two due, live first
