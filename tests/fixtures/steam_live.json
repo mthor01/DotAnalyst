@@ -1,0 +1,10 @@
+{
+ "result": {
+  "games": [
+   {"players": [{"account_id": 2001, "name": "Player 1", "hero_id": 0, "team": 0}], "radiant_team": {"team_name": "Team A", "team_id": 3001, "team_logo": 0, "complete": true}, "dire_team": {"team_name": "Team B", "team_id": 3002, "team_logo": 0, "complete": true}, "lobby_id": 1, "match_id": 9001, "spectators": 3, "league_id": 1003, "league_node_id": 0, "stream_delay_s": 300, "radiant_series_wins": 0, "dire_series_wins": 1, "series_type": 1},
+   {"players": [], "radiant_team": {"team_name": "Team C", "team_id": 3003}, "dire_team": {"team_name": "Team D", "team_id": 3004}, "lobby_id": 2, "match_id": 9002, "spectators": 0, "league_id": 1003, "series_type": 0},
+   {"players": [], "lobby_id": 3, "match_id": 9003, "spectators": 1, "league_id": 1099, "series_type": 0}
+  ],
+  "status": 200
+ }
+}
