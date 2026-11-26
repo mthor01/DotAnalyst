@@ -118,3 +118,29 @@ def head_to_head(session: Session, a: int, b: int) -> dict:
         "teams": [{"team_id": a, "name": sides[a]}, {"team_id": b, "name": sides[b]}], "games": len(rows), "wins": wins,
         "series": sorted(series, key=lambda s: -s["start_time"]),
     }  # fmt: skip
+
+
+def played_rosters(rows: list[LeagueMatch], names: dict[int, tuple[str | None, str | None]]) -> dict[int, list[dict]]:
+    """Per team, the players seen playing for it in these games (anonymous left out), most games first."""
+    counts: dict[int, Counter] = defaultdict(Counter)
+    for m in rows:
+        for p in m.raw_json.get("players", []):
+            account_id = p.get("account_id")
+            team_id = m.radiant_team_id if p["player_slot"] < 128 else m.dire_team_id
+            if account_id not in (None, ANONYMOUS) and team_id:
+                counts[team_id][account_id] += 1
+    return {
+        team_id: [{"account_id": a, "name": names.get(a, (None, None))[0], "avatar": names.get(a, (None, None))[1],
+                   "games": n} for a, n in sorted(c.items(), key=lambda x: (-x[1], x[0]))]  # fmt: skip
+        for team_id, c in counts.items()
+    }
+
+
+def logo_ids(rows: list[LeagueMatch]) -> dict[int, int]:
+    """Per team, the UGC id of its logo in its newest game that has one."""
+    found: dict[int, int] = {}
+    for m in sorted(rows, key=lambda m: -m.start_time):
+        for team_id, logo in ((m.radiant_team_id, m.raw_json.get("radiant_logo")), (m.dire_team_id, m.raw_json.get("dire_logo"))):
+            if team_id and logo and team_id not in found:
+                found[team_id] = logo
+    return found

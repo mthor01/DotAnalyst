@@ -120,3 +120,27 @@ def test_page_adds_stats_for_a_subscribed_league(session, tmp_path):
     assert page["standings"][0]["team_id"] == 3001
     preview = league_page.page(session, client([]), "key", 1002, tmp_path, NOW)
     assert preview["standings"] and "heroes" not in preview
+
+
+def test_played_rosters_by_team():
+    rows = [
+        game(9001, players=[player(1001), player(1002), player(steam.ANONYMOUS)]),
+        game(9002, players=[player(1002), player(1003, radiant=False)]),
+    ]
+    found = league_stats.played_rosters(rows, {1002: ("Player 2", None)})
+    assert [p["account_id"] for p in found[3001]] == [1002, 1001]  # most games first
+    assert found[3001][0]["name"] == "Player 2" and found[3001][0]["games"] == 2
+    assert [p["account_id"] for p in found[3002]] == [1003]
+
+
+def test_stored_teams_get_their_steam_logo(session, tmp_path):
+    (tmp_path / "logos.json").write_text('{"77": "https://example.invalid/77.png"}')
+    session.add(League(league_id=1003, name="Friday Amateur League S9"))
+    session.add(game(9001, players=[player(1001)], radiant_logo=77, dire_logo=0))
+    session.commit()
+    asked = []
+    page = league_page.page(session, client(asked), "key", 1003, tmp_path, NOW)
+    logos = {t["team_id"]: t["logo"] for t in page["teams"]}
+    assert logos == {3001: "https://example.invalid/77.png", 3002: None}
+    assert not any("GetUGCFileDetails" in r.url.path for r in asked)  # from data/logos.json
+    assert page["rosters"]["3001"][0]["account_id"] == 1001

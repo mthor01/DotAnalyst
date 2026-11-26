@@ -193,6 +193,11 @@ def page(session: Session, client: httpx.Client, key: str, league_id: int, data:
     if subscribed:
         names = names_of(session, rows)
         found["heroes"], found["players"] = league_stats.heroes(rows), league_stats.players(rows, names)
+        found["rosters"] = {str(k): v for k, v in league_stats.played_rosters(rows, names).items()}
+        logos = league_stats.logo_ids(rows)
+        for t in found["teams"]:
+            if not t["logo"] and t["team_id"] in logos:  # Steam's logo, kept in data/logos.json
+                t["logo"] = steam.team_logo(client, key, logos[t["team_id"]], data)
     return found
 
 
