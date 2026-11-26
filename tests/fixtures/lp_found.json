@@ -1,0 +1,24 @@
+{
+ "batchcomplete": "",
+ "query": {
+  "pages": {
+   "501": {
+    "pageid": 501,
+    "ns": 0,
+    "title": "Grand Cup/2026",
+    "index": 1,
+    "revisions": [
+     {
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "*": "{{Infobox league\n|name=Grand Cup 2026\n|series=Grand Cup\n|country=Sweden\n|city=Jönköping\n|type=Offline\n|sdate=2026-11-07\n|edate=2026-11-20\n|prizepoolusd=50,000\n|liquipediatier=3\n|leagueid=1001\n}}\n==Overview==\nMade-up tournament for the tests.\n"
+       }
+      }
+     }
+    ]
+   }
+  }
+ }
+}
