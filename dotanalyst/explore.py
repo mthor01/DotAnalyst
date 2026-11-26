@@ -2,10 +2,15 @@
 recent pro games, team logos) and the answer built from that, the catalog and the kept Liquipedia structures. Explore
 itself never asks anyone: see Explore in IMPLEMENTATION.md."""
 import json
+import time
 from pathlib import Path
 
 import httpx
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
 
+from . import catalog, liquipedia
+from .db import League, LeagueCatalog
 from .opendota import pace
 
 PRO_MATCHES = "https://api.opendota.com/api/proMatches"
@@ -128,3 +133,126 @@ def series_of(games: list[dict], now: float) -> list[dict]:
             "winner": winner, "best_of": best_of, "league_id": first.get("leagueid"), "league_name": first.get("league_name"),
         })  # fmt: skip
     return sorted(found, key=lambda s: -s["time"])
+
+
+# ---- which tournaments Explore follows, and its answer
+SOON_DAYS = 14  # starting soon: a Liquipedia start date this many days ahead at most
+FINISHED_DAYS = 30  # recently finished: an end date this many days back at most
+CALENDAR_BACK, CALENDAR_AHEAD = 14, 42  # days the calendar shows around today
+UPCOMING_HOURS = 24
+SHOWN = 20  # upcoming matches and results at most
+NEWCOMERS = 50  # the newest pro leagues without a game that are looked up on Liquipedia
+
+
+def _start(r: LeagueCatalog) -> int | None:
+    end = catalog.day_end(r.start_date)
+    return end - 86399 if end else r.first_game
+
+
+def _ended(r: LeagueCatalog, now: float) -> bool:
+    """Over by Liquipedia's end date. A league counts as active 30 days after its last game (catalog.status), so the
+    end date is what tells a finished tournament from one with a few days off."""
+    end = catalog.day_end(r.end_date)
+    return end is not None and end < now
+
+
+def tournaments(session: Session, now: float) -> list[LeagueCatalog]:
+    """The tournaments whose Liquipedia structure Explore keeps: tier 1 to 3 with a page, live or active, starting
+    within SOON_DAYS or ended within FINISHED_DAYS. Live first, then by tier and prize pool."""
+    found = []
+    for r in session.scalars(select(LeagueCatalog).where(LeagueCatalog.lp_page.is_not(None), LeagueCatalog.lp_tier.between(1, 3))):
+        start, end = _start(r), catalog.day_end(r.end_date)
+        recent = _ended(r, now) and end >= now - FINISHED_DAYS * 86400
+        soon = start is not None and now <= start <= now + SOON_DAYS * 86400
+        playing = catalog.status(r, now) in ("live", "active") and not _ended(r, now)
+        if recent or soon or playing:
+            found.append(r)
+    return sorted(found, key=lambda r: (catalog.status(r, now) != "live", r.lp_tier, -(r.prize_usd or 0), -r.league_id))
+
+
+def newcomers(session: Session, n: int = NEWCOMERS) -> list[int]:
+    """The n newest leagues OpenDota lists as premium or professional with no game yet, never asked of Liquipedia:
+    a tournament before its first game, which Explore's Starting soon needs a start date for."""
+    query = select(LeagueCatalog.league_id).where(
+        LeagueCatalog.tier.in_(("premium", "professional")), or_(LeagueCatalog.games.is_(None), LeagueCatalog.games == 0),
+        LeagueCatalog.lp_checked.is_(None),
+    ).order_by(LeagueCatalog.league_id.desc()).limit(n)  # fmt: skip
+    return list(session.scalars(query))
+
+
+def missing_region(session: Session) -> list[int]:
+    """Leagues with a Liquipedia page asked before regions were read (region None; "" is asked, none said)."""
+    query = select(LeagueCatalog.league_id).where(LeagueCatalog.lp_page.is_not(None), LeagueCatalog.region.is_(None))
+    return list(session.scalars(query.order_by(LeagueCatalog.league_id.desc())))
+
+
+def answer(session: Session, data: Path, now: float | None = None) -> dict:
+    """GET /api/explore, from what is kept only: every section and the leagues they name (with region and whether
+    online), for the browser to filter."""
+    now = now or time.time()
+    subscribed = set(session.scalars(select(League.league_id)))
+    rows: dict[int, LeagueCatalog] = {}
+
+    def league(league_id) -> LeagueCatalog | None:
+        if league_id not in rows and (r := session.get(LeagueCatalog, league_id)) is not None:
+            rows[league_id] = r
+        return rows.get(league_id)
+
+    known = logos(data)
+    by_name = {(v.get("name") or "").lower(): (int(k), v["logo"]) for k, v in known.items() if v.get("name")}
+    rank = lambda r: (r.lp_tier or 99, -(r.prize_usd or 0)) if r else (99, 0)  # noqa: E731
+
+    kept_live = _read(data / "explore" / "live.json")
+    live = []
+    if kept_live and now - kept_live.get("read", 0) <= catalog.LIVE_MINUTES * 60:
+        for g in kept_live.get("games", []):
+            for s in ("radiant", "dire"):
+                g[s]["logo"] = (known.get(str(g[s]["team_id"])) or {}).get("logo")
+            live.append(g)
+        live.sort(key=lambda g: (*rank(league(g["league_id"])), -(g["duration"] or 0)))
+
+    followed = tournaments(session, now)
+    upcoming = []
+    for r in followed:
+        for m in (liquipedia.kept(r.league_id, data) or {}).get("upcoming", []):
+            names = [o["name"] if isinstance(o, dict) else o for o in m["opponents"]]
+            if None in names or not (now <= (m.get("time") or 0) <= now + UPCOMING_HOURS * 3600):
+                continue
+            teams = [by_name.get(n.lower(), (0, None)) for n in names]
+            upcoming.append({**m, "league_id": r.league_id,
+                             "opponents": [{"name": n, "team_id": t, "logo": logo} for n, (t, logo) in zip(names, teams)]})  # fmt: skip
+    upcoming = sorted(upcoming, key=lambda m: m["time"])[:SHOWN]
+
+    results = series_of((_read(data / "explore" / "results.json") or {}).get("games", []), now)[:SHOWN]
+    for s in results:
+        for o in s["opponents"]:
+            o["logo"] = (known.get(str(o["team_id"])) or {}).get("logo")
+
+    every = list(session.scalars(select(LeagueCatalog).where(or_(
+        LeagueCatalog.start_date.is_not(None), LeagueCatalog.end_date.is_not(None), LeagueCatalog.first_game.is_not(None)))))  # fmt: skip
+    soon = sorted((r for r in every if (s := _start(r)) and catalog.day_end(r.start_date) and now <= s <= now + SOON_DAYS * 86400),
+                  key=_start)  # fmt: skip
+    calendar = []
+    for r in every:
+        if not r.lp_tier or not 1 <= r.lp_tier <= 3 or (start := _start(r)) is None:
+            continue
+        end = catalog.day_end(r.end_date) or (r.last_game if catalog.status(r, now) == "finished" else None)
+        if start > now + CALENDAR_AHEAD * 86400 or (end or now) < now - CALENDAR_BACK * 86400:
+            continue
+        calendar.append({"league_id": r.league_id, "start": start, "end": end or max(now, start), "open": end is None})
+        league(r.league_id)
+    finished = []
+    for r in sorted((r for r in followed if _ended(r, now)), key=lambda r: -(catalog.day_end(r.end_date) or 0)):
+        name = (liquipedia.kept(r.league_id, data) or {}).get("winner")
+        finished.append({"league_id": r.league_id,
+                         "winner": {"name": name, "logo": by_name.get(name.lower(), (0, None))[1]} if name else None})  # fmt: skip
+    big = [r["league_id"] for r in catalog.explore(session, now)["big"]]
+
+    for league_id in [g["league_id"] for g in live] + [m["league_id"] for m in upcoming] + [s["league_id"] for s in results] \
+            + [r.league_id for r in soon] + [f["league_id"] for f in finished] + big:  # fmt: skip
+        league(league_id)
+    leagues = {str(i): {**catalog.row(r, now, subscribed), "online": (r.location or "").startswith("Online")} for i, r in rows.items()}
+    return {
+        "leagues": leagues, "live": live, "upcoming": upcoming, "results": results, "soon": [r.league_id for r in soon],
+        "calendar": calendar, "big": big, "finished": finished,
+    }  # fmt: skip

@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import catalog, derive, league_page, league_stats, load_env, opendota, parser, poll, queries, save_env, settings, update
+from . import catalog, derive, explore, league_page, league_stats, load_env, opendota, parser, poll, queries, save_env, settings, update
 from .db import DATA, Ability, Account, Hero, Item, League, LeagueCatalog, open_engine
 from .replay import ReplayError
 from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, store_avatars, store_names, team_logo
@@ -336,8 +336,9 @@ def league_search(session: Db, text: str = "", tier: str = "", state: str = "", 
 
 
 @app.get("/api/explore")
-def explore(session: Db) -> dict:
-    return catalog.explore(session)
+def explore_page(session: Db) -> dict:
+    """Explore: live series, upcoming matches, results, calendar and more, from what the poller keeps (explore.py)."""
+    return explore.answer(session, DATA)
 
 
 @app.get("/api/teams/{a}/vs/{b}")

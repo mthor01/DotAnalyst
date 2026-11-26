@@ -88,3 +88,134 @@ def test_remember_logos_merges(tmp_path):
     explore.remember_logos(tmp_path, [{"team_id": 3001, "name": "Team A", "logo": "a.png"}, {"team_id": 0, "name": "X", "logo": "x.png"}])
     explore.remember_logos(tmp_path, [{"team_id": 3002, "name": "Team B", "logo": "b.png"}, {"team_id": 3003, "name": "Team C", "logo": None}])
     assert explore.logos(tmp_path) == {"3001": {"name": "Team A", "logo": "a.png"}, "3002": {"name": "Team B", "logo": "b.png"}}
+
+
+# ---- which tournaments, and the answer of /api/explore
+import time  # noqa: E402
+
+import pytest  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy.orm import Session  # noqa: E402
+
+from dotanalyst import liquipedia  # noqa: E402
+from dotanalyst.db import Base, Derived, LeagueCatalog  # noqa: E402
+
+DAY = 86400
+
+
+def date(at: float) -> str:
+    return time.strftime("%Y-%m-%d", time.gmtime(at))
+
+
+@pytest.fixture
+def session():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    Derived.metadata.create_all(engine)
+    lp = dict(lp_checked=NOW - DAY)
+    with Session(engine) as s:
+        s.add_all([
+            LeagueCatalog(league_id=1001, name="Big Live", lp_page="Big Live", lp_tier=1, prize_usd=10**6, live_seen=NOW, live_games=1,
+                          first_game=NOW - 3 * DAY, last_game=NOW - HOUR, region="Europe", location="Online, Europe", **lp),
+            LeagueCatalog(league_id=1002, name="Active Two", lp_page="Active Two", lp_tier=2, first_game=NOW - 9 * DAY,
+                          last_game=NOW - 2 * DAY, location="Moscow, Russia", **lp),  # region never asked: None
+            LeagueCatalog(league_id=1003, name="Soon", lp_page="Soon", lp_tier=3, start_date=date(NOW + 5 * DAY),
+                          end_date=date(NOW + 10 * DAY), region="", **lp),
+            LeagueCatalog(league_id=1004, name="Done", lp_page="Done", lp_tier=1, first_game=NOW - 20 * DAY, last_game=NOW - 10 * DAY,
+                          start_date=date(NOW - 20 * DAY), end_date=date(NOW - 10 * DAY), region="SEA", **lp),
+            LeagueCatalog(league_id=1005, name="Old", lp_page="Old", lp_tier=1, last_game=NOW - 100 * DAY, end_date=date(NOW - 100 * DAY), **lp),
+            LeagueCatalog(league_id=1006, name="Tier Four", lp_page="Tier Four", lp_tier=4, live_seen=NOW, live_games=1, **lp),
+            LeagueCatalog(league_id=1007, name="No Page", live_seen=NOW, live_games=1),
+            LeagueCatalog(league_id=2001, name="New Pro", tier="professional"),
+            LeagueCatalog(league_id=2002, name="New Premium", tier="premium"),
+            LeagueCatalog(league_id=2003, name="Played", tier="premium", games=5),
+            LeagueCatalog(league_id=2004, name="Amateur", tier="amateur"),
+            LeagueCatalog(league_id=2005, name="Asked", tier="professional", lp_checked=NOW),
+        ])  # fmt: skip
+        s.commit()
+        yield s
+
+
+def test_tournaments_pick_and_order(session):
+    assert [r.league_id for r in explore.tournaments(session, NOW)] == [1001, 1004, 1002, 1003]  # live, then tier
+
+
+def test_newcomers_and_missing_region(session):
+    assert explore.newcomers(session) == [2002, 2001] and explore.newcomers(session, n=1) == [2002]
+    assert 1002 in explore.missing_region(session)
+
+
+def test_missing_region_skips_empty(session):
+    assert 1003 not in explore.missing_region(session)  # asked, none said
+    assert 1007 not in explore.missing_region(session)  # no Liquipedia page
+
+
+def keep(data, league_id: int, found: dict, page: str) -> None:
+    path = data / "leagues" / f"{league_id}.lp.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"version": liquipedia.VERSION, "fetched": NOW, "page": page, "found": found}))
+
+
+def upcoming(at: float, a="Team A", b="Team B") -> dict:
+    return {"opponents": [a, b], "time": at, "match_ids": [], "maps": [], "score": [0, 0], "winner": None, "best_of": 3}
+
+
+def fill(data) -> None:
+    games = [live_game(1007, 9007), live_game(1001, 9001), live_game(1006, 9006)]
+    games[0]["scoreboard"]["duration"], games[1]["scoreboard"]["duration"] = 900, 500
+    explore.keep_live(games, data, NOW - 60)
+    explore.remember_logos(data, [{"team_id": 3001, "name": "Team A", "logo": "a.png"}])
+    (data / "explore" / "results.json").write_text(json.dumps({"read": NOW, "games": [
+        game(9101, 601, NOW - 3 * HOUR, A, B, True, league=1002), game(9102, 601, NOW - 2 * HOUR, B, A, False, league=1002)]}))
+    keep(data, 1001, {"upcoming": [upcoming(NOW + 2 * HOUR), upcoming(NOW + 30 * HOUR)], "winner": None}, "Big Live")
+    keep(data, 1004, {"upcoming": [], "winner": "team a"}, "Done")
+
+
+def test_answer_sections(session, tmp_path):
+    fill(tmp_path)
+    a = explore.answer(session, tmp_path, NOW)
+    assert [g["match_id"] for g in a["live"]] == [9001, 9006, 9007]  # tier 1, tier 4, no tier
+    assert a["live"][0]["radiant"]["logo"] == "a.png" and a["live"][0]["dire"]["logo"] is None
+    (u,) = a["upcoming"]
+    assert u["league_id"] == 1001 and u["opponents"][0] == {"name": "Team A", "team_id": 3001, "logo": "a.png"}
+    assert u["opponents"][1] == {"name": "Team B", "team_id": 0, "logo": None}
+    assert [(r["league_id"], r["score"]) for r in a["results"]] == [(1002, [2, 0])]
+    assert a["soon"] == [1003]
+    assert a["finished"] == [{"league_id": 1004, "winner": {"name": "team a", "logo": "a.png"}}]
+    assert {c["league_id"] for c in a["calendar"]} == {1001, 1002, 1003, 1004}
+    assert a["big"][:2] == [1001, 1004]
+    leagues = a["leagues"]
+    assert {1001, 1002, 1003, 1004, 1006, 1007} <= {int(k) for k in leagues}
+    assert (leagues["1001"]["region"], leagues["1001"]["online"], leagues["1002"]["online"]) == ("Europe", True, False)
+
+
+def test_live_older_than_fifteen_minutes_is_not_shown(session, tmp_path):
+    explore.keep_live([live_game(1001, 9001)], tmp_path, NOW - 16 * 60)
+    assert explore.answer(session, tmp_path, NOW)["live"] == []
+
+
+def test_upcoming_window_24h(session, tmp_path):
+    keep(tmp_path, 1001, {"upcoming": [upcoming(NOW - 60), upcoming(NOW + DAY), upcoming(NOW + DAY + 1),
+                                       upcoming(NOW + HOUR, b=None)], "winner": None}, "Big Live")  # fmt: skip
+    assert [u["time"] for u in explore.answer(session, tmp_path, NOW)["upcoming"]] == [NOW + DAY]
+
+
+def test_answer_without_files(session, tmp_path):
+    (tmp_path / "explore").mkdir()
+    (tmp_path / "explore" / "live.json").write_text("{broken")
+    a = explore.answer(session, tmp_path, NOW)
+    assert a["live"] == [] and a["upcoming"] == [] and a["results"] == []
+    assert a["finished"] == [{"league_id": 1004, "winner": None}]
+
+
+def test_finished_winner_unknown_for_old_structure(session, tmp_path):
+    keep(tmp_path, 1004, {"upcoming": []}, "Done")  # kept before winners were read
+    assert explore.answer(session, tmp_path, NOW)["finished"] == [{"league_id": 1004, "winner": None}]
+
+
+def test_calendar_uses_game_dates_and_open_end(session, tmp_path):
+    cal = {c["league_id"]: c for c in explore.answer(session, tmp_path, NOW)["calendar"]}
+    assert (cal[1001]["start"], cal[1001]["end"], cal[1001]["open"]) == (NOW - 3 * DAY, NOW, True)  # still playing
+    assert cal[1003]["start"] == liquipedia.catalog.day_end(date(NOW + 5 * DAY)) - 86399 and not cal[1003]["open"]
+    assert cal[1004]["end"] == liquipedia.catalog.day_end(date(NOW - 10 * DAY))
+    assert 1005 not in cal  # out of the window
