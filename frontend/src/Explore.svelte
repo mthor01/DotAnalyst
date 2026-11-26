@@ -13,12 +13,14 @@
 
   // ---- the filters, kept in this browser
   type Filters = { tiers: TierGroup[]; regions: string[]; place: 'both' | 'online' | 'lan' }
-  const KEY = 'explore_filters'
+  // a new key when the default changes: every visit saves the filters, so the old key holds the old default
+  const KEY = 'explore_filters_2'
+  const START: Filters = { tiers: ['1'], regions: [], place: 'both' } // tier 1 until you pick otherwise
   function remembered(): Filters {
     try {
-      return { tiers: [], regions: [], place: 'both', ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }
+      return { ...START, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }
     } catch {
-      return { tiers: [], regions: [], place: 'both' }
+      return { ...START }
     }
   }
   let filters = $state<Filters>(remembered())

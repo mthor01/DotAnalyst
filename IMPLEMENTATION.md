@@ -308,7 +308,7 @@ What the poller keeps for it:
 
 **Region**: from the infobox's `region=`, else its `country=`, each read as a region or a country, into Europe, CIS, China, SEA, North America, South America, MENA or International; none when neither says. A page asked before regions were read is asked again (before newcomers, at most 30 lookups a round in all), so the region filter fills over a few rounds.
 
-**Filters**: tier (1, 2, 3, lower), the regions present, and online or LAN (Liquipedia's `type=Online`), each section filtered alike; kept in the browser (`localStorage`), so they stay for this browser only.
+**Filters**: tier (1, 2, 3, lower), the regions present, and online or LAN (Liquipedia's `type=Online`), each section filtered alike; Tier 1 until other filters are picked; kept in the browser (`localStorage`), so they stay for this browser only.
 
 ### Tournament rosters (tournament page, Teams)
 
