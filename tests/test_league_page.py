@@ -136,3 +136,16 @@ def test_a_league_liquipedia_was_never_asked_about_is_looked_up(session, tmp_pat
     session.get(LeagueCatalog, 1002).lp_checked = None
     league_page.page(session, client([]), "key", 1002, tmp_path, NOW)
     assert looked == [1002]
+
+
+def test_games_without_a_result_do_not_count_in_a_teams_record():
+    side = lambda i: {"team_id": i, "name": f"Team {i}"}  # noqa: E731
+    games = [
+        {"match_id": 1, "start_time": 3, "series_id": 9, "series_type": 0, "radiant": side(1), "dire": side(2),
+         "radiant_win": True, "radiant_score": 1, "dire_score": 0},
+        {"match_id": 2, "start_time": 2, "series_id": 8, "series_type": 0, "radiant": side(1), "dire": side(3),
+         "radiant_win": None, "radiant_score": None, "dire_score": None},  # an older game, not asked for
+    ]  # fmt: skip
+    found = {t["team_id"]: t for t in league_page.teams(games, [])}
+    assert (found[1]["games"], found[1]["wins"], found[1]["series"], found[1]["series_wins"]) == (1, 1, 1, 1)
+    assert (found[3]["games"], found[3]["series"], found[3]["seen"]) == (0, 0, 1)  # listed, with no record

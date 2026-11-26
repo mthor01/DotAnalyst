@@ -39,7 +39,7 @@ export const hiddenIds = () => (prefs.s?.hidden ? prefs.s.hidden.split(',') : []
 export const isHidden = (id: string) => hiddenIds().some((h) => id === h || id.startsWith(`${h}.`))
 
 /** The parts the Design page can hide, as the site shows them. A part marks its elements with data-block="<id>";
- *  `group` is only a heading there (the match and team pages are opened from links, not hidden as a whole). */
+ *  `group` is only a heading there (the match, team and tournament pages are opened from links, not hidden as a whole). */
 export type Part = { id: string; label: string; parts?: Part[]; group?: true }
 const part = (id: string, label: string, parts?: Part[]): Part => ({ id, label, ...(parts && { parts }) })
 const within = (prefix: string, list: [string, string][]) => list.map(([id, label]) => part(`${prefix}.${id}`, label))
@@ -58,7 +58,10 @@ export const DESIGN: Part[] = [
     part('profile.teammates', 'Teammates', within('profile.teammates', [['mates', 'With tracked accounts'], ['heroes', 'Heroes on my team and against me']])),
   ]),
   part('compare', 'Player comparison', within('compare', [['stats', 'Stats'], ['wards', 'Ward maps']])),
-  part('tournaments', 'Tournaments', within('tournaments', [['list', 'Tournaments tab'], ['teams', 'Teams tab']])),
+  part('tournaments', 'Tournaments', within('tournaments', [
+    ['explore', 'Explore tab'], ['search', 'Search tab'], ['list', 'Subscribed tab'], ['teams', 'Teams tab'],
+  ])),
+  { ...part('league', 'Tournament page', within('league', [['header', 'Facts'], ['teams', 'Teams'], ['series', 'Series'], ['games', 'Latest games']])), group: true },
   { ...part('team', 'Team page', [
     part('team.overview', 'Overview', within('team.overview', [['stack', 'Main stack'], ['standins', 'Stand-ins'], ['history', 'Historical players']])),
     part('team.games', 'Games'),

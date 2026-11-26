@@ -8,6 +8,7 @@
   import Progress from './lib/Progress.svelte'
   import Queue from './Queue.svelte'
   import Team from './Team.svelte'
+  import League from './League.svelte'
   import Tournaments from './Tournaments.svelte'
   import Settings from './Settings.svelte'
   import { hiddenIds, isHidden, loadSettings, prefs, type Settings as Values } from './lib/settings.svelte'
@@ -23,9 +24,10 @@
   const profileTab = $derived(/^profile\/(\w+)$/.exec(hash)?.[1] ?? '') // #profile/matches is a tab of the profile
   const matchId = $derived(/^match\/(\d+)$/.exec(hash)?.[1]) // #match/123 is one match, outside the pages above
   const teamId = $derived(/^team\/(\d+)$/.exec(hash)?.[1]) // #team/123 is one league team, under Tournaments
+  const leagueId = $derived(/^league\/(\d+)$/.exec(hash)?.[1]) // #league/123 is one tournament, under Tournaments
   const tournamentsTab = $derived(/^tournaments\/(\w+)$/.exec(hash)?.[1] ?? '') // #tournaments/teams is its Teams tab
   // the league pages are about other people's games: no account and none of the filters apply
-  const league = $derived(!!teamId || (!matchId && page === 'tournaments'))
+  const league = $derived(!!teamId || !!leagueId || (!matchId && page === 'tournaments'))
   let accounts = $state<Account[]>([])
   let error = $state('')
   let filters = $state({ account_id: '', lobby_type: '', game_mode: '', hero_id: '' })
@@ -212,7 +214,7 @@
     <h1><a class="brand" href="#"><img src="/logo.png" alt="DotAnalyst" width="209" height="32" /></a></h1>
     <nav aria-label="Pages">
       {#each NAV as id}
-        <a href="#{id}" data-block={id} aria-current={(teamId ? id === 'tournaments' : !matchId && page === id) ? 'page' : undefined}>{PAGES[id]}</a>
+        <a href="#{id}" data-block={id} aria-current={(teamId || leagueId ? id === 'tournaments' : !matchId && page === id) ? 'page' : undefined}>{PAGES[id]}</a>
       {/each}
     </nav>
     <div class="side">
@@ -336,6 +338,8 @@
     <p class="error" role="alert">Could not reach the API: {error}</p>
   {:else if matchId}
     <Match id={matchId} />
+  {:else if leagueId}
+    <League id={leagueId} />
   {:else if teamId}
     <Team id={teamId} {query} onshown={(s) => (selected = s)} />
   {:else if page === 'tournaments'}

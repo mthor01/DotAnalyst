@@ -76,28 +76,33 @@ def series(games: list[dict]) -> list[dict]:
 
 
 def teams(games: list[dict], known: list[dict]) -> list[dict]:
-    """Every team of the games with its game and series record; OpenDota's teams add rating and logo. Most games first."""
+    """Every team of the games with its game and series record, which count only games with a known result (an
+    amateur preview asks for the newest STEAM_DETAILS only); OpenDota's teams add rating and logo. Most games first."""
     found: dict[int, dict] = {}
     for t in known:
         found[t["team_id"]] = {"team_id": t["team_id"], "name": t.get("name"), "logo": t.get("logo_url"),
-                               "rating": t.get("rating"), "games": 0, "wins": 0, "series": 0, "series_wins": 0}  # fmt: skip
+                               "rating": t.get("rating"), "seen": 0, "games": 0, "wins": 0, "series": 0, "series_wins": 0}  # fmt: skip
     for g in sorted(games, key=lambda g: g["start_time"]):
         for s in ("radiant", "dire"):
             team = g[s]
             if not team["team_id"]:
                 continue
             t = found.setdefault(team["team_id"], {"team_id": team["team_id"], "name": None, "logo": None,
-                                                    "rating": None, "games": 0, "wins": 0, "series": 0, "series_wins": 0})  # fmt: skip
+                                                    "rating": None, "seen": 0, "games": 0, "wins": 0, "series": 0, "series_wins": 0})  # fmt: skip
             t["name"] = team["name"] or t["name"]
-            t["games"] += 1
-            t["wins"] += g["radiant_win"] is not None and g["radiant_win"] == (s == "radiant")
+            t["seen"] += 1
+            if g["radiant_win"] is not None:
+                t["games"] += 1
+                t["wins"] += g["radiant_win"] == (s == "radiant")
     for s in series(games):
         a, b = s["score"]
+        if not a + b:  # no game of it with a known result
+            continue
         for i, team in enumerate(s["teams"]):
             if team["team_id"] in found:
                 found[team["team_id"]]["series"] += 1
                 found[team["team_id"]]["series_wins"] += (a, b)[i] > (b, a)[i]
-    return sorted((t for t in found.values() if t["games"]), key=lambda t: (-t["games"], (t["name"] or "").lower()))
+    return sorted((t for t in found.values() if t["seen"]), key=lambda t: (-t["seen"], (t["name"] or "").lower()))
 
 
 def _opendota(client: httpx.Client, league_id: int, what: str) -> list:
