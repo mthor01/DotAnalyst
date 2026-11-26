@@ -169,3 +169,18 @@ def test_best_of_from_the_maps_listed_or_the_match():
     (_, body), *_ = lp.blocks(EVENT, "Match")
     assert lp.match(body)["best_of"] == 3  # three maps listed, one skipped
     assert lp.match("Match|bestof=5|map1={{Map|winner=1}}")["best_of"] == 5
+
+
+def test_winner_from_prize_pool_slots():
+    new = "{{Prize pool|\n|{{Slot|place=1|usdprize=100|{{TeamOpponent|Team A}}}}\n|{{Slot|place=2|{{TeamOpponent|Team B}}}}\n}}"
+    old = "{{prize pool slot|place=1|usdprize=100|{{TeamOpponent|Team C}}}}"
+    assert lp.winner({"E": new}) == "Team A" and lp.winner({"E": old}) == "Team C"
+    assert lp.winner({"E": "no table"}) is None
+    assert lp.winner({"E": "{{Slot|place=1|{{TeamOpponent|TBD}}}}"}) is None
+    assert lp.winner({"E": "{{Slot|place=2|{{TeamOpponent|Team B}}}}"}) is None
+
+
+def test_structure_names_the_winner():
+    pages = {"Pro Series 5": EVENT + "\n{{Slot|place=1|{{TeamOpponent|Team A}}}}"}
+    assert lp.structure(pages, {"Bracket/4DE": LAYOUT}, NOV_20)["winner"] == "Team A"
+    assert lp.structure({"Pro Series 5": EVENT}, {"Bracket/4DE": LAYOUT}, NOV_20)["winner"] is None

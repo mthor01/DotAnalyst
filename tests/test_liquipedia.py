@@ -119,7 +119,7 @@ def test_structure_fetches_pages_and_layouts_once(tmp_path):
     found = liquipedia.structure(structure_client(asked), row(), tmp_path, NOW, finished=False)
     assert len(asked) == 3 and found["brackets"][0]["title"] == "Playoffs"
     titles = asked[1].url.params["titles"].split("|")
-    assert titles == ["Pro Series 5", "Pro Series 5/Playoffs", "Pro Series 5/Region"]  # no Statistics, nothing deeper
+    assert titles == ["Pro Series 5", "Pro Series 5/Playoffs", "Pro Series 5/Region", "Pro Series 5/prizepool"]  # no Statistics, nothing deeper; prizepool names the winner
     assert any(m["time"] and m["opponents"] == ["Team A", "Team B"] for m in found["upcoming"])  # from the subpage
     liquipedia.structure(structure_client(asked), row(), tmp_path, NOW + 5 * 3600, finished=False)
     assert len(asked) == 3  # within 6 hours: from data/leagues/1002.lp.json
@@ -174,3 +174,19 @@ def test_a_structure_kept_by_an_older_version_is_read_again(tmp_path):
 def test_infobox_reads_region():
     assert liquipedia.infobox("{{Infobox league\n|country=Germany\n|type=Offline\n}}")["region"] == "Europe"
     assert liquipedia.infobox("{{Infobox league\n|region=Southeast Asia\n|country=Singapore\n}}")["region"] == "SEA"
+
+
+def test_kept_and_due(tmp_path):
+    row = LeagueCatalog(league_id=1002, name="Pro Series 5", lp_page="Pro Series 5")
+    assert liquipedia.kept(1002, tmp_path) is None and liquipedia.structure_due(row, tmp_path, 0, False)
+    kept = tmp_path / "leagues" / "1002.lp.json"
+    kept.parent.mkdir()
+    kept.write_text(json.dumps({"version": liquipedia.VERSION, "fetched": 1000, "page": "Pro Series 5", "found": {"x": 1}}))
+    assert liquipedia.kept(1002, tmp_path) == {"x": 1}  # whatever its age
+    assert not liquipedia.structure_due(row, tmp_path, 1000 + 3600, False)
+    assert liquipedia.structure_due(row, tmp_path, 1000 + liquipedia.STRUCTURE_HOURS * 3600, False)
+    assert not liquipedia.structure_due(row, tmp_path, 10**9, True)  # a finished league's is kept for good
+    kept.write_text(json.dumps({"version": 1, "fetched": 1000, "page": "Pro Series 5", "found": {"x": 1}}))
+    assert liquipedia.kept(1002, tmp_path) is None and liquipedia.structure_due(row, tmp_path, 1001, True)
+    kept.write_text("not json")
+    assert liquipedia.kept(1002, tmp_path) is None

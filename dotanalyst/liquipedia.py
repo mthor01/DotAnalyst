@@ -24,8 +24,8 @@ _pace_lock = threading.Lock()
 FIELDS = ("lp_tier", "prize_usd", "start_date", "end_date", "location", "region")
 STRUCTURE_HOURS = 6  # brackets and groups of a league still playing are read again after this; a finished one's never
 MAX_PAGES = 50  # what one revisions request may ask for
-NOT_STAGES = ("Statistics", "prizepool")
-VERSION = 3  # of the kept structure: one kept by another version is read again
+NOT_STAGES = ("Statistics",)  # a prizepool subpage names the winner
+VERSION = 4  # of the kept structure: one kept by another version is read again
 
 
 def pace() -> None:
@@ -155,15 +155,37 @@ def layouts(client: httpx.Client, names: set[str], data: Path) -> dict[str, list
     return {n: known[n] for n in names if n in known}
 
 
+def _kept(league_id: int, data: Path) -> dict | None:
+    """The kept structure file, None when missing, unreadable or of another VERSION."""
+    stored = data / "leagues" / f"{league_id}.lp.json"
+    try:
+        cached = json.loads(stored.read_text())
+    except (OSError, ValueError):
+        return None
+    return cached if isinstance(cached, dict) and cached.get("version") == VERSION else None
+
+
+def kept(league_id: int, data: Path) -> dict | None:
+    """The league's kept structure whatever its age, never asking Liquipedia (Explore reads it)."""
+    cached = _kept(league_id, data)
+    return cached["found"] if cached else None
+
+
+def structure_due(row: LeagueCatalog, data: Path, now: float, finished: bool) -> bool:
+    """Whether structure would ask Liquipedia: nothing kept for this page, or kept STRUCTURE_HOURS ago while it plays."""
+    cached = _kept(row.league_id, data)
+    return not cached or cached["page"] != row.lp_page or (not finished and now - cached["fetched"] >= STRUCTURE_HOURS * 3600)
+
+
 def structure(client: httpx.Client, row: LeagueCatalog, data: Path, now: float, finished: bool) -> dict | None:
     """The league's brackets, groups, upcoming matches and rosters (lp_structure.structure), kept in
     data/leagues/<id>.lp.json: read again after STRUCTURE_HOURS while the league plays, a finished league's never. A
     failed request keeps what was read before."""
     stored = data / "leagues" / f"{row.league_id}.lp.json"
-    cached = json.loads(stored.read_text()) if stored.exists() else None
-    if cached and (cached["page"] != row.lp_page or cached.get("version") != VERSION):  # another page, or kept older
+    cached = _kept(row.league_id, data)
+    if cached and cached["page"] != row.lp_page:  # Liquipedia's search found another page since
         cached = None
-    if cached and (finished or now - cached["fetched"] < STRUCTURE_HOURS * 3600):
+    if cached and not structure_due(row, data, now, finished):
         return cached["found"]
     got = pages(client, row.lp_page, row.league_id)
     if got is None:

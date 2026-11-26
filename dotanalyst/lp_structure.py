@@ -313,7 +313,20 @@ def structure(pages: dict[str, str], layouts: dict[str, list[dict]], now: float)
          if None not in m["opponents"] and m["time"] is not None and m["time"] >= now - STALE and not played(m)),
         key=lambda m: m["time"],
     )[:UPCOMING]  # fmt: skip
+    found["winner"] = winner(pages)
     return found
+
+
+def winner(pages: dict[str, str]) -> str | None:
+    """The tournament's winner: the team of the first place-1 slot of a prize pool (`{{Slot|place=1|…}}`, older pages
+    `{{prize pool slot|place=1|…}}`, a shared first place `place=1-2` too); None before it is known."""
+    for text in pages.values():
+        text = COMMENT.sub("", text)
+        for _, body in sorted(blocks(text, "Slot") + blocks(text, "prize pool slot") + blocks(text, "Prize pool slot")):
+            place = params(body).get("place", "").strip()
+            if place == "1" or place.startswith("1-"):
+                return next((name for _, b in blocks(body, "TeamOpponent") if (name := opponent("{{" + b + "}}"))), None)
+    return None
 
 
 def identify(found: dict, games: list[dict], teams: list[dict]) -> dict:
