@@ -279,6 +279,22 @@ OpenDota's tier "excluded" is where most amateur leagues are; OpenDota has no ga
 - **Series**: games grouped by series id (a game without one is a series of its own); the first team is the first game's Radiant; the score counts games with a known result; Bo1/Bo3/Bo5 from `series_type` 0/1/2.
 - **Team records** count only games with a known result: the older games of an amateur preview, without details, list the teams but give them no record ("–"). OpenDota's teams add rating and logo; a logo that does not load is hidden.
 
+### Tournament standings (tournament page)
+
+Every league with games gets a table worked out from its series (`league_stats.standings`): series won and lost, maps won and lost. Order: most series won, fewest series lost, best map difference, then name. A series with no game of known result counts for nobody. Liquipedia's group tables, where it has them, come from its own matches instead (see Liquipedia brackets and groups).
+
+### Tournament hero stats (tournament page, subscribed leagues)
+
+From the drafts (`picks_bans`) of the league's stored games (`league_stats.heroes`): picks, wins (a pick wins when its side won), bans, and *contested* = (picks + bans) / the games that have a draft. A game without a draft (an all-pick lobby) counts for no hero and is not in the denominator. Most contested first, then most picks. An unsubscribed league has no drafts: the page asks to subscribe.
+
+### Tournament player stats (tournament page, subscribed leagues)
+
+Per player of the league's stored games (`league_stats.players`), anonymous ones left out: games, wins, per-game averages of kills, deaths, assists, GPM, XPM, last hits and hero damage (1 decimal), KDA = (kills + assists) / deaths on the totals (deaths at least 1), the team it played the most games for, and its three most played heroes. Names and pictures are the stored Steam names. Most games first.
+
+### Head-to-head (tournament page, subscribed leagues)
+
+`/api/teams/{a}/vs/{b}` (`league_stats.head_to_head`): every stored league game between the two teams, of any subscribed league, not only the one on screen, as one event often has a single meeting. Games won by each, and their series, newest first. Stored games carry no series id, so a series is the games of one league with less than 6 hours (`SERIES_GAP`) between consecutive ones: two series played back to back the same day merge (known limit).
+
 ### League teams
 
 Built from the drafts and scoreboards of the league games (`league_matches`).

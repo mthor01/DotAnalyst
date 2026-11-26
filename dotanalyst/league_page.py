@@ -10,8 +10,8 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import catalog, liquipedia, steam
-from .db import DATA, League, LeagueCatalog, LeagueMatch
+from . import catalog, league_stats, liquipedia, steam
+from .db import DATA, League, LeagueCatalog, LeagueMatch, PlayerName
 from .opendota import pace
 
 OPENDOTA = "https://api.opendota.com/api/leagues/{}/{}"
@@ -174,8 +174,9 @@ def page(session: Session, client: httpx.Client, key: str, league_id: int, data:
         cached = {**fetch(client, key, league_id, subscribed), "fetched": now, "subscribed": subscribed}
         stored.parent.mkdir(parents=True, exist_ok=True)
         stored.write_text(json.dumps(cached))
+    rows: list[LeagueMatch] = []
     if subscribed:
-        rows = session.scalars(select(LeagueMatch).where(LeagueMatch.league_id == league_id))
+        rows = list(session.scalars(select(LeagueMatch).where(LeagueMatch.league_id == league_id)))
         games, source = [from_stored(m, cached.get("series_of", {})) for m in rows], "stored"
     else:
         games, source = cached["games"], cached["source"]
@@ -183,7 +184,20 @@ def page(session: Session, client: httpx.Client, key: str, league_id: int, data:
     if games:  # what the page knows is the best count there is for a league OpenDota's explorer has not
         row.games, row.first_game, row.last_game = len(games), games[-1]["start_time"], games[0]["start_time"]
         session.commit()
-    return {
+    grouped = series(games)
+    found = {
         "league": catalog.row(row, now, {league_id} if subscribed else set()), "source": source, "subscribed": subscribed,
-        "teams": teams(games, cached.get("teams", [])), "series": series(games), "games": games,
+        "teams": teams(games, cached.get("teams", [])), "series": grouped, "games": games,
+        "standings": league_stats.standings(grouped),
     }  # fmt: skip
+    if subscribed:
+        names = names_of(session, rows)
+        found["heroes"], found["players"] = league_stats.heroes(rows), league_stats.players(rows, names)
+    return found
+
+
+def names_of(session: Session, rows: list[LeagueMatch]) -> dict[int, tuple[str | None, str | None]]:
+    """Stored name and Steam picture of every player of these games."""
+    seen = {p.get("account_id") for m in rows for p in m.raw_json.get("players", [])}
+    stored = session.scalars(select(PlayerName).where(PlayerName.account_id.in_(seen - {None})))
+    return {n.account_id: (n.name, n.avatar or None) for n in stored}

@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import catalog, derive, league_page, load_env, opendota, parser, poll, queries, save_env, settings, update
+from . import catalog, derive, league_page, league_stats, load_env, opendota, parser, poll, queries, save_env, settings, update
 from .db import DATA, Ability, Account, Hero, Item, League, LeagueCatalog, open_engine
 from .replay import ReplayError
 from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, store_avatars, store_names, team_logo
@@ -338,6 +338,14 @@ def league_search(session: Db, text: str = "", tier: str = "", state: str = "", 
 @app.get("/api/explore")
 def explore(session: Db) -> dict:
     return catalog.explore(session)
+
+
+@app.get("/api/teams/{a}/vs/{b}")
+def head_to_head(session: Db, a: int, b: int) -> dict:
+    """Two teams' record against each other over every stored league game."""
+    if a == b:
+        raise HTTPException(422, "pick two different teams")
+    return league_stats.head_to_head(session, a, b)
 
 
 @app.get("/api/leagues/{league_id}/page")
