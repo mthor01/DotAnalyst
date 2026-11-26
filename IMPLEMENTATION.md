@@ -283,6 +283,17 @@ OpenDota's tier "excluded" is where most amateur leagues are; OpenDota has no ga
 
 Liquipedia's participant list when the league has a page (see Liquipedia brackets and groups); else, for a subscribed league, the players seen playing for the team in its stored games (`league_stats.played_rosters`), with their stored Steam name and picture and games played, most games first, anonymous ones left out. A stand-in who played once is listed too.
 
+### Liquipedia brackets and groups (tournament page, Overview and Teams)
+
+For a league with a Liquipedia page, its page source is read (`lp_structure.py`), never Liquipedia's rendered HTML:
+
+- **Bracket**: a `{{Bracket|Bracket/<layout>|…}}` lists its matches as `R1M1`, `R1M2`, … The layout page (`Template:Bracket/<layout>` on Liquipedia's commons wiki) says which slots feed each match (`toupper`, `tolower`), which is the final (`root`) and each round's header code. Slots after a header starting `!l` are the lower bracket until one starting `!u`. A round is named by the page's own `R<r>M<m>header=`, else by its code (`!u1!` Grand Final, `!u2!` Upper Bracket Final, `!u3!` Semifinals, `!u4!` Quarterfinals, `!l2!` Lower Bracket Final, `!l3!` Semifinal, `!l4!` Quarterfinals, `!lx!N`/`!ux!N` Round N), an unknown code as "Round <r>". A slot the page has not filled yet is drawn empty (TBD). The bracket reset shows only once played.
+- **A match**: the two `{{TeamOpponent|<name>}}` (empty or TBD is no team), `date=` read with its `{{Abbr/<zone>}}` (a table of about 30 zones; an unknown one is read as UTC; a day without a time is its noon), its Dota match ids (`matchid<k>` belongs to `map<k>`), the maps (`finished=skip` dropped). Winner: the match's own `winner=`, else a team that won more than half of its listed maps.
+- **Groups**: each `{{GroupStandings}}` gives its members and is titled by the heading above it. Its table is worked out from the match lists (`{{Matchlist}}`) on the same page and on the page its `stages=` names, from matches between two members only, so a playoff meeting does not count. Team names match in any case. Order: series won, series lost, map difference, name. Tiebreakers set by hand on Liquipedia are ignored (known limit).
+- **Upcoming**: matches with both teams named, no map played and a date at most 12 hours past (`STALE`), soonest first, at most 10.
+- **Rosters**: `{{TeamParticipants}}`, per team each `{{Person}}` with its role and whether it is a stand-in (`status=sub`).
+- **Which Dota team**: a Liquipedia name gets the Dota team id of a played map whose match id is among the page's games (`team1side` says which side the first team was), else of the league's team with that name in any case, else none (no logo, no link).
+
 ### Tournament standings (tournament page)
 
 Every league with games gets a table worked out from its series (`league_stats.standings`): series won and lost, maps won and lost. Order: most series won, fewest series lost, best map difference, then name. A series with no game of known result counts for nobody. Liquipedia's group tables, where it has them, come from its own matches instead (see Liquipedia brackets and groups).

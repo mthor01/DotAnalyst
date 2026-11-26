@@ -1,0 +1,102 @@
+{{Infobox league
+|name=Pro Series 5
+|leagueid=1002
+|sdate=2026-11-10
+|edate=2026-12-01
+}}
+
+==Participants==
+{{TeamParticipants|showplayerinfo=true
+|{{Opponent|Team A
+|players={{Persons
+|{{Person|role=1|Player 1}}
+|{{Person|role=5|Player 2|status=sub|results=false}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+}}
+
+==Group Stage==
+===Group A===
+{{GroupStandings|importopponents=false|format=srr|points=win=1
+|tiebreakers={{Json|matchwins|manual}}
+|title=Standings
+|{{TeamOpponent|Team A}}
+|{{TeamOpponent|Team B|tiebreaker=1}}
+|{{TeamOpponent|Team C}}
+|edate=November 20, 2026 - 23:00 {{Abbr/CET}}
+}}
+{{Matchlist|id=aaaa|title=November 13|width=330px
+|M1={{Match
+|opponent1={{TeamOpponent|Team A}}
+|opponent2={{TeamOpponent|Team B}}
+|date=November 13, 2026 - 11:00 {{Abbr/CET}}
+|twitch=Some Stream
+|matchid1=9001
+|matchid2=9002
+|map1={{Map
+|team1side=radiant
+|t1h1=puck|t1h2=lion
+|length=40m10s|winner=1
+}}
+|map2={{Map|team1side=dire|winner=1}}
+|map3={{Map|finished=skip}}
+}}
+|M2={{Match
+|opponent1={{TeamOpponent|Team B}}
+|opponent2={{TeamOpponent|Team C}}
+|date=November 14, 2026 - 15:00 {{Abbr/CET}}
+|matchid1=9003|matchid2=9004|matchid3=9005
+|map1={{Map|team1side=radiant|winner=1}}
+|map2={{Map|team1side=dire|winner=2}}
+|map3={{Map|team1side=radiant|winner=1}}
+}}
+|M3={{Match
+|opponent1={{TeamOpponent|Team A}}
+|opponent2={{TeamOpponent|Team C}}
+|date=November 30, 2026 - 18:00 {{Abbr/CEST}}
+|map1={{Map}}
+|map2={{Map}}
+}}
+}}
+
+==Playoffs==
+{{Bracket|Bracket/4DE|id=bbbb
+|R1M1header=Semifinals
+<!-- Upper Bracket Semifinals -->
+|R1M1={{Match
+|opponent1={{TeamOpponent|Team A}}
+|opponent2={{TeamOpponent|Team B}}
+|date=November 21, 2026 - 12:00 {{Abbr/CET}}
+|map1={{Map|team1side=radiant|winner=1}}
+|map2={{Map|team1side=radiant|winner=1}}
+}}
+|R1M2={{Match
+|opponent1={{TeamOpponent|Team C}}
+|opponent2={{TeamOpponent|Team Z}}
+|date=November 21, 2026 - 16:00 {{Abbr/CET}}
+|map1={{Map|team1side=dire|winner=2}}
+|map2={{Map|team1side=dire|winner=2}}
+}}
+|R2M1={{Match
+|opponent1={{TeamOpponent|Team A}}
+|opponent2={{TeamOpponent|Team Z}}
+|date=December 1, 2026 - 12:00 {{Abbr/CET}}
+}}
+|R2M2={{Match
+|opponent1={{TeamOpponent|Team B}}
+|opponent2={{TeamOpponent|Team C}}
+|date=November 22, 2026 - 12:00 {{Abbr/CET}}
+|map1={{Map|team1side=radiant|winner=2}}
+|map2={{Map|team1side=radiant|winner=2}}
+}}
+|R3M1={{Match
+|opponent1={{TeamOpponent|TBD}}
+|opponent2={{TeamOpponent|TBD}}
+}}
+|R4M1={{Match
+|opponent1={{TeamOpponent|}}
+|opponent2={{TeamOpponent|TBD}}
+|date=December 1, 2026 - 18:00 {{Abbr/CET}}
+}}
+}}
