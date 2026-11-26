@@ -10,7 +10,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import catalog, league_stats, liquipedia, lp_structure, steam
+from . import catalog, explore, league_stats, liquipedia, lp_structure, steam
 from .db import DATA, League, LeagueCatalog, LeagueMatch, PlayerName
 from .opendota import pace
 from .replay import opendota_match
@@ -114,19 +114,7 @@ def live(client: httpx.Client, key: str, league_id: int) -> list[dict]:
         games = steam.call(client, key, LIVE, league_id=league_id).get("games", [])
     except steam.SteamError:
         return []
-    found = []
-    for g in games:
-        if g.get("league_id") != league_id:
-            continue
-        board = g.get("scoreboard") or {}
-        team = lambda s: side((g.get(f"{s}_team") or {}).get("team_id"), (g.get(f"{s}_team") or {}).get("team_name"))  # noqa: E731
-        found.append({
-            "match_id": g.get("match_id"), "radiant": team("radiant"), "dire": team("dire"),
-            "series": [g.get("radiant_series_wins") or 0, g.get("dire_series_wins") or 0],
-            "best_of": BEST_OF.get(g.get("series_type") or 0, 1), "duration": board.get("duration"),
-            "score": [(board.get("radiant") or {}).get("score"), (board.get("dire") or {}).get("score")],
-        })  # fmt: skip
-    return found
+    return [g for g in explore.parse_live(games) if g["league_id"] == league_id]
 
 
 def _opendota(client: httpx.Client, league_id: int, what: str) -> list:
@@ -241,6 +229,7 @@ def page(session: Session, client: httpx.Client, key: str, league_id: int, data:
             elif new < LOGOS_PER_LOAD:
                 new += 1
                 t["logo"] = steam.team_logo(client, key, ugc, data)
+    explore.remember_logos(data, found["teams"])  # Explore shows them too
     return found
 
 
