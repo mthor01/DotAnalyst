@@ -2,8 +2,11 @@
   import { get, post, type TournamentRow } from './lib/api'
   import { loadConstants } from './lib/constants.svelte'
   import Teams from './Teams.svelte'
+  import { shownTab } from './lib/settings.svelte'
 
   let { tab }: { tab: string } = $props()
+  // a tab hidden on the Design page gives way to the other
+  const shown = $derived(shownTab('tournaments', ['list', 'teams'], tab === 'teams' ? 'teams' : 'list'))
   let rows = $state<TournamentRow[]>([])
   let error = $state('')
   let leagueId = $state('')
@@ -33,11 +36,11 @@
 </script>
 
 <div class="choice tabs" role="group" aria-label="Part of the tournaments page">
-  <button aria-pressed={tab !== 'teams'} onclick={() => (location.hash = 'tournaments')}>Tournaments</button>
-  <button aria-pressed={tab === 'teams'} onclick={() => (location.hash = 'tournaments/teams')}>Teams</button>
+  <button data-block="tournaments.list" aria-pressed={shown === 'list'} onclick={() => (location.hash = 'tournaments')}>Tournaments</button>
+  <button data-block="tournaments.teams" aria-pressed={shown === 'teams'} onclick={() => (location.hash = 'tournaments/teams')}>Teams</button>
 </div>
 
-{#if tab === 'teams'}
+{#if shown === 'teams'}
   <Teams />
 {:else if error}
   <p class="error" role="alert">{error}</p>

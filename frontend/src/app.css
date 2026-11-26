@@ -125,8 +125,15 @@ nav a[aria-current='page'] {
   left: auto;
   right: 0;
 }
-.reload {
+.reload,
+.gear {
   padding-inline: 10px;
+}
+.gear {
+  text-decoration: none;
+}
+.gear[aria-current='page'] {
+  background: var(--border);
 }
 /* the header's Add profile form */
 .add {
@@ -350,6 +357,10 @@ input {
   cursor: pointer;
 }
 
+/* a wrapper that only marks a part the Design page can hide (data-block); the layout passes through it */
+.contents {
+  display: contents;
+}
 /* a panel is a step lighter than the page; no outline, no shadow */
 .card {
   background: var(--surface);

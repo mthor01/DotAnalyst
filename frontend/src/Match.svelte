@@ -7,6 +7,7 @@
   import Hero from './lib/Hero.svelte'
   import MiniMap, { KINDS, SIDES, mapX, mapY, viewOf } from './lib/MiniMap.svelte'
   import Playback from './lib/Playback.svelte'
+  import { isHidden, prefs } from './lib/settings.svelte'
 
   /** brief: only the scoreboard, the draft and the lead chart, for a game unfolded on a team page; notes: a word
    *  under each side's name in the draft; draft: false leaves the draft out of the brief view */
@@ -84,8 +85,9 @@
   const hasReplay = $derived(!!match?.player_minute.length)
   const hasDraft = $derived(!!match?.draft.length && (draft || !brief))
   const captains = $derived(match?.game_mode === 2) // only Captains Mode has a draft worth a tab; other games show the pick order
-  const tabs = $derived(Object.entries(TABS).filter(([id]) => id === 'general' || (id === 'draft' ? hasDraft && captains : hasReplay)))
-  const shown = $derived(!brief && tabs.some(([id]) => id === tab) ? tab : 'general')
+  const tabs = $derived(Object.entries(TABS).filter(([id]) => (id === 'general' || (id === 'draft' ? hasDraft && captains : hasReplay)) && !isHidden(`match.${id}`)))
+  // the tab picked, else the first one there and not hidden on the Design page
+  const shown = $derived(brief ? 'general' : tabs.some(([id]) => id === tab) ? tab : ((tabs[0]?.[0] ?? 'general') as keyof typeof TABS))
   const lastMinute = $derived(Math.max(0, ...(match?.player_minute ?? []).map((r) => r.minute)))
   const minuteRow = $derived(new Map((match?.player_minute ?? []).map((r) => [`${r.player_slot}:${r.minute}`, r])))
 
@@ -494,7 +496,7 @@
   {#if !brief && tabs.length > 1}
     <div class="tabs" role="tablist" aria-label="Parts of the match">
       {#each tabs as [id, title]}
-        <button role="tab" aria-selected={tab === id} onclick={() => (tab = id as keyof typeof TABS)}>{title}</button>
+        <button role="tab" aria-selected={shown === id} onclick={() => (tab = id as keyof typeof TABS)}>{title}</button>
       {/each}
     </div>
   {/if}
@@ -502,7 +504,7 @@
   {#if shown === 'general'}
     <!-- on a team page the draft stands right of the scoreboard, both as tall as the taller one -->
     <div class:beside={brief && hasDraft}>
-    <div class="card">
+    <div class="card" data-block="match.general.score">
       <table>
         <thead>
           <tr>
@@ -554,23 +556,23 @@
     <!-- the pick order and the lane map stand side by side, each taking what it needs, and stack on a narrow screen -->
     <div class="pair">
     {#if !brief && hasDraft && !captains}
-      <section>
+      <section data-block="match.general.picks">
         <h2>Pick order</h2>
         <Draft draft={match.draft} captains={false} />
       </section>
     {/if}
     {#if hasReplay}
       {#if brief}
-        <h2>Lead</h2>
-        <p class="legend">
+        <h2 data-block="match.general.lead">Lead</h2>
+        <p class="legend" data-block="match.general.lead">
           <span><i class="swatch radiant"></i>Radiant ahead</span>
           <span><i class="swatch dire"></i>Dire ahead</span>
         </p>
-        <div class="card chart">
+        <div class="card chart" data-block="match.general.lead">
           <Chart option={leadChart(leadOf(players, lastMinute))} height={320} label="Radiant's lead over Dire in net worth and in experience over time; above zero Radiant is ahead, below zero Dire" />
         </div>
       {:else}
-      <section class="lanes">
+      <section class="lanes" data-block="match.general.lanes">
       <h2>Lanes and buildings</h2>
       <p class="legend">
         <span>■ building standing at the end</span>
@@ -589,7 +591,7 @@
     {:else}
       <p class="muted">
         No replay data for this match (replay: {match.replay_state}), so only the scoreboard above is known. Replays are
-        fetched on their own for matches up to 90 days old; Valve keeps them for about 100 days.
+        fetched on their own for matches up to {prefs.s?.max_age_days ?? 90} days old; Valve keeps them for about 100 days.
       </p>
       <p>
         <button class="action" onclick={requestReplay} disabled={asking}>
@@ -695,9 +697,9 @@
     </div>
 
   {:else if shown === 'builds'}
-    <h2>Item timeline</h2>
-    <p class="muted">Items at the time they were bought.<About>Each item sits at the time it was bought; hover one for its name and time. A part that went into a bigger item within a minute is left out, so only the finished item shows. Consumables, wards and recipes are left out too.</About></p>
-    <div class="card timeline" style:--step="{Math.max(timeX(300), 1)}px">
+    <h2 data-block="match.builds.items">Item timeline</h2>
+    <p class="muted" data-block="match.builds.items">Items at the time they were bought.<About>Each item sits at the time it was bought; hover one for its name and time. A part that went into a bigger item within a minute is left out, so only the finished item shows. Consumables, wards and recipes are left out too.</About></p>
+    <div class="card timeline" data-block="match.builds.items" style:--step="{Math.max(timeX(300), 1)}px">
       <span></span>
       <span class="head">Before 0:00</span>
       <span class="head axis" bind:clientWidth={trackWidth}>
@@ -728,9 +730,9 @@
       {/each}
     </div>
 
-    <h2>Skills and talents</h2>
-    <p class="muted">Skill points in the order they were spent.<About>Every skill point in the order it was spent, with the hero's level under it; hover one for the ability, its level and the time. Talents are listed apart, each with the level it was taken at.</About></p>
-    <div class="card">
+    <h2 data-block="match.builds.skills">Skills and talents</h2>
+    <p class="muted" data-block="match.builds.skills">Skill points in the order they were spent.<About>Every skill point in the order it was spent, with the hero's level under it; hover one for the ability, its level and the time. Talents are listed apart, each with the level it was taken at.</About></p>
+    <div class="card" data-block="match.builds.skills">
       <table>
         <thead>
           <tr><th>Hero</th><th>Skills</th><th>Talents</th></tr>

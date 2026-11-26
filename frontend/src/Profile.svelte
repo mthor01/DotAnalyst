@@ -10,6 +10,7 @@
   import WardHeat, { HOW } from './lib/WardHeat.svelte'
   import WinRate from './lib/WinRate.svelte'
   import Count from './lib/Count.svelte'
+  import { shownTab } from './lib/settings.svelte'
 
   let {
     query,
@@ -34,7 +35,8 @@
   } = $props()
 
   const TABS = { overview: 'Overview', matches: 'Matches', heroes: 'Heroes', laning: 'Laning', warding: 'Warding', teammates: 'Teammates' }
-  const shown = $derived<keyof typeof TABS>(tab in TABS ? (tab as keyof typeof TABS) : 'overview')
+  // a tab hidden on the Design page gives way to the first one shown
+  const shown = $derived(shownTab('profile', Object.keys(TABS) as (keyof typeof TABS)[], tab in TABS ? (tab as keyof typeof TABS) : 'overview'))
   // the server narrows to every filter, the role, the queue and the number of matches among them; newest first
   let recent = $state<MatchRow[]>([])
   let wards = $state.raw<WardSpot[]>([]) // of the same matches
@@ -331,7 +333,7 @@
 
   <div class="tabs" role="tablist" aria-label="Profile">
     {#each Object.entries(TABS) as [id, title]}
-      <button role="tab" aria-selected={shown === id} onclick={() => ((heroOpen = 0), (location.hash = id === 'overview' ? 'profile' : `profile/${id}`))}>{title}</button>
+      <button role="tab" data-block="profile.{id}" aria-selected={shown === id} onclick={() => ((heroOpen = 0), (location.hash = id === 'overview' ? 'profile' : `profile/${id}`))}>{title}</button>
     {/each}
   </div>
 
@@ -342,7 +344,7 @@
   {:else if shown === 'teammates'}
     <Teammates {query} {account} {ontracked} />
   {:else if shown === 'overview'}
-  <dl class="card numbers">
+  <dl class="card numbers" data-block="profile.overview.numbers">
     <div>
       <dt>Win rate</dt>
       <dd>{share(wins)}</dd>
@@ -366,11 +368,11 @@
     </div>
   </dl>
   <div class="overview">
-    <section class="card roles">
+    <section class="card roles" data-block="profile.overview.roles">
       <RoleWheel games={allRoles} zoomed={roles} picked={positions} onpick={(p) => onpositions(p.filter((n) => typeof n === 'number') as typeof positions)} none="No replay" />
     </section>
 
-    <section class="card">
+    <section class="card" data-block="profile.overview.heroes">
       <table>
         <thead>
           <tr><th>Hero</th><th>Matches</th><th>Win rate</th><th class="num">K / D / A</th></tr>
@@ -394,7 +396,7 @@
   </div>
 
   <div class="lower">
-  <section class="card activity">
+  <section class="card activity" data-block="profile.overview.activity">
     <h3>Activity</h3>
     <!-- too wide for a phone: it scrolls, and opens at its newest end -->
     <div class="calendar" {@attach toNewest} style:--weeks={weeks.length} role="img" aria-label="Games and win rate per day over the last 6 months: {active.length} days played">
@@ -414,7 +416,7 @@
     </div>
     <p class="muted">{active.reduce((n, d) => n + d.games, 0)} games on {active.length} days in the last 6 months, at most {busiest} in one day.</p>
   </section>
-  <section class="card results">
+  <section class="card results" data-block="profile.overview.form">
     <h3>Form <span class="tally"><b class="won">{formWins} W</b> <b class="lost">{form.length - formWins} L</b></span></h3>
     <ol aria-label="The last {form.length} results, oldest first">
       {#each form as r (r.match_id)}
@@ -427,7 +429,7 @@
   </section>
   </div>
 
-  <div class="sections">
+  <div class="sections" data-block="profile.overview.averages">
     {#each averages as [title, stats] (title)}
       <section class="card">
         <h3>{title}</h3>
@@ -450,7 +452,7 @@
   <p class="muted laning">All numbers are your averages at 10:00 over the {laneMatches} filtered matches with a parsed replay.<About>Averages over the {laneMatches} of these {laneGames.length} matches that have a parsed replay and lasted 10 minutes. Your lane is you and the allies who laned with you, the enemy lane the heroes you laned against; in the mid lane that is usually one hero each. Damage counts only hits on heroes, after armour and resistances, as the replay's combat log records it. The best and worst lanes are the {LANES} of these matches with the biggest and the smallest net worth lead at 10:00, each with every hero of both lanes, yours first; click a row to unfold the match, or its date to open it. The Hero filter in the panel narrows all of it to one hero.</About></p>
   <!-- your own lane phase and what it meant for the game: one card, three columns of equal width; the lane record
        (as on the Overview) and what each lane result meant for the game on the left, farm and fights beside them -->
-  <section class="card lists">
+  <section class="card lists" data-block="profile.laning.lane">
     <div class="first" title="A lane is won or lost by more than {EVEN} net worth at 10:00, even within it">
       <div>
         <h3>Lanes won, even, lost</h3>
@@ -472,7 +474,7 @@
     {#each laning as [title, stats]}{@render list(title, stats)}{/each}
   </section>
   <!-- your lane against the enemy lane: the means beside the lead of every match -->
-  <section class="card lists versus">
+  <section class="card lists versus" data-block="profile.laning.versus">
     {@render list('Your lane vs the enemy lane', versus)}
     <div>
       <h3>Net worth lead per match<About>One column per match, the oldest on the left. The bar is the net worth lead of the player's lane: up when ahead, down when behind. A match without a parsed replay has no bar. The dot is the result.</About></h3>
@@ -498,10 +500,11 @@
     </div>
   </section>
 
-  {#each extremes as [title, games]}
-    <h3 class="group">{title}</h3>
+  {#each extremes as [title, games], i}
+    {@const block = `profile.laning.${i ? 'worst' : 'best'}`}
+    <h3 class="group" data-block={block}>{title}</h3>
     {#if games.length}
-      <section class="card">
+      <section class="card" data-block={block}>
         <table class="lanes">
           <thead>
             <tr><th></th><th>Match</th><th>Your heroes</th><th>Enemy heroes</th><th>Result</th><th class="num">Net worth lead</th><th class="num">Last-hit lead</th><th class="num">Deaths</th></tr>
@@ -534,7 +537,7 @@
         </table>
       </section>
     {:else}
-      <p class="muted">No match with a parsed replay here.</p>
+      <p class="muted" data-block={block}>No match with a parsed replay here.</p>
     {/if}
   {/each}
   {:else}
@@ -542,13 +545,13 @@
   <!-- the numbers, the map, and the map's controls in a column of their own beside it -->
   <div class="vision">
     <section class="card">
-      <div class="lists wards">
+      <div class="lists wards" data-block="profile.warding.numbers">
         {#each wardLists as [title, stats]}{@render list(title, stats)}{/each}
       </div>
-      <div class="map">{@render heatmap('map')}</div>
+      <div class="map" data-block="profile.warding.map">{@render heatmap('map')}</div>
     </section>
     <!-- the map's controls in a box of their own, like the filter panel -->
-    <div class="filterbox">{@render heatmap('controls')}</div>
+    <div class="filterbox" data-block="profile.warding.map">{@render heatmap('controls')}</div>
   </div>
   {#snippet heatmap(only: 'map' | 'controls')}
     <WardHeat {only} {wards} games={recent.filter((r) => r.replay_state === 'parsed')} counts={false} label="Heatmap of the wards {account?.label ?? 'the player'} placed in these matches"

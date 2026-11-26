@@ -68,12 +68,12 @@
 {#if error}
   <p class="error" role="alert">{error}</p>
 {:else}
-  <h2>With tracked accounts</h2>
+  <h2 data-block="profile.teammates.mates">With tracked accounts</h2>
   {#if teammates.length === 0}
-    <p class="muted">No matches on the same team as another tracked account for these filters.</p>
+    <p class="muted" data-block="profile.teammates.mates">No matches on the same team as another tracked account for these filters.</p>
   {/if}
   <!-- one card per mate, most games first, across the page's whole width; a click opens the mate's profile -->
-  <ul class="mates">
+  <ul class="mates" data-block="profile.teammates.mates">
     {#each teammates as t, i (t.account_id)}
       {@const lead = 2 * t.wins - t.games}
       {@const rate = percent(t.wins, t.games)}
@@ -115,8 +115,8 @@
     </li>
   </ul>
 
-  <h2>Heroes on my team and against me</h2>
-  <div class="filters">
+  <h2 data-block="profile.teammates.heroes">Heroes on my team and against me</h2>
+  <div class="filters" data-block="profile.teammates.heroes">
     <span>At least</span>
     <span class="choice" role="group" aria-label="Fewest games of a hero shown">
       {#each MIN_GAMES as n}
@@ -125,7 +125,7 @@
     </span>
     <span>games</span>
   </div>
-  <div class="sides">
+  <div class="sides" data-block="profile.teammates.heroes">
     {#each SIDES as [side, title]}
       {@const shown = rows(side)}
       <div class="card tall">

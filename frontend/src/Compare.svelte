@@ -46,10 +46,12 @@
   import { heroIcon, heroName } from './lib/constants.svelte'
   import { tally } from './lib/RoleWheel.svelte'
   import WardHeat, { HOW } from './lib/WardHeat.svelte'
+  import { prefs } from './lib/settings.svelte'
 
   let { query, accounts }: { query: string; accounts: Account[] } = $props()
-  // the two accounts compared, the first two tracked ones at first
-  let chosen = $state(untrack(() => [accounts[0]?.account_id, accounts[1]?.account_id ?? accounts[0]?.account_id]))
+  // the two accounts compared: at first the main profile (Settings), else the first tracked one, and the next tracked one
+  const first = untrack(() => accounts.find((a) => String(a.account_id) === prefs.s?.main_account) ?? accounts[0])
+  let chosen = $state([first?.account_id, (accounts.find((a) => a !== first) ?? first)?.account_id])
   let together = $state<TeammateRow | undefined>()
   let sides = $state.raw<Side[]>([])
   let error = $state('')
@@ -112,7 +114,7 @@
     {/if}
 
     {#if sides.length === 2}
-      <div class="card stats">
+      <div class="card stats" data-block="compare.stats">
         {#each GROUPS as [title, rows] (title)}
           <h3 class="group">{title}</h3>
           {#each rows as row (row.label)}
@@ -134,10 +136,10 @@
           {/each}
         {/each}
       </div>
-      <p class="muted">Green is the better of the two, red the worse.<About>Green is the better of the two, red the worse. The replay numbers average each account's matches with a parsed replay, the rest every match the filters keep; the games together count every stored match.</About></p>
+      <p class="muted" data-block="compare.stats">Green is the better of the two, red the worse.<About>Green is the better of the two, red the worse. The replay numbers average each account's matches with a parsed replay, the rest every match the filters keep; the games together count every stored match.</About></p>
 
-      <h2>Wards</h2>
-      <div class="maps">
+      <h2 data-block="compare.wards">Wards</h2>
+      <div class="maps" data-block="compare.wards">
         <!-- one box between the maps holds every control; the maps only show, and zoom together -->
         {#each ['map', 'controls', 'map'] as const as only, k}
           {@const i = k ? 1 : 0}
@@ -156,7 +158,7 @@
           </div>
         {/each}
       </div>
-      <p class="muted">Left the first player's wards, right the second's.<About>Left the first player's wards, right the second's; the box in the middle and a zoom on either map apply to both. {HOW}</About></p>
+      <p class="muted" data-block="compare.wards">Left the first player's wards, right the second's.<About>Left the first player's wards, right the second's; the box in the middle and a zoom on either map apply to both. {HOW}</About></p>
     {/if}
   </div>
 {/if}

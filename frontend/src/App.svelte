@@ -9,12 +9,17 @@
   import Queue from './Queue.svelte'
   import Team from './Team.svelte'
   import Tournaments from './Tournaments.svelte'
+  import Settings from './Settings.svelte'
+  import { hiddenIds, isHidden, loadSettings, prefs, type Settings as Values } from './lib/settings.svelte'
 
-  const PAGES = { profile: 'Profile', compare: 'Player comparison', tournaments: 'Tournaments', queue: 'Queue' }
+  const PAGES = { profile: 'Profile', compare: 'Player comparison', tournaments: 'Tournaments', queue: 'Queue', settings: 'Settings' }
+  const NAV: Page[] = ['profile', 'compare', 'tournaments'] // the page tabs; the progress bar opens Queue, the gear Settings
   const ALL_ACCOUNTS: Page[] = ['compare'] // these pages show every tracked account at once
   type Page = keyof typeof PAGES
   let hash = $state(location.hash.slice(1))
-  const page = $derived<Page>(hash.split('/')[0] in PAGES ? (hash.split('/')[0] as Page) : 'profile')
+  // with no page in the address, the first page the Design settings leave shown
+  const page = $derived<Page>(hash.split('/')[0] in PAGES ? (hash.split('/')[0] as Page) : (NAV.find((id) => !isHidden(id)) ?? 'profile'))
+  const settingsTab = $derived(/^settings\/(\w+)$/.exec(hash)?.[1] ?? '') // #settings/data is its Data tab
   const profileTab = $derived(/^profile\/(\w+)$/.exec(hash)?.[1] ?? '') // #profile/matches is a tab of the profile
   const matchId = $derived(/^match\/(\d+)$/.exec(hash)?.[1]) // #match/123 is one match, outside the pages above
   const teamId = $derived(/^team\/(\d+)$/.exec(hash)?.[1]) // #team/123 is one league team, under Tournaments
@@ -58,39 +63,55 @@
   $effect(() => {
     if (filters.hero_id && !heroes.includes(Number(filters.hero_id))) filters.hero_id = ''
   })
-  const showFilters = $derived(!matchId && !(league && !teamId) && page !== 'queue')
+  const showFilters = $derived(!matchId && !(league && !teamId) && page !== 'queue' && page !== 'settings' && !isHidden('filters'))
   function monthsAgo(n: number) {
     const day = new Date()
     day.setMonth(day.getMonth() - n)
     return day.toLocaleDateString('en-CA') // YYYY-MM-DD in local time, what the API takes
   }
 
+  /** The query's parameters that each filter of the panel sets, by the filter's Design id */
+  const HIDES: Record<string, string> = {
+    lobby_type: 'filters.lobby', game_mode: 'filters.mode', hero_id: 'filters.hero', league_id: 'filters.tournament',
+    date_from: 'filters.time', date_to: 'filters.time',
+  }
   // every view takes the same filters, so they travel as one query string
   const query = $derived.by(() => {
     const { span, ...dates } = time
     const sent = { ...filters, ...dates }
     if (span !== 'dates') [sent.date_from, sent.date_to] = [span === 'all' ? '' : monthsAgo(Number(span)), '']
-    const pairs: [string, string][] = Object.entries(sent).filter(([, v]) => v !== '')
+    // a filter hidden in the Design settings counts as its default, so nothing narrows the page unseen
+    const pairs: [string, string][] = Object.entries(sent).filter(([k, v]) => v !== '' && !(k in HIDES && isHidden(HIDES[k])))
     if (!league) {
-      pairs.push(...ROLES[own.role][2].map((p): [string, string] => ['position', String(p)]))
-      if (own.queue) pairs.push(['party', String(own.queue === 2)])
-      if (own.size) pairs.push(['last', String(own.size)])
+      if (!isHidden('filters.role')) pairs.push(...ROLES[own.role][2].map((p): [string, string] => ['position', String(p)]))
+      if (own.queue && !isHidden('filters.queue')) pairs.push(['party', String(own.queue === 2)])
+      const size = isHidden('filters.matches') ? 100 : own.size
+      if (size) pairs.push(['last', String(size)])
     }
     return new URLSearchParams(pairs).toString()
   })
 
   const loadAccounts = async () => (accounts = await get<Account[]>('accounts'))
-  Promise.all([loadAccounts(), loadConstants()]).then(
+  Promise.all([loadAccounts(), loadConstants(), loadSettings()]).then(
     ([found]) => {
+      // the main profile from the settings, else the one picked last
+      const known = (id: string | null | undefined) => found.some((a) => String(a.account_id) === id)
+      const main = prefs.s?.main_account
       const remembered = localStorage.getItem('account_id')
-      const known = found.some((a) => String(a.account_id) === remembered)
-      filters.account_id = known ? remembered! : String(found[0]?.account_id ?? '')
+      filters.account_id = known(main) ? main! : known(remembered) ? remembered! : String(found[0]?.account_id ?? '')
     },
     (e) => (error = e.message),
   )
 
   $effect(() => {
     if (filters.account_id) localStorage.setItem('account_id', filters.account_id)
+  })
+
+  // the Design settings' hidden parts: every element marked data-block with that id or one under it
+  const hiding = document.head.appendChild(document.createElement('style'))
+  $effect(() => {
+    const ids = hiddenIds()
+    hiding.textContent = ids.length ? `${ids.map((id) => `[data-block="${id}"], [data-block^="${id}."]`).join(', ')} { display: none !important; }` : ''
   })
 
   // #account/123 picks that tracked account and opens its profile: how other pages link to one
@@ -136,14 +157,13 @@
   }
   const focus = (input: HTMLInputElement) => input.focus()
 
-  let steamKey = $state(true) // the server has a Steam Web API key; without one no new matches are fetched
+  const steamKey = $derived(prefs.s?.steam_key ?? true) // the server has a Steam Web API key; without one no new matches are fetched
   let newKey = $state('')
   let keyError = $state('')
-  get<{ steam_key: boolean }>('settings').then((s) => (steamKey = s.steam_key), () => {})
   async function saveKey(event: SubmitEvent) {
     event.preventDefault()
     try {
-      steamKey = (await post<{ steam_key: boolean }>('settings/steam-key', { key: newKey })).steam_key
+      prefs.s = await post<Values>('settings/steam-key', { key: newKey })
     } catch (e) {
       keyError = (e as Error).message
     }
@@ -153,6 +173,7 @@
   function reload() {
     version += 1
     loadAccounts()
+    loadSettings()
   }
 
   let checking = $state(false)
@@ -188,10 +209,10 @@
 
 <main>
   <header class="top">
-    <h1><a class="brand" href="#{Object.keys(PAGES)[0]}"><img src="/logo.png" alt="DotAnalyst" width="209" height="32" /></a></h1>
+    <h1><a class="brand" href="#"><img src="/logo.png" alt="DotAnalyst" width="209" height="32" /></a></h1>
     <nav aria-label="Pages">
-      {#each Object.entries(PAGES).filter(([id]) => id !== 'queue') as [id, title]}<!-- the progress bar opens Queue -->
-        <a href="#{id}" aria-current={(teamId ? id === 'tournaments' : !matchId && page === id) ? 'page' : undefined}>{title}</a>
+      {#each NAV as id}
+        <a href="#{id}" data-block={id} aria-current={(teamId ? id === 'tournaments' : !matchId && page === id) ? 'page' : undefined}>{PAGES[id]}</a>
       {/each}
     </nav>
     <div class="side">
@@ -210,6 +231,7 @@
       <button class="action" onclick={check} disabled={checking}>
         {checking ? 'Checking…' : teamId ? 'Refresh' : league ? 'Check for new league games' : 'Check for new games'}
       </button>
+      <a class="action gear" href="#settings" aria-current={page === 'settings' ? 'page' : undefined} title="Settings" aria-label="Settings">⚙</a>
     </div>
   </header>
   {#if !steamKey}
@@ -233,13 +255,13 @@
         </p>
       {/if}
       {#if !league}
-        <section>
+        <section data-block="filters.matches">
           <h3>Matches</h3>
           <div class="choice" role="group" aria-label="How many of the newest matches">
             {#each SIZES as n}<button aria-pressed={own.size === n} onclick={() => (own.size = n)}>{n || 'All'}</button>{/each}
           </div>
         </section>
-        <section>
+        <section data-block="filters.role">
           <h3>Role</h3>
           <div class="choice roles" role="group" aria-label="Role">
             {#each ROLES as [short, long, positions], i}
@@ -249,13 +271,13 @@
             {/each}
           </div>
         </section>
-        <section>
+        <section data-block="filters.queue">
           <h3>Queue</h3>
           <div class="choice" role="group" aria-label="Solo or party">
             {#each QUEUES as name, i}<button aria-pressed={own.queue === i} onclick={() => (own.queue = i)}>{name}</button>{/each}
           </div>
         </section>
-        <section>
+        <section data-block="filters.lobby">
           <h3>Lobby</h3>
           <div class="choice" role="group" aria-label="Lobby">
             {#each [['', 'All'], ...Object.entries(LOBBY_TYPES)] as [id, name]}
@@ -263,7 +285,7 @@
             {/each}
           </div>
         </section>
-        <section>
+        <section data-block="filters.mode">
           <h3><label for="mode">Mode</label></h3>
           <select id="mode" bind:value={filters.game_mode}>
             <option value="">All modes</option>
@@ -272,7 +294,7 @@
             {/each}
           </select>
         </section>
-        <section>
+        <section data-block="filters.hero">
           <h3>Hero</h3>
           <div class="choice heroes" role="group" aria-label="Hero">
             <button class="all" aria-pressed={filters.hero_id === ''} onclick={() => (filters.hero_id = '')}>All heroes</button>
@@ -284,7 +306,7 @@
           </div>
         </section>
       {/if}
-      <section>
+      <section data-block="filters.time">
         <h3>Time</h3>
         <div class="choice spans" role="group" aria-label="Time">
           {#each SPANS as [id, name]}
@@ -297,7 +319,7 @@
         {/if}
       </section>
       {#if league}<!-- a team's season; the profile and the comparison take every game -->
-        <section>
+        <section data-block="filters.tournament">
           <h3><label for="tournament">Tournament</label></h3>
           <select id="tournament" bind:value={time.league_id}>
             <option value="">All games</option>
@@ -320,6 +342,8 @@
     <Tournaments tab={tournamentsTab} />
   {:else if page === 'queue'}
     <Queue />
+  {:else if page === 'settings'}
+    <Settings tab={settingsTab} {accounts} onaccounts={loadAccounts} />
   {:else if !filters.account_id}
     <p class="muted">No tracked accounts yet. Add one with Add profile above, by its friend id or Steam id.</p>
   {:else if page === 'profile'}

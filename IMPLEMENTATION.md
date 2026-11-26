@@ -493,6 +493,17 @@ The settings are lines in `.env` beside the Steam key (`settings.py`, written by
 
 **Storage** is the Queue page's (`storage`).
 
+**Main profile**: at start the site opens the main profile, else the one picked last in this browser, else the first tracked one. The player comparison starts with the main profile on the left (else the first tracked one) and the next tracked one on the right.
+
+### Design
+
+The Design tab hides parts of the site: a page, a tab, a block on a tab, or a filter of the filter panel. Each part has a dotted id (`profile.laning.versus`, `team.general.blood`, `filters.role`; the list is `DESIGN` in `settings.svelte.ts`), and `HIDDEN` holds the hidden ids joined by commas. The elements of a part carry `data-block="<id>"`, and the app adds a style rule that hides `[data-block="<id>"]` and every `[data-block^="<id>."]`, so hiding a tab hides all its blocks. Where a part has no element of its own (the team page's blocks), a `display: contents` wrapper carries the mark without changing the layout.
+
+- A hidden tab gives way to the first shown tab of its page (`shownTab`); the match page leaves hidden tabs out of its tab bar. A hidden page leaves the top bar, and the site opens the first page still shown.
+- The team and match pages are opened from links, so they cannot be hidden as a whole, only their tabs and blocks. A match unfolded on another page (Laning's best lanes, a team's games) hides the same blocks as the match page.
+- A hidden filter counts as its default: the pages are no longer narrowed by it (Matches counts as 100, the others as all).
+- Hiding is only display: what a hidden part needs is still fetched and computed.
+
 ## The installed program
 
 What the setup asks and what the installed program does with the answers. `packaging/dotanalyst.iss` writes them under `HKCU\Software\DotAnalyst`; `dotanalyst/app.py` reads them at every start (`installed_settings`).

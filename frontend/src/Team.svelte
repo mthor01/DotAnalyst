@@ -8,6 +8,7 @@
   import RoleWheel from './lib/RoleWheel.svelte'
   import WardHeat from './lib/WardHeat.svelte'
   import Match from './Match.svelte'
+  import { shownTab } from './lib/settings.svelte'
 
   let { id, query, onshown }: { id: string; query: string; onshown: (shown: { games: number; parsed: number } | null) => void } = $props()
   let team = $state<TeamDetail>()
@@ -58,7 +59,9 @@
   /** An average net worth lead from their side: +1234, -560, or – with none to average */
   const lead = (n: number | null) => (n === null ? '–' : `${n > 0 ? '+' : ''}${Math.round(n)}`)
   const TABS = ['Overview', 'Games', 'Players', 'Draft', 'General'] as const
-  let tab = $state<(typeof TABS)[number]>('Overview')
+  let picked = $state<(typeof TABS)[number]>('Overview')
+  // a tab hidden on the Design page gives way to the first one shown
+  const tab = $derived(shownTab('team', TABS.map((t) => t.toLowerCase()), picked.toLowerCase()))
   const stack = $derived(team?.players.filter((p) => p.main) ?? [])
   const others = $derived(team?.players.filter((p) => !p.main).sort((a, b) => b.last_played - a.last_played) ?? [])
   const STAND_IN_MONTHS = 3 // a player who stood in longer ago than this is a historical player
@@ -147,11 +150,11 @@
 
   <div class="choice tabs" role="group" aria-label="Part of the team page">
     {#each TABS as name}
-      <button aria-pressed={tab === name} onclick={() => (tab = name)}>{name}</button>
+      <button data-block="team.{name.toLowerCase()}" aria-pressed={tab === name.toLowerCase()} onclick={() => (picked = name)}>{name}</button>
     {/each}
   </div>
 
-  {#if tab === 'Overview'}
+  {#if tab === 'overview'}
   <dl class="facts">
     <div><dt>Record</dt><dd>{wins}–{games - wins}</dd><dd class="muted">{percent(wins, games)}% won</dd></div>
     {#each sides as s}
@@ -173,6 +176,7 @@
     </div>
   </dl>
 
+  <div class="contents" data-block="team.overview.stack">
   <h2>Main stack</h2>
   <p class="muted">The five players seen most in their last {RECENT_GAMES} games.<About>The five players seen most in their last {RECENT_GAMES} games; a tie goes to whoever played more lately. The bar under a player fills one step per game of those. A name opens the player's profile here when the site tracks them, else on OpenDota.</About></p>
   <ol class="lineup">
@@ -191,21 +195,29 @@
     {/each}
   </ol>
 
+  </div>
+
+  <div class="contents" data-block="team.overview.standins">
   <h2>Stand-ins</h2>
   {#if standIns.length}
     {@render bench(standIns)}
   {:else}
     <p class="muted">Nobody else played for them in the last {STAND_IN_MONTHS} months of these games.</p>
   {/if}
+  </div>
+
+  <div class="contents" data-block="team.overview.history">
   {#if historical.length}
     <h2>Historical players</h2>
     <p class="muted">Played for them, but not in the last {STAND_IN_MONTHS} months.</p>
     {@render bench(historical)}
   {/if}
 
-  {:else if tab === 'General'}
+  </div>
+
+  {:else if tab === 'general'}
   <div class="pair">
-    <section>
+    <section data-block="team.general.wards">
       <h2>Wards placed</h2>
       {#if parsed.length}
         <p class="muted">Every ward of their {parsed.length} parsed games.<About>Every ward their players placed in the {parsed.length} of their {games} games whose replay is parsed; their usual matches are on each player's own map under Players.</About></p>
@@ -214,13 +226,14 @@
         <p class="muted">None of their games has a parsed replay yet, and wards are only in replays. Request the replays under "First moves".</p>
       {/if}
     </section>
-    <section>
+    <section data-block="team.general.moves">
       <h2>First moves</h2>
       <p class="muted">Their paths up to 0:30, last six games on one side.<About>Where their five heroes walked from the start of the pre-game to 0:30, in their last six games on one side. One colour per game; the button above the map switches between Radiant and Dire, the buttons beside it switch games on and off, the slider moves the clock.</About></p>
       <Openings games={team.games} onfetched={() => (fetched += 1)} />
     </section>
   </div>
 
+  <div class="contents" data-block="team.general.blood">
   <h2>First blood</h2>
   {#if bloods.length}
     <p>They drew first blood in {drew} of the {bloods.length} games whose replay is parsed ({percent(drew, bloods.length)}%).</p>
@@ -228,6 +241,9 @@
     <p class="muted">Not known: none of their games has a parsed replay.</p>
   {/if}
 
+  </div>
+
+  <div class="contents" data-block="team.general.lanes">
   <h2>Lanes at 10:00</h2>
   <p class="muted">Each lane at 10:00, their heroes against the enemy.<About>Their heroes in each lane against the enemy's there, at 10:00 of the parsed games where both sides had a hero in it. The lead is theirs minus the enemy's, averaged over those games; the bar grows to the side ahead in net worth.</About></p>
   <div class="lanes">
@@ -254,6 +270,9 @@
     {/each}
   </div>
 
+  </div>
+
+  <div class="contents" data-block="team.general.tormentor">
   <h2>First Tormentor</h2>
   <p class="muted">First Tormentor of {team.tormentors.games} parsed games.<About>The first Tormentor of each of the {team.tormentors.games} games whose replay is parsed, by who took it. Time, heroes dead and lead are averages over those games: the dead are the other side's, the lead is the taker's net worth minus the other side's.</About></p>
   <div class="card">
@@ -278,6 +297,9 @@
     </table>
   </div>
 
+  </div>
+
+  <div class="contents" data-block="team.general.runes">
   <h2>Wisdom runes</h2>
   <p class="muted">Wisdom runes from 7:00 on.<About>Every wisdom rune of their parsed games, from 7:00 on. They contested one when at least one of their heroes came within ten cells of it between 20 seconds before it appeared and its pickup; heroes and the net worth lead are averages over the ones they contested. Kills and deaths per game count the heroes that died within those ten cells from then until 15 seconds after the pickup.</About></p>
   <div class="card">
@@ -306,7 +328,10 @@
     </table>
   </div>
 
-  {:else if tab === 'Draft'}
+  </div>
+
+  {:else if tab === 'draft'}
+  <div class="contents" data-block="team.draft.heroes">
   <h2>Heroes in their drafts</h2>
   <p class="muted">Open: not banned, not picked by the enemy.<About>A hero is open in a game when neither side banned it and the enemy team did not pick it. The percentages beside a count are of their {games} games; the win rate is of the games they played the hero, and picked when open of the games it was open. A hero banned against them often and picked nearly every time it is open is worth a ban.</About></p>
   <div class="card">
@@ -339,6 +364,9 @@
     </p>
   {/if}
 
+  </div>
+
+  <div class="contents" data-block="team.draft.roles">
   <h2>Roles in their draft</h2>
   <p class="muted">The position each pick went on to play.<About>Which position the hero of each of their picks went on to play, in the {team.draft[0].reduce((a, b) => a + b, 0)} of their games whose replay is parsed. In Captains Mode a team picks once in the first phase, three times in the second and once in the last. The percentages are of the row.</About></p>
   <div class="card">
@@ -359,7 +387,9 @@
       </tbody>
     </table>
   </div>
-  {:else if tab === 'Games'}
+  </div>
+
+  {:else if tab === 'games'}
   <h2>Games</h2>
   <p class="muted">Click a game to unfold it, ↗ opens it.<About>Unfolded: its draft, first Tormentor, scoreboard and, with a parsed replay, the lead and the lanes. One without a replay has a button under Replay that requests it.</About></p>
   <div class="card tall">
