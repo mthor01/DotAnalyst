@@ -87,6 +87,30 @@ class League(Base):
     name: Mapped[str]
 
 
+class LeagueCatalog(Base):
+    """Every league the tournament browser knows: OpenDota's list, Steam's live games and Liquipedia (catalog.py).
+    Times are unix seconds; dates from Liquipedia stay as it writes them, YYYY-MM-DD."""
+
+    __tablename__ = "league_catalog"
+
+    league_id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    tier: Mapped[str | None]  # OpenDota's: premium, professional, amateur, excluded (most amateur leagues), or none
+    games: Mapped[int | None]  # None: not known
+    first_game: Mapped[int | None]
+    last_game: Mapped[int | None]
+    live_games: Mapped[int] = mapped_column(default=0)  # in the last look of Steam's live list that had any
+    live_seen: Mapped[int | None]
+    lp_page: Mapped[str | None]  # Liquipedia's page title; None: none found, or never asked (lp_checked None)
+    lp_tier: Mapped[int | None]  # Liquipedia's tier, 1 the biggest
+    prize_usd: Mapped[int | None]
+    start_date: Mapped[str | None]
+    end_date: Mapped[str | None]
+    location: Mapped[str | None]
+    lp_checked: Mapped[int | None]
+    refreshed: Mapped[int | None]  # when OpenDota's list last had it
+
+
 class PlayerName(Base):
     """Steam name of a league player, or of a player of a match that was opened, as it was when first asked for."""
 

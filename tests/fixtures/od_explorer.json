@@ -1,0 +1,1 @@
+{"command": "SELECT", "rowCount": 1, "rows": [{"leagueid": 1002, "games": "40", "first_at": 1790000000, "last_at": 1795000000}], "err": null}
