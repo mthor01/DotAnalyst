@@ -24,8 +24,12 @@ def env_lines(path: Path) -> list[str]:
     return raw.decode("utf-16" if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8-sig").splitlines()
 
 
-def save_env(name: str, value: str, path: Path = Path(".env")) -> None:
-    """Set one variable in .env, in place of its old line, keeping every other line; and in the environment."""
+def save_env(name: str, value: str | None, path: Path = Path(".env")) -> None:
+    """Set one variable in .env, in place of its old line, keeping every other line; and in the environment.
+    None takes it out of both."""
     lines = [line for line in env_lines(path) if line.partition("=")[0].strip().removeprefix("export ").strip() != name]
-    path.write_text("\n".join([*lines, f"{name}={value}"]) + "\n", encoding="utf-8")
-    os.environ[name] = value
+    path.write_text("\n".join([*lines, *([] if value is None else [f"{name}={value}"])]) + "\n", encoding="utf-8")
+    if value is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = value

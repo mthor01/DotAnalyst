@@ -254,6 +254,8 @@ Known limits: most matches have no parsed replay and so no position until the po
 
 The tracked tournaments are the `leagues` table, league id to name. A new database tracks none. The add form on the Tournaments page takes a league id; the name is OpenDota's (`/leagues/{id}`), or "League {id}" when OpenDota has none or does not answer. The league sync reads every tracked tournament, so a new one is read in full on the poller's next round for league games, up to Steam's newest 500 games of a league.
 
+Taking a tournament off (Settings, Accounts) deletes its row in `leagues`: its games are no longer read from Steam, and those not yet copied into `matches` are not copied, so no more of its replays are downloaded. Its stored games, their replays and the team pages built from them stay; adding it again reads it in full.
+
 The list gives per tournament its stored games, the teams that played in them (a side without a team is none), and the start of its first and last stored game. The Teams tab of the page is the League teams list.
 
 ### League teams
@@ -298,7 +300,7 @@ Shown on the team page under each player, as the same role wheel as a profile's 
 
 ### League games as matches
 
-A league game starts out in `league_matches` only; its match page is built from the answer Steam gave for it. It is copied into `matches` when it is younger than 90 days (`MAX_AGE_DAYS` in `replay.py`, 30 until 2026-11-20, by the leagues step every round, so the poller downloads its replay and computes its stats like any match's) or when its replay is asked for (the button on its page, or under "First moves" on a team page). From then on it is a match like any other. No tracked account plays in it, so it joins no account's stats: those only count rows where the account itself played.
+A league game starts out in `league_matches` only; its match page is built from the answer Steam gave for it. It is copied into `matches` when it is younger than 90 days (the settings' replay age, `max_age_days` in `replay.py`; 30 until 2026-11-20) and its tournament is still tracked (by the leagues step every round, so the poller downloads its replay and computes its stats like any match's) or when its replay is asked for (the button on its page, or under "First moves" on a team page). From then on it is a match like any other. No tracked account plays in it, so it joins no account's stats: those only count rows where the account itself played.
 
 ### Replay queue (Queue page)
 
@@ -310,7 +312,7 @@ The Whose column names the tracked accounts that played the match (their label a
 
 ### Poll steps (Queue page)
 
-The poller is eight steps, in `STEP_FUNCS` in `poll.py`: new matches of the accounts, new league games, usual games of checked players, replays in the Dota client folder, replay ids (salts) from Valve, replay downloads and parsing, game lists of league players, stats of parsed matches. Since 2026-11-20 each runs on a thread of its own (`start`, called when the server starts), side by side, none waiting for another: a round does all the work the step finds, then the step looks again 10 seconds (`LOOP_SECONDS`) after that round ended. So downloads start right after a restart, while the accounts step is still reading Steam, and a match the accounts step stores is picked up by the downloads step within 10 seconds. Before, one poll ran the steps in order every minute.
+The poller is eight steps, in `STEP_FUNCS` in `poll.py`: new matches of the accounts, new league games, usual games of checked players, replays in the Dota client folder, replay ids (salts) from Valve, replay downloads and parsing, game lists of league players, stats of parsed matches. Since 2026-11-20 each runs on a thread of its own (`start`, called when the server starts), side by side, none waiting for another: a round does all the work the step finds, then the step looks again 10 seconds (`LOOP_SECONDS`) after that round ended; the two steps that ask Steam for new games wait the settings' interval instead, when it is longer (`wait_after`). While the poller is paused in the settings, every step only waits. So downloads start right after a restart, while the accounts step is still reading Steam, and a match the accounts step stores is picked up by the downloads step within 10 seconds. Before, one poll ran the steps in order every minute.
 
 - **Rules that keep the steps apart.** Each round has its own database session and HTTP client. A match a step downloads, parses or computes is claimed in `WORKING` (`claim` / `release`): another step, or the site's Request replay, leaves a claimed match alone. Each step and the button that does the same work by hand (`refresh`, `refresh_leagues`, `refresh_players`) share a lock, so they never run at once. SQLite lets one writer at a time; a step waits up to 30 seconds for another's write (`timeout` in `db.py`).
 - **Rate limits across threads.** OpenDota's calls share one pacer, one a second; Steam's calls share another (`pace` in `steam.py`), one a second. `salts.json` is written to a temporary file and swapped in whole, since the downloads step reads it while the salts step writes it.
@@ -333,7 +335,7 @@ Known limit: the league players' count walks every league game on each refresh o
 
 ### Background progress (bar in the header, Replay column)
 
-`progress` in `poll.py`, behind `GET /api/progress`, which every page reads every 3 seconds. A replay counts as **waiting** under the same condition as the queue (`wanted`: `pending`, or `none` and younger than 90 days), and as **parsed** when its state is `parsed`. Replays the poller gave up on (`unavailable`, `failed`, or `none` older than 90 days) count in neither, so the bar can reach 100 % while such matches remain. The bar shows parsed out of parsed plus waiting over all matches. It is a small bar with its count, in the header between the page tabs and the account; clicking it opens the Queue page, which has no tab of its own. Hovering it (or keyboard focus) opens an overview that adds:
+`progress` in `poll.py`, behind `GET /api/progress`, which every page reads every 3 seconds. A replay counts as **waiting** under the same condition as the queue (`wanted`: `pending`, or `none` and younger than 90 days), and as **parsed** when its state is `parsed`. Replays the poller gave up on (`unavailable`, `failed`, or `none` older than 90 days) count in neither, so the bar can reach 100 % while such matches remain. The bar shows parsed out of parsed plus waiting over all matches. It is a small bar with its count, at the right end of the header beside the page's reload button; clicking it opens the Queue page, which has no tab of its own. Hovering it (or keyboard focus) opens an overview that adds:
 
 - one bar per **active** tracked account, counting the matches it played in (through `match_players`);
 - one bar per tracked tournament, counting its games that are already in `matches` (through `league_matches`). League games still only in `league_matches` are counted in no bar;
@@ -463,6 +465,34 @@ How often the game was won after a won, an even and a lost lane: the matches sho
 
 A team's lead is Radiant's sum minus Dire's, per minute. The laning table and lane charts use minute 10, or the last minute of a shorter game.
 
+## Settings (Settings page)
+
+The settings are lines in `.env` beside the Steam key (`settings.py`, written by `save_env`): in the repo's folder from source, in the data folder when installed. The server, the poller and the desktop app read them each time they need them, so a change counts at once, without a restart. A value edited by hand into something a setting does not take counts as its default. `POST /api/settings` checks every value it gets before it keeps any.
+
+| Setting | In `.env` | Default | What it changes |
+|---|---|---|---|
+| Automatic updates | `AUTO_UPDATE` | on | see Updates |
+| Download speed cap | `DOWNLOAD_LIMIT_KBPS` | 0, no cap | KB per second over all replay downloads together |
+| Pause fetching | `POLL_PAUSED` | off | every poll step only waits; Check for new games still works |
+| Look for new games every | `CHECK_SECONDS` | 10 s | the accounts and leagues steps, 10 s to a day |
+| Download replays younger than | `REPLAY_MAX_AGE_DAYS` | 90 days | 1 to 100: Valve keeps replays about 100 days |
+| Main profile | `MAIN_ACCOUNT` | none | the account the site opens with, first in the comparison |
+| Second Steam account | `STEAM_ALT_USER`, `STEAM_ALT_PASSWORD` | none | see Replay ids from Valve; the password is never sent back to the page |
+| Dota replay folder | `DOTA_REPLAY_DIR` | Steam's folder | absent: Steam's own folder, empty: none, else that folder |
+| Hidden parts | `HIDDEN` | none | see Design |
+
+**Download speed cap**: every chunk of every download takes its turn on one schedule (`Throttle` in `replay.py`): a chunk of n bytes moves the schedule n / cap seconds on, from now or from where it was if that is later, and its download waits until then before it reads on. So four downloads together keep under the cap, and a cap that was idle saves up no allowance for a burst later. The reader waiting is what slows Valve's server too, through TCP. The cap is read at every chunk, so a change counts during a download.
+
+**Start with Windows** (installed program only) writes or removes the same `Run` value the setup writes.
+
+**Removing a tracked account** sets it inactive, like `remove-account`: no new matches are fetched for it and it leaves the account picker, but its matches and replays stay, and Add profile brings it back with them. If it was the main profile, there is none after.
+
+**Removing old parser output** deletes `data/raw/<match id>.jsonl.gz` of every match that started more than the chosen number of days ago. The match keeps its replay state (`parsed`), so its replay is never downloaded again, and its stats stay. What needs the file stops working for that match: the match page's replay map (Playback), and recomputing, which skips it and keeps its old rows (`derive_match` reads the log before it deletes anything).
+
+**Recompute stats** runs `recompute` (the `recompute` command) on a thread of the server; the page shows how many of the parsed matches are done. Only one runs at a time. The poller goes on meanwhile.
+
+**Storage** is the Queue page's (`storage`).
+
 ## The installed program
 
 What the setup asks and what the installed program does with the answers. `packaging/dotanalyst.iss` writes them under `HKCU\Software\DotAnalyst`; `dotanalyst/app.py` reads them at every start (`installed_settings`).
@@ -497,7 +527,7 @@ At start the installed program asks `POST http://127.0.0.1:8765/api/desktop/show
 
 ### Updates
 
-At every start, and every 6 hours while it runs in the tray, the program looks for a newer release and downloads its setup to `update\`. The setup runs silently when the window is closed. In the tray that happens as soon as the window is hidden, or right away if it already is; the setup gets `/TRAY` and starts the program in the tray again afterwards.
+Unless automatic updates are off in the settings (`AUTO_UPDATE=0`, read before each look, so turning them off in the tray skips the next one): at every start, and every 6 hours while it runs in the tray, the program looks for a newer release and downloads its setup to `update\`. The setup runs silently when the window is closed. In the tray that happens as soon as the window is hidden, or right away if it already is; the setup gets `/TRAY` and starts the program in the tray again afterwards.
 
 ### Uninstall
 

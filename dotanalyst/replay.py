@@ -3,6 +3,7 @@ import gzip
 import json
 import os
 import subprocess
+import threading
 import time
 from collections import deque
 from compression import zstd
@@ -11,6 +12,7 @@ from pathlib import Path
 import httpx
 from sqlalchemy.orm import Session
 
+from . import settings
 from .db import DATA, Match
 from .opendota import pace
 
@@ -27,6 +29,32 @@ DOWNLOADED: deque[dict] = deque(maxlen=10)  # the last downloads that ended, cut
 
 class ReplayError(Exception):
     pass
+
+
+def max_age_days() -> int:
+    """How far back replays are downloaded: the settings' number of days, MAX_AGE_DAYS unless changed there."""
+    return settings.number("max_age_days")
+
+
+class Throttle:
+    """The settings' download cap, over every download at once: each chunk takes its turn on one schedule, and the
+    reader waits until the cap allows that many bytes. Waiting before the next read lets TCP slow the sender too."""
+
+    def __init__(self, clock=time.monotonic, sleep=time.sleep) -> None:
+        self.clock, self.sleep, self.lock, self.free = clock, sleep, threading.Lock(), 0.0
+
+    def take(self, size: int, limit: int) -> None:
+        """`size` bytes just arrived; `limit` bytes a second, 0 for no cap."""
+        if limit <= 0:
+            return
+        with self.lock:
+            now = self.clock()
+            self.free = max(now, self.free) + size / limit  # an idle cap saves up no allowance for later
+            wait = self.free - now
+        self.sleep(wait)
+
+
+THROTTLE = Throttle()
 
 
 def replay_complete(dem: Path) -> bool:
@@ -204,6 +232,7 @@ def download_replay(url: str, dem: Path, client: httpx.Client) -> bool:
                     except (OSError, EOFError, zstd.ZstdError) as error:
                         raise ReplayError(f"{dem.name}: download is not a valid archive") from error
                     out.write(content)
+                    THROTTLE.take(len(chunk), 1024 * settings.number("download_limit"))
         finally:
             DOWNLOADING.pop(match_id, None)
             whole = decompressor is not None and decompressor.eof

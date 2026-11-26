@@ -14,11 +14,12 @@ from sqlalchemy.orm import Session
 from .db import (
     DATA, Account, League, LeagueMatch, Match, MatchPlayer, PlayerGame, PlayerGameList, PlayerMinute, PlayerName,
 )  # fmt: skip
+from . import settings
 from .derive import derive_match
 from .opendota import fetch_player_games, player_games, store_player_games, unlisted_players, usual_match
 from .replay import (
-    DOWNLOADED, DOWNLOADING, MAX_AGE_DAYS, PARSER_URL, ReplayError, download_and_parse, fetch_replay, mark_tried, opendota_match, parse_dem,
-    replay_complete, settle, steam_salts,
+    DOWNLOADED, DOWNLOADING, PARSER_URL, ReplayError, download_and_parse, fetch_replay, mark_tried, opendota_match, parse_dem,
+    max_age_days, replay_complete, settle, steam_salts,
 )  # fmt: skip
 from .steam import store_match, sync, sync_leagues
 
@@ -84,7 +85,7 @@ def wanted(now: float):
     """Matches whose replay the poller still wants, whenever it next tries them."""
     return or_(
         Match.replay_state == "pending",
-        and_(Match.replay_state == "none", Match.start_time > now - MAX_AGE_DAYS * 86400),
+        and_(Match.replay_state == "none", Match.start_time > now - max_age_days() * 86400),
     )
 
 
@@ -104,7 +105,7 @@ def usual_waiting(now: float):
     return (
         select(PlayerGame.match_id).distinct()
         .join(PlayerGameList, and_(PlayerGameList.account_id == PlayerGame.account_id, PlayerGameList.replays_wanted))
-        .where(PlayerGame.start_time > now - MAX_AGE_DAYS * 86400, PlayerGame.match_id.not_in(select(Match.match_id)))
+        .where(PlayerGame.start_time > now - max_age_days() * 86400, PlayerGame.match_id.not_in(select(Match.match_id)))
         .where(PlayerGame.match_id.not_in(NO_MATCH))
         .order_by(PlayerGame.match_id.desc())
     )  # fmt: skip
@@ -137,7 +138,8 @@ def leagues_step(session: Session, client: httpx.Client, setup: Setup) -> int:
     # a league game young enough to download becomes a match like any other: its replay is fetched and its stats
     # computed by the steps after. No tracked account plays in it, so it joins nobody's stats
     recent = select(LeagueMatch.raw_json).where(
-        LeagueMatch.start_time > time.time() - MAX_AGE_DAYS * 86400, LeagueMatch.match_id.not_in(select(Match.match_id))
+        LeagueMatch.start_time > time.time() - max_age_days() * 86400, LeagueMatch.match_id.not_in(select(Match.match_id)),
+        LeagueMatch.league_id.in_(select(League.league_id)),  # a tournament taken off the list downloads no more
     )
     young = session.scalars(recent).all()
     for raw in young:
@@ -355,16 +357,23 @@ def setup_from_env(newest_only: bool = True) -> Setup:
 
 
 def loop(engine: Engine, key: str, stop: threading.Event) -> None:
-    """One step, over and over: a round does all the work there is, then the step looks again LOOP_SECONDS later."""
+    """One step, over and over: a round does all the work there is, then the step looks again LOOP_SECONDS later
+    (the looks for new matches and league games after the settings' interval). Paused, it only waits."""
     newest_only = False  # the first round reads Steam's whole lists, to pick up what an interrupted run left out
     while not stop.is_set():
-        try:
-            with LOCKS[key], Session(engine) as session, httpx.Client() as client:
-                run_step(key, session, client, setup_from_env(newest_only))
-            newest_only = True
-        except Exception:  # one bad round must not end the step
-            log.exception("poll step %s failed, next round in %d s", key, LOOP_SECONDS)
-        stop.wait(LOOP_SECONDS)
+        if not settings.flag("paused"):
+            try:
+                with LOCKS[key], Session(engine) as session, httpx.Client() as client:
+                    run_step(key, session, client, setup_from_env(newest_only))
+                newest_only = True
+            except Exception:  # one bad round must not end the step
+                log.exception("poll step %s failed, next round in %d s", key, LOOP_SECONDS)
+        stop.wait(wait_after(key))
+
+
+def wait_after(key: str) -> int:
+    """Seconds between two rounds of a step: Steam is asked for new games at the settings' interval."""
+    return max(LOOP_SECONDS, settings.number("check_seconds")) if key in ("accounts", "leagues") else LOOP_SECONDS
 
 
 def start(engine: Engine) -> threading.Event:
@@ -445,7 +454,7 @@ def queue(session: Session, replay_dir: Path | None, data: Path = DATA, now: flo
     running = dict(RUNNING)  # a copy: the steps go on changing it
     return {
         "busy": bool(running), "running": running, "now": now, "parser": parser,
-        "retry_seconds": RETRY_SECONDS, "loop_seconds": LOOP_SECONDS, "max_age_days": MAX_AGE_DAYS,
+        "retry_seconds": RETRY_SECONDS, "loop_seconds": LOOP_SECONDS, "max_age_days": max_age_days(),
         "states": states, "steps": steps(session, replay_dir, data, waiting, next_try, now),
         "storage": storage(data),
         "downloading": list(DOWNLOADING.values()), "downloaded": list(reversed(DOWNLOADED)),
@@ -481,7 +490,7 @@ def progress(session: Session, now: float | None = None) -> dict:
     running = dict(RUNNING)  # a copy: the steps go on changing it
     return {
         "busy": bool(running), "running": running, "now": now, "loop_seconds": LOOP_SECONDS,
-        "max_age_days": MAX_AGE_DAYS, "working": sorted(WORKING),
+        "max_age_days": max_age_days(), "working": sorted(WORKING),
         "overall": {"parsed": parsed, "waiting": waiting},
         "profiles": [{"account_id": a, "name": name, "parsed": p, "waiting": w} for a, name, p, w in session.execute(profiles)],
         "tournaments": [{"league_id": i, "name": name, "parsed": p, "waiting": w} for i, name, p, w in session.execute(tournaments)],

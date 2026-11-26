@@ -113,7 +113,7 @@ def main() -> None:
     from sqlalchemy import select
     from sqlalchemy.orm import Session
 
-    from dotanalyst import update
+    from dotanalyst import settings, update
     from dotanalyst.api import app, engine  # after the chdir: it opens data/ and reads .env
     from dotanalyst.db import Hero
     from dotanalyst.steam import sync_constants
@@ -125,6 +125,8 @@ def main() -> None:
         visible.set()
 
     def check(version: str) -> None:
+        if not settings.flag("auto_update"):  # read at each check: turned off in the tray, the next one is skipped
+            return
         try:
             with httpx.Client() as client:
                 if setup := update.download(client, version, Path("update")):

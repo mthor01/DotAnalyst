@@ -22,9 +22,14 @@ def parse(tag: str) -> tuple[int, ...]:
     return tuple(int(part) for part in tag.removeprefix("v").split("."))
 
 
+def latest(client: httpx.Client) -> dict:
+    """GitHub's newest release: its tag_name and its assets."""
+    return client.get(RELEASES, timeout=10).raise_for_status().json()
+
+
 def download(client: httpx.Client, current: str, folder: Path) -> Path | None:
     """The newest release's setup when it is newer than `current`, checked against its .sha256; else None."""
-    release = client.get(RELEASES, timeout=10).raise_for_status().json()
+    release = latest(client)
     if parse(release["tag_name"]) <= parse(current):
         return None
     urls = {asset["name"]: asset["browser_download_url"] for asset in release["assets"]}

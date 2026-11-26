@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import derive, load_env, opendota, parser, poll, queries, save_env
+from . import derive, load_env, opendota, parser, poll, queries, save_env, settings, update
 from .db import DATA, Ability, Account, Hero, Item, League, open_engine
 from .replay import ReplayError
 from .steam import ANONYMOUS, STEAM_ID_BASE, SteamError, leagues, store_avatars, store_names, team_logo
@@ -91,6 +91,20 @@ def add_account(session: Db, account_id: Annotated[int, Body(embed=True)]) -> di
     if not 0 < account_id < ANONYMOUS:
         raise HTTPException(422, f"{account_id} is not a friend id or a Steam id")
     track(session, [account_id])
+    return {"account_id": account_id}
+
+
+@app.delete("/api/accounts/{account_id}")
+def remove_account(session: Db, account_id: int) -> dict:
+    """Stop tracking an account: no new matches are fetched for it, its stored ones stay, and adding it again brings
+    them back. It is no longer the main profile."""
+    account = session.get(Account, account_id)
+    if account is None or not account.active:
+        raise HTTPException(404, f"account {account_id} is not tracked")
+    account.active = False
+    session.commit()
+    if settings.text("main_account") == str(account_id):
+        settings.change("main_account", "")
     return {"account_id": account_id}
 
 
@@ -197,8 +211,66 @@ def progress(session: Db) -> dict:
 
 
 @app.get("/api/settings")
-def settings() -> dict:
-    return {"steam_key": bool(os.environ.get("STEAM_API_KEY"))}
+def get_settings() -> dict:
+    return settings.values()
+
+
+@app.post("/api/settings")
+def set_settings(changes: Annotated[dict, Body()]) -> dict:
+    """Change some settings at once, {name: value}; nothing is kept when one of them is refused."""
+    try:
+        for name, value in changes.items():  # checked first, so a refused one changes nothing
+            settings.check(name, value)
+        for name, value in changes.items():
+            settings.change(name, value)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from None
+    return settings.values()
+
+
+@app.get("/api/settings/storage")
+def storage() -> list[dict]:
+    return poll.storage(DATA)
+
+
+@app.post("/api/settings/remove-parser-output")
+def remove_parser_output(session: Db, days: Annotated[int, Body(embed=True)]) -> dict:
+    if days < 1:
+        raise HTTPException(422, "only matches at least a day old")
+    return settings.remove_parser_output(session, days)
+
+
+@app.post("/api/settings/recompute")
+def recompute() -> dict:
+    settings.start_recompute(engine)
+    return settings.RECOMPUTE
+
+
+@app.get("/api/settings/recompute")
+def recomputing() -> dict:
+    return settings.RECOMPUTE
+
+
+@app.post("/api/settings/open")
+def open_folder(what: Annotated[str, Body(embed=True)]) -> dict:
+    """Show the data folder or the app's log in Windows; the server runs on the user's own machine."""
+    path = {"data": Path.cwd(), "log": Path("dotanalyst.log").resolve()}.get(what)
+    if path is None or not path.exists():
+        raise HTTPException(404, f"no {what} to open")
+    os.startfile(path)
+    return {"opened": str(path)}
+
+
+@app.get("/api/settings/update")
+def newest_version() -> dict:
+    """The installed version (None when run from the repo) and the newest release on GitHub."""
+    try:
+        with httpx.Client() as client:
+            newest = update.latest(client)["tag_name"].removeprefix("v")
+    except (httpx.HTTPError, KeyError, ValueError) as error:
+        raise HTTPException(502, f"GitHub: {error!r}") from None
+    current = update.installed_version()
+    return {"current": current, "newest": newest, "newer": current is not None and update.parse(newest) > update.parse(current)}
 
 
 @app.post("/api/settings/steam-key")
@@ -208,7 +280,7 @@ def set_steam_key(key: Annotated[str, Body(embed=True)]) -> dict:
     if not re.fullmatch(r"[0-9A-Fa-f]{32}", key):  # also keeps a line break out of .env
         raise HTTPException(422, "a Steam Web API key is 32 letters and digits (0-9, A-F)")
     save_env("STEAM_API_KEY", key.upper())
-    return settings()
+    return settings.values()
 
 
 @app.post("/api/teams/refresh")
@@ -250,6 +322,17 @@ def add_tournament(session: Db, league_id: Annotated[int, Body(embed=True)]) -> 
         session.add(League(league_id=league_id, name=known[league_id]))
         session.commit()
     return {"league_id": league_id, "name": known[league_id]}
+
+
+@app.delete("/api/leagues/{league_id}")
+def remove_tournament(session: Db, league_id: int) -> dict:
+    """Stop following a tournament: no new games of it are fetched, nor replays of the stored ones; those stay."""
+    league = session.get(League, league_id)
+    if league is None:
+        raise HTTPException(404, f"league {league_id} is not tracked")
+    session.delete(league)
+    session.commit()
+    return {"league_id": league_id}
 
 
 @app.get("/api/teams")

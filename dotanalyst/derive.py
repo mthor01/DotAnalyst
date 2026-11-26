@@ -3,6 +3,7 @@ import gzip
 import json
 import re
 from collections import Counter
+from collections.abc import Callable
 from math import hypot
 from pathlib import Path
 
@@ -530,8 +531,11 @@ def derive_match(session: Session, match_id: int, raw_dir: Path = DATA / "raw") 
     session.commit()
 
 
-def recompute(session: Session, raw_dir: Path = DATA / "raw") -> tuple[int, list[str]]:
-    """Rebuild every match's derived rows from the raw logs, newest first. Returns (matches done, what went wrong)."""
+def recompute(
+    session: Session, raw_dir: Path = DATA / "raw", on_match: Callable[[], None] | None = None
+) -> tuple[int, list[str]]:
+    """Rebuild every match's derived rows from the raw logs, newest first. Returns (matches done, what went wrong).
+    on_match is called after each match, done or not, for the settings page's count."""
     bind = session.get_bind()
     # only a table whose columns changed starts empty; the others keep each match's old rows until it is redone, so
     # the site stays filled during the hour this takes. shortcut: compares column names only, a changed type or key
@@ -552,4 +556,6 @@ def recompute(session: Session, raw_dir: Path = DATA / "raw") -> tuple[int, list
         except (OSError, ValueError, KeyError) as error:  # a missing or damaged log must not stop the rest
             session.rollback()
             problems.append(f"match {match_id}: {error!r}")
+        if on_match:
+            on_match()
     return done, problems

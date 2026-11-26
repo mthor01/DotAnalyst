@@ -9,7 +9,7 @@ from .db import (
     TABLES, Account, Death, Lane, LeagueMatch, Match, MatchPlayer, Metric, PlayerGame, PlayerGameList, PlayerMinute,
     PlayerName, Tormentor, Ward, WisdomRune,
 )  # fmt: skip
-from .replay import MAX_AGE_DAYS
+from .replay import max_age_days
 from .steam import ANONYMOUS, leagues, match_rows
 
 OTHER = aliased(MatchPlayer)
@@ -541,7 +541,7 @@ def team(
             select(PlayerGame.account_id, func.count())
             .outerjoin(Match, Match.match_id == PlayerGame.match_id)
             .where(
-                PlayerGame.account_id.in_(wanted), PlayerGame.start_time > datetime.now().timestamp() - MAX_AGE_DAYS * 86400,
+                PlayerGame.account_id.in_(wanted), PlayerGame.start_time > datetime.now().timestamp() - max_age_days() * 86400,
                 or_(Match.match_id.is_(None), Match.replay_state.in_(("none", "pending"))),
             )
             .group_by(PlayerGame.account_id)

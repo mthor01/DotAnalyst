@@ -218,8 +218,10 @@ def league_game(session: Session, match_id: int, age_days: float) -> dict:
 
 
 def test_poll_downloads_the_replays_of_recent_league_games(session, tmp_path):
-    league_game(session, GOOD, age_days=2)  # the parser of these tests answers with the log of GOOD
+    game = league_game(session, GOOD, age_days=2)  # the parser of these tests answers with the log of GOOD
     league_game(session, 1, age_days=100)  # outside the download window
+    session.add(League(league_id=game["leagueid"], name="Season 1"))  # tracked: only then are its replays fetched
+    session.commit()
     calls = []
     client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
 
@@ -232,6 +234,14 @@ def test_poll_downloads_the_replays_of_recent_league_games(session, tmp_path):
     calls.clear()
     poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
     assert for_replays(calls) == []  # copied once, fetched once
+
+
+def test_a_tournament_taken_off_the_list_downloads_no_more_replays(session, tmp_path):
+    league_game(session, GOOD, age_days=2)  # stored while it was tracked; its League row is gone since
+    calls = []
+    client = network(calls, opendota=(200, OPENDOTA), valve=(200, zstd.compress(REPLAY)))
+    poll_once(session, client, "", tmp_path / "nowhere", tmp_path)
+    assert session.get(Match, GOOD) is None and for_replays(calls) == []
 
 
 def test_a_requested_replay_of_a_league_game_makes_it_a_match(session, tmp_path):
