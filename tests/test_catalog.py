@@ -188,3 +188,16 @@ def test_catalog_step_looks_up_explores_and_subscribed_leagues_once(session):
     assert poll.catalog_step(session, client, poll.Setup("", None), NOW) == 2
     assert sorted(wiki) == ['insource:"leagueid=1002"', 'insource:"leagueid=1003"']  # active and subscribed
     assert poll.catalog_step(session, client, poll.Setup("", None), NOW + 60) == 0 and len(wiki) == 2
+
+
+def test_region_from_infobox_region_then_country():
+    assert catalog.region_of("Europe", "") == "Europe"
+    assert catalog.region_of("Southeast Asia", "") == "SEA"
+    assert catalog.region_of("", "Peru") == "South America"
+    assert catalog.region_of("", "Russia") == "CIS"
+    assert catalog.region_of("World", "") == "International"
+    assert catalog.region_of("", "Europe") == "Europe"  # Liquipedia writes a region as the country too
+
+
+def test_region_none_is_kept_as_empty():
+    assert catalog.region_of("", "") == "" and catalog.region_of("Atlantis", "Narnia") == ""

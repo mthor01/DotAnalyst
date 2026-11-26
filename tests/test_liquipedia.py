@@ -38,13 +38,14 @@ def test_infobox_reads_the_fields():
     text = json.loads((FIXTURES / "lp_found.json").read_text(encoding="utf-8"))["query"]["pages"]["501"]["revisions"][0]
     assert liquipedia.infobox(text["slots"]["main"]["*"]) == {
         "lp_tier": 3, "prize_usd": 50000, "start_date": "2026-11-07", "end_date": "2026-11-20", "location": "Jönköping, Sweden",
+        "region": "Europe",
     }  # fmt: skip
 
 
 def test_infobox_survives_odd_values():
     box = "{{Infobox league\n|liquipediatier=Qualifier\n|prizepoolusd=TBA\n|sdate=2026-11-??\n|type=Online\n|country=Europe\n}}"
-    assert liquipedia.infobox(box) == {"lp_tier": None, "prize_usd": None, "start_date": None, "end_date": None, "location": "Online, Europe"}
-    assert liquipedia.infobox("no infobox here") == dict.fromkeys(("lp_tier", "prize_usd", "start_date", "end_date", "location"))
+    assert liquipedia.infobox(box) == {"lp_tier": None, "prize_usd": None, "start_date": None, "end_date": None, "location": "Online, Europe", "region": "Europe"}
+    assert liquipedia.infobox("no infobox here") == {**dict.fromkeys(("lp_tier", "prize_usd", "start_date", "end_date", "location")), "region": ""}
     assert liquipedia.infobox("{{Infobox league\n|prizepoolusd=$1,600,000.00\n|liquipediatier=1}}")["prize_usd"] == 1600000
 
 
@@ -168,3 +169,8 @@ def test_a_structure_kept_by_an_older_version_is_read_again(tmp_path):
     asked: list[httpx.Request] = []
     found = liquipedia.structure(structure_client(asked), row(), tmp_path, NOW, finished=True)
     assert asked and found["brackets"]
+
+
+def test_infobox_reads_region():
+    assert liquipedia.infobox("{{Infobox league\n|country=Germany\n|type=Offline\n}}")["region"] == "Europe"
+    assert liquipedia.infobox("{{Infobox league\n|region=Southeast Asia\n|country=Singapore\n}}")["region"] == "SEA"

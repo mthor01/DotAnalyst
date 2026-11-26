@@ -107,6 +107,7 @@ class LeagueCatalog(Base):
     start_date: Mapped[str | None]
     end_date: Mapped[str | None]
     location: Mapped[str | None]
+    region: Mapped[str | None]  # Explore's region (catalog.region_of); "" none said, None never asked since it came
     lp_checked: Mapped[int | None]
     refreshed: Mapped[int | None]  # when OpenDota's list last had it
 
@@ -360,6 +361,8 @@ def open_engine() -> Engine:
             c.exec_driver_sql("ALTER TABLE player_game_lists ADD COLUMN replays_wanted BOOLEAN NOT NULL DEFAULT 0")
         if "twin_gates" not in {col["name"] for col in inspect(c).get_columns("player_minute")}:  # 0 until recompute
             c.exec_driver_sql("ALTER TABLE player_minute ADD COLUMN twin_gates INTEGER NOT NULL DEFAULT 0")
+        if "region" not in {col["name"] for col in inspect(c).get_columns("league_catalog")}:  # None until asked again
+            c.exec_driver_sql("ALTER TABLE league_catalog ADD COLUMN region VARCHAR")
         if "party_size" not in {col["name"] for col in inspect(c).get_columns("match_players")}:  # None until recompute
             c.exec_driver_sql("ALTER TABLE match_players ADD COLUMN party_size INTEGER")
     return engine

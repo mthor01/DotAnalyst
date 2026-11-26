@@ -21,7 +21,7 @@ PAUSE = 2.0  # seconds between Liquipedia requests, from whatever thread
 RECHECK_DAYS = 7  # a league still playing is asked again after this, as prize pools and dates change
 _paced = {"last": 0.0}
 _pace_lock = threading.Lock()
-FIELDS = ("lp_tier", "prize_usd", "start_date", "end_date", "location")
+FIELDS = ("lp_tier", "prize_usd", "start_date", "end_date", "location", "region")
 STRUCTURE_HOURS = 6  # brackets and groups of a league still playing are read again after this; a finished one's never
 MAX_PAGES = 50  # what one revisions request may ask for
 NOT_STAGES = ("Statistics", "prizepool")
@@ -50,6 +50,7 @@ def infobox(wikitext: str) -> dict:
         "prize_usd": int(prize) if prize.isdigit() else None,
         "start_date": date("sdate"), "end_date": date("edate"),
         "location": ", ".join(place) or None,
+        "region": catalog.region_of(field.get("region", ""), field.get("country", "")),
     }  # fmt: skip
 
 

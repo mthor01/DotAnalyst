@@ -30,6 +30,49 @@ SORTS = {  # search order; ties keep the newest league (highest id) first
 log = logging.getLogger(__name__)
 
 
+# Explore's regions: Liquipedia's own region names (also written as the country) and the countries of each
+REGIONS = {
+    "europe": "Europe", "western europe": "Europe", "cis": "CIS", "eastern europe": "CIS", "china": "China",
+    "southeast asia": "SEA", "sea": "SEA", "north america": "North America", "south america": "South America",
+    "mena": "MENA", "middle east": "MENA", "world": "International", "international": "International",
+    "global": "International",
+}  # fmt: skip
+_BY_REGION = {
+    "Europe": "Germany France United Kingdom Spain Italy Portugal Netherlands Belgium Sweden Denmark Norway Finland "
+              "Poland Czech Republic Czechia Slovakia Austria Switzerland Romania Bulgaria Serbia Croatia Greece Hungary "
+              "Ireland Slovenia Bosnia and Herzegovina North Macedonia Montenegro Albania Estonia Latvia Lithuania Malta "
+              "Cyprus Iceland Luxembourg",
+    "CIS": "Russia Ukraine Belarus Kazakhstan Uzbekistan Kyrgyzstan Tajikistan Armenia Georgia Azerbaijan Moldova Mongolia",
+    "China": "China Hong Kong Macau Taiwan",
+    "SEA": "Philippines Indonesia Malaysia Singapore Thailand Vietnam Myanmar Cambodia Laos",
+    "North America": "United States USA Canada Mexico",
+    "South America": "Peru Brazil Argentina Chile Bolivia Colombia Ecuador Paraguay Uruguay Venezuela",
+    "MENA": "United Arab Emirates UAE Saudi Arabia Qatar Kuwait Bahrain Oman Jordan Lebanon Egypt Morocco Tunisia "
+            "Algeria Iraq Iran Israel Turkey",
+}
+# multi-word names first, so "Czech Republic" is one country and "United States" not "United Kingdom"
+COUNTRIES = {}
+for _region, _names in _BY_REGION.items():
+    for _name in ("Czech Republic|United Kingdom|Bosnia and Herzegovina|North Macedonia|Hong Kong|United States|"
+                  "United Arab Emirates|Saudi Arabia").split("|"):
+        if _name in _names:
+            COUNTRIES[_name.lower()] = _region
+            _names = _names.replace(_name, "")
+    COUNTRIES.update({n.lower(): _region for n in _names.split()})
+
+
+def region_of(region: str, country: str) -> str:
+    """Explore's region of a tournament: Liquipedia's `region=`, else its `country=` as a region or a country; ""
+    when neither says (kept as asked: None is a row never asked)."""
+    for value in (region, country):
+        key = value.strip().lower()
+        if key in REGIONS:
+            return REGIONS[key]
+        if key in COUNTRIES:
+            return COUNTRIES[key]
+    return ""
+
+
 def _get(client: httpx.Client, url: str, **params):
     """OpenDota's answer as JSON, None when it fails."""
     pace()
