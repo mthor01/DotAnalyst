@@ -44,12 +44,17 @@ def pace() -> None:
         _paced["last"] = time.monotonic()
 
 
-def infobox(wikitext: str) -> dict:
-    """The fields of a page's league infobox; what is missing or not a value (TBA, 2026-11-??) is None."""
+def _fields(wikitext: str) -> dict[str, str]:
+    """Every field of a page's league infobox, as written."""
     start = wikitext.find("{{Infobox league")
     end = wikitext.find("\n}}", start)
     box = wikitext[start : end if end >= 0 else None] if start >= 0 else ""
-    field = {k: v.strip().removesuffix("}}").strip() for k, v in re.findall(r"^\|\s*(\w+)\s*=([^\n]*)", box, re.M)}
+    return {k: v.strip().removesuffix("}}").strip() for k, v in re.findall(r"^\|\s*(\w+)\s*=([^\n]*)", box, re.M)}
+
+
+def infobox(wikitext: str) -> dict:
+    """The fields of a page's league infobox; what is missing or not a value (TBA, 2026-11-??) is None."""
+    field = _fields(wikitext)
     date = lambda name: field[name] if re.fullmatch(r"\d{4}-\d{2}-\d{2}", field.get(name, "")) else None  # noqa: E731
     prize = re.sub(r"[$,\s]", "", field.get("prizepoolusd", "")).split(".")[0]
     place = [field[k] for k in ("city", "country") if field.get(k)]
@@ -111,6 +116,53 @@ def _get(client: httpx.Client, url: str, params: dict) -> dict | None:
     except (httpx.HTTPError, ValueError):
         body = None
     return body if isinstance(body, dict) else None
+
+
+LIST = "Liquipedia:Tournaments"  # the upcoming, ongoing and completed tournaments of Liquipedia's sidebar
+LIST_HOURS = 6  # the list is read again after this
+
+
+def sidebar(wikitext: str) -> list[dict]:
+    """The upcoming and ongoing tournaments of Liquipedia's sidebar list (`** Page_title | Short name | …` under
+    `*Upcoming` and `*Ongoing`), each page title as the API writes it (spaces, not underscores)."""
+    found, state = [], None
+    for line in wikitext.splitlines():
+        if line.startswith("*") and not line.startswith("**"):
+            state = line.lstrip("*").strip().lower()
+        elif line.startswith("**") and state in ("upcoming", "ongoing"):
+            page = line.lstrip("*").split("|")[0].strip().replace("_", " ")
+            if page:
+                found.append({"page": page[0].upper() + page[1:], "state": state})
+    return found
+
+
+def fetch_list(client: httpx.Client, data: Path, now: float) -> int:
+    """Liquipedia's upcoming and ongoing tournaments with their infobox (name, tier, prize pool, dates, place, region,
+    league id once it has one) into data/explore/lp_tournaments.json, unless read under LIST_HOURS ago: 2 requests. A
+    failed request keeps the old list. A page without an answer is left out. Returns the tournaments kept."""
+    stored = data / "explore" / "lp_tournaments.json"
+    try:
+        kept = json.loads(stored.read_text())
+    except (OSError, ValueError):
+        kept = None
+    if isinstance(kept, dict) and now - kept.get("read", 0) < LIST_HOURS * 3600:
+        return 0
+    body = _get(client, API, {"action": "query", "prop": "revisions", "rvprop": "content", "rvslots": "main", "titles": LIST})
+    listed = sidebar(_texts(body).get(LIST, "")) if body else []
+    body = listed and _get(client, API, {"action": "query", "prop": "revisions", "rvprop": "content", "rvslots": "main",
+                                         "titles": "|".join(t["page"] for t in listed[:MAX_PAGES])})  # fmt: skip
+    if not body:
+        return 0
+    texts, found = _texts(body), []
+    for t in listed[:MAX_PAGES]:
+        if t["page"] not in texts:
+            continue
+        field = _fields(texts[t["page"]])
+        found.append({**t, "name": field.get("name") or t["page"], "league_id": int(field["leagueid"]) if field.get("leagueid", "").isdigit() else None,
+                      **infobox(texts[t["page"]])})  # fmt: skip
+    stored.parent.mkdir(parents=True, exist_ok=True)
+    stored.write_text(json.dumps({"read": now, "tournaments": found}))
+    return len(found)
 
 
 def _texts(body: dict) -> dict[str, str]:

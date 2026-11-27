@@ -216,3 +216,70 @@ def test_kept_and_due(tmp_path):
     assert liquipedia.kept(1002, tmp_path) is None and liquipedia.structure_due(row, tmp_path, 1001, True)
     kept.write_text("not json")
     assert liquipedia.kept(1002, tmp_path) is None
+
+
+# ---- Liquipedia's list of upcoming and ongoing tournaments (its sidebar), for Explore
+SIDEBAR = """
+*Upcoming
+** Grand_Cup/30 | Grand Cup S30 | icon= | iconfile=File:Grand.png | startdate=Dec 02 | enddate=Dec 13
+** Small_Cup/4/Open_Qualifier_1 | Small Cup OQ1 | icon= | startdate=Dec 04 | enddate=Dec 07
+
+*Ongoing
+** Big_League/41 | Big League 41 | icon= | startdate=Nov 12 | enddate=Nov 28
+
+*Completed
+** Old_Cup/2 | Old Cup S2 | icon= | startdate=Nov 03 | enddate=Nov 20
+"""
+
+
+def box(name: str, tier: int, sdate: str, edate: str, leagueid: str = "") -> str:
+    return (f"{{{{Infobox league\n|name={name}\n|liquipediatier={tier}\n|sdate={sdate}\n|edate={edate}\n|type=Online\n"
+            f"|region=Europe\n|prizepoolusd=$100,000\n|leagueid={leagueid}\n}}}}")  # fmt: skip
+
+
+def lp_pages(texts: dict[str, str]) -> dict:
+    pages = {str(i): {"title": t, "revisions": [{"slots": {"main": {"*": x}}}]} for i, (t, x) in enumerate(texts.items())}
+    return {"query": {"pages": pages}}
+
+
+def test_sidebar_reads_upcoming_and_ongoing():
+    assert liquipedia.sidebar(SIDEBAR) == [
+        {"page": "Grand Cup/30", "state": "upcoming"},
+        {"page": "Small Cup/4/Open Qualifier 1", "state": "upcoming"},
+        {"page": "Big League/41", "state": "ongoing"},
+    ]
+
+
+def test_the_tournament_list_is_kept(tmp_path):
+    asked: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(request)
+        if request.url.params["titles"] == "Liquipedia:Tournaments":
+            return httpx.Response(200, json=lp_pages({"Liquipedia:Tournaments": SIDEBAR}))
+        return httpx.Response(200, json=lp_pages({  # the qualifier's page not answered: left out
+            "Grand Cup/30": box("Grand Cup Season 30", 1, "2026-12-02", "2026-12-13", leagueid="1009"),
+            "Big League/41": box("Big League 41", 3, "2026-11-12", "2026-11-28"),
+        }))  # fmt: skip
+
+    client = httpx.Client(transport=httpx.MockTransport(answer))
+    assert liquipedia.fetch_list(client, tmp_path, NOW) == 2
+    assert asked[1].url.params["titles"] == "Grand Cup/30|Small Cup/4/Open Qualifier 1|Big League/41"
+    assert asked[1].headers["User-Agent"] == liquipedia.AGENT
+    kept = json.loads((tmp_path / "explore" / "lp_tournaments.json").read_text())
+    grand, big = kept["tournaments"]
+    assert kept["read"] == NOW and grand == {
+        "page": "Grand Cup/30", "name": "Grand Cup Season 30", "state": "upcoming", "league_id": 1009, "lp_tier": 1,
+        "prize_usd": 100000, "start_date": "2026-12-02", "end_date": "2026-12-13", "location": "Online", "region": "Europe",
+    }  # fmt: skip
+    assert (big["league_id"], big["state"]) == (None, "ongoing")
+    assert liquipedia.fetch_list(client, tmp_path, NOW + 5 * 3600) == 0 and len(asked) == 2  # read under 6 hours ago
+
+
+def test_a_failed_tournament_list_keeps_the_old(tmp_path):
+    kept = tmp_path / "explore" / "lp_tournaments.json"
+    kept.parent.mkdir()
+    kept.write_text(json.dumps({"read": 0, "tournaments": [{"page": "Old"}]}))
+    broken = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+    assert liquipedia.fetch_list(broken, tmp_path, NOW) == 0
+    assert json.loads(kept.read_text())["tournaments"] == [{"page": "Old"}]

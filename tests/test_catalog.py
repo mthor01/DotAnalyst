@@ -177,6 +177,8 @@ def test_catalog_step_looks_up_explores_and_subscribed_leagues_once(session, tmp
     wiki: list[str] = []
 
     def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "liquipedia.net" and "titles" in request.url.params:  # Explore's tournament list: none
+            return httpx.Response(200, json={"query": {"pages": {}}})
         if request.url.host == "liquipedia.net":
             wiki.append(request.url.params["gsrsearch"])
             return httpx.Response(200, content=(FIXTURES / "lp_none.json").read_bytes())

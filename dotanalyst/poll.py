@@ -342,6 +342,7 @@ def catalog_step(session: Session, client: httpx.Client, setup: Setup, now: floa
     catalog.refresh(session, client, now)
     doing("catalog", "asking OpenDota for the recent pro games")
     explore.fetch_results(client, setup.data, now)
+    liquipedia.fetch_list(client, setup.data, now)  # Explore's upcoming tournaments, every 6 hours
     found = catalog.explore(session, now)
     wanted = [r["league_id"] for r in found["live"] + found["big"]] + list(session.scalars(select(League.league_id)))
     due = [i for i in dict.fromkeys(wanted) if (row := session.get(catalog.LeagueCatalog, i)) is None or liquipedia.due(row, now)]

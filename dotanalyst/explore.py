@@ -158,9 +158,10 @@ def series_of(games: list[dict], now: float) -> list[dict]:
 
 
 # ---- which tournaments Explore follows, and its answer
-SOON_DAYS = 14  # starting soon: a Liquipedia start date this many days ahead at most
+SOON_DAYS = 14  # a tournament starting this many days ahead at most has its structure kept
+AHEAD_DAYS = 60  # Upcoming tournaments: a start date this many days ahead at most
 FINISHED_DAYS = 30  # recently finished: an end date this many days back at most
-CALENDAR_BACK, CALENDAR_AHEAD = 14, 42  # days the calendar shows around today
+CALENDAR_BACK, CALENDAR_AHEAD = 14, AHEAD_DAYS  # days the calendar shows around today
 UPCOMING_HOURS = 24
 SHOWN = 20  # upcoming matches and results at most
 NEWCOMERS = 50  # the newest pro leagues without a game that are looked up on Liquipedia
@@ -229,10 +230,10 @@ def answer(session: Session, data: Path, now: float | None = None) -> dict:
     online), for the browser to filter."""
     now = now or time.time()
     subscribed = set(session.scalars(select(League.league_id)))
-    rows: dict[int, LeagueCatalog] = {}
+    rows: dict[int | str, LeagueCatalog] = {}  # a tournament only Liquipedia's list has: "lp:<page>", a row of no league
 
     def league(league_id) -> LeagueCatalog | None:
-        if league_id not in rows and (r := session.get(LeagueCatalog, league_id)) is not None:
+        if league_id not in rows and isinstance(league_id, int) and (r := session.get(LeagueCatalog, league_id)) is not None:
             rows[league_id] = r
         return rows.get(league_id)
 
@@ -246,8 +247,7 @@ def answer(session: Session, data: Path, now: float | None = None) -> dict:
 
     every = list(session.scalars(select(LeagueCatalog).where(or_(
         LeagueCatalog.start_date.is_not(None), LeagueCatalog.end_date.is_not(None), LeagueCatalog.first_game.is_not(None)))))  # fmt: skip
-    soon = sorted((r for r in every if (s := _start(r)) and catalog.day_end(r.start_date) and now <= s <= now + SOON_DAYS * 86400),
-                  key=_start)  # fmt: skip
+    soon = {r.league_id: s for r in every if (s := _start(r)) and catalog.day_end(r.start_date) and now <= s <= now + AHEAD_DAYS * 86400}
     calendar = []
     for r in every:
         if not r.lp_tier or not 1 <= r.lp_tier <= 3 or (start := _start(r)) is None:
@@ -257,6 +257,27 @@ def answer(session: Session, data: Path, now: float | None = None) -> dict:
             continue
         calendar.append({"league_id": r.league_id, "start": start, "end": end or max(now, start), "open": end is None})
         league(r.league_id)
+    # Liquipedia's list of upcoming and ongoing tournaments: those without a league id yet, and dates our rows lack
+    shown = {c["league_id"] for c in calendar}
+    for t in (_read(data / "explore" / "lp_tournaments.json") or {}).get("tournaments", []):
+        r = (session.get(LeagueCatalog, t["league_id"]) if t.get("league_id") else None) or \
+            session.scalar(select(LeagueCatalog).where(LeagueCatalog.lp_page == t["page"]).limit(1))  # fmt: skip
+        key = r.league_id if r else f"lp:{t['page']}"
+        if r is None:
+            rows[key] = LeagueCatalog(name=t["name"], lp_page=t["page"], **{f: t.get(f) for f in liquipedia.FIELDS})
+        else:
+            league(key)
+        start, end = catalog.day_end(t.get("start_date")), catalog.day_end(t.get("end_date"))
+        if start is None:
+            continue
+        start -= 86399
+        if t["state"] == "upcoming" and now <= start <= now + AHEAD_DAYS * 86400:
+            soon.setdefault(key, start)
+        tier = t.get("lp_tier")
+        if key not in shown and tier and 1 <= tier <= 3 and start <= now + CALENDAR_AHEAD * 86400 and (end or now) >= now - CALENDAR_BACK * 86400:
+            calendar.append({"league_id": key, "start": start, "end": end or max(now, start), "open": end is None})
+            shown.add(key)
+    soon = sorted(soon, key=soon.get)
     finished = []
     for r in sorted((r for r in followed if ended(r, now)), key=lambda r: -(catalog.day_end(r.end_date) or 0)):
         kept = liquipedia.kept(r.league_id, data) or {}
@@ -267,11 +288,11 @@ def answer(session: Session, data: Path, now: float | None = None) -> dict:
     big = [r["league_id"] for r in catalog.explore(session, now)["big"]]
 
     for league_id in [g["league_id"] for g in live] + [m["league_id"] for m in upcoming] + [s["league_id"] for s in results] \
-            + [r.league_id for r in soon] + [f["league_id"] for f in finished] + big:  # fmt: skip
+            + soon + [f["league_id"] for f in finished] + big:  # fmt: skip
         league(league_id)
     return {
         "leagues": _rows(rows, now, subscribed), "live": live, "upcoming": upcoming, "results": results,
-        "soon": [r.league_id for r in soon], "calendar": calendar, "big": big, "finished": finished,
+        "soon": soon, "calendar": calendar, "big": big, "finished": finished,
     }  # fmt: skip
 
 

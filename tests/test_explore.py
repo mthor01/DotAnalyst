@@ -248,11 +248,12 @@ def test_catalog_step_fills_explore(monkeypatch, tmp_path, session):
     calls: dict[str, list] = {"results": [], "lookups": [], "structures": []}
     monkeypatch.setattr(poll.catalog, "refresh", lambda s, c, now: 0)
     monkeypatch.setattr(poll.explore, "fetch_results", lambda c, data, now: calls["results"].append(data) or 0)
+    monkeypatch.setattr(poll.liquipedia, "fetch_list", lambda c, data, now: calls["results"].append(("list", data)) or 0)
     monkeypatch.setattr(poll.liquipedia, "lookup", lambda s, c, league_id, now: calls["lookups"].append(league_id) or False)
     monkeypatch.setattr(poll.liquipedia, "structure", lambda c, row, data, now, finished: calls["structures"].append(row.league_id))
     monkeypatch.setattr(poll, "STRUCTURES", 2)
     poll.catalog_step(session, httpx.Client(), poll.Setup("key", None, tmp_path), NOW)
-    assert calls["results"] == [tmp_path]
+    assert calls["results"] == [tmp_path, ("list", tmp_path)]  # OpenDota's results, Liquipedia's tournament list
     assert {2001, 2002, 1002} <= set(calls["lookups"])  # newcomers, and a region never asked
     assert 1003 not in calls["lookups"]  # asked a day ago, region said none
     assert calls["structures"] == [1001, 1004]  # the first two due, live first
@@ -322,6 +323,7 @@ def test_catalog_step_reads_your_tournaments_brackets_first(monkeypatch, tmp_pat
     read: list[tuple[int, bool]] = []
     monkeypatch.setattr(poll.catalog, "refresh", lambda s, c, now: 0)
     monkeypatch.setattr(poll.explore, "fetch_results", lambda c, data, now: 0)
+    monkeypatch.setattr(poll.liquipedia, "fetch_list", lambda c, data, now: 0)
     monkeypatch.setattr(poll.liquipedia, "lookup", lambda s, c, league_id, now: False)
     monkeypatch.setattr(poll.liquipedia, "structure", lambda c, row, data, now, finished: read.append((row.league_id, finished)))
     session.add_all([League(league_id=1006, name="Tier Four"), League(league_id=1005, name="Old")])  # tier 4; over 100 days ago
@@ -329,3 +331,33 @@ def test_catalog_step_reads_your_tournaments_brackets_first(monkeypatch, tmp_pat
     poll.catalog_step(session, httpx.Client(), poll.Setup("key", None, tmp_path), NOW)
     assert read[:2] == [(1005, True), (1006, False)]  # yours, though Explore follows neither; a finished one read once
     assert [i for i, _ in read[2:]] == [1001, 1004, 1002, 1003]
+
+
+# ---- upcoming tournaments from Liquipedia's list
+def lp_list(data, tournaments: list[dict]) -> None:
+    (data / "explore").mkdir(exist_ok=True)
+    (data / "explore" / "lp_tournaments.json").write_text(json.dumps({"read": NOW, "tournaments": tournaments}))
+
+
+def lp(page, start, end, state="upcoming", league_id=None, tier=1) -> dict:
+    return {"page": page, "name": f"{page} Full", "state": state, "league_id": league_id, "lp_tier": tier, "prize_usd": 5000,
+            "start_date": date(start), "end_date": date(end), "location": "Online", "region": "Europe"}  # fmt: skip
+
+
+def test_upcoming_tournaments_from_liquipedias_list(session, tmp_path):
+    lp_list(tmp_path, [
+        lp("New Cup/1", NOW + 30 * DAY, NOW + 40 * DAY),  # no league id yet: Liquipedia's only
+        lp("Soon", NOW + 5 * DAY, NOW + 10 * DAY),  # our 1003, by its page
+        lp("Id Cup", NOW + 2 * DAY, NOW + 3 * DAY, league_id=2001),  # our 2001, by its league id; we have no dates
+        lp("Far Cup/2", NOW + 70 * DAY, NOW + 80 * DAY),  # over 60 days ahead
+        lp("Running Cup", NOW - 2 * DAY, NOW + 3 * DAY, state="ongoing", tier=2),
+    ])  # fmt: skip
+    a = explore.answer(session, tmp_path, NOW)
+    assert a["soon"] == [2001, 1003, "lp:New Cup/1"]  # within 60 days, soonest first
+    new = a["leagues"]["lp:New Cup/1"]
+    assert (new["league_id"], new["name"], new["lp_tier"], new["lp_page"], new["online"], new["region"]) == (
+        None, "New Cup/1 Full", 1, "New Cup/1", True, "Europe")  # fmt: skip
+    cal = {c["league_id"]: c for c in a["calendar"]}
+    assert {"lp:New Cup/1", "lp:Running Cup", 2001, 1003} <= set(cal) and "lp:Far Cup/2" not in cal
+    assert cal["lp:New Cup/1"]["start"] == liquipedia.catalog.day_end(date(NOW + 30 * DAY)) - 86399 and not cal["lp:Running Cup"]["open"]
+    assert cal[2001]["end"] == liquipedia.catalog.day_end(date(NOW + 3 * DAY))  # Liquipedia's dates where ours are missing
