@@ -139,18 +139,22 @@ def leagues_step(session: Session, client: httpx.Client, setup: Setup) -> int:
     new = 0
     if setup.key:
         doing("leagues", "asking Steam for new league games")
-        new = sync_leagues(session, client, setup.key, setup.newest_only)
-    # a league game young enough to download becomes a match like any other: its replay is fetched and its stats
-    # computed by the steps after. No tracked account plays in it, so it joins nobody's stats
+        # each game as soon as it is stored: a new tournament is read one request a game, up to 500 of them
+        new = sync_leagues(session, client, setup.key, setup.newest_only, stored=lambda: young_matches(session))
+    young_matches(session)  # and those stored before, or before the download window grew
+    return new
+
+
+def young_matches(session: Session) -> None:
+    """A league game young enough to download becomes a match like any other: its replay is fetched and its stats
+    computed by the steps after. No tracked account plays in it, so it joins nobody's stats."""
     recent = select(LeagueMatch.raw_json).where(
         LeagueMatch.start_time > time.time() - max_age_days() * 86400, LeagueMatch.match_id.not_in(select(Match.match_id)),
         LeagueMatch.league_id.in_(select(League.league_id)),  # a tournament taken off the list downloads no more
     )
-    young = session.scalars(recent).all()
-    for raw in young:
+    for raw in session.scalars(recent).all():
         store_match(session, raw)
     session.commit()
-    return new
 
 
 def usual_step(session: Session, client: httpx.Client, setup: Setup) -> int:

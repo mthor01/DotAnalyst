@@ -405,7 +405,7 @@ Shown on the team page under each player, as the same role wheel as a profile's 
 
 ### League games as matches
 
-A league game starts out in `league_matches` only; its match page is built from the answer Steam gave for it. It is copied into `matches` when it is younger than 90 days (the settings' replay age, `max_age_days` in `replay.py`; 30 until 2026-11-20) and its tournament is still tracked (by the leagues step every round, so the poller downloads its replay and computes its stats like any match's) or when its replay is asked for (the button on its page, or under "First moves" on a team page). From then on it is a match like any other. No tracked account plays in it, so it joins no account's stats: those only count rows where the account itself played.
+A league game starts out in `league_matches` only; its match page is built from the answer Steam gave for it. It is copied into `matches` when it is younger than 90 days (the settings' replay age, `max_age_days` in `replay.py`; 30 until 2026-11-20) and its tournament is still tracked (by the leagues step, right after the league sync stores the game, so the poller downloads its replay and computes its stats like any match's; a newly subscribed tournament is read one Steam request a game, up to 500 of them, and its replays start while that backfill goes on instead of after it. The step checks once more after the sync, for games stored before or before the download window grew) or when its replay is asked for (the button on its page, or under "First moves" on a team page). From then on it is a match like any other. No tracked account plays in it, so it joins no account's stats: those only count rows where the account itself played.
 
 ### Replay queue (Queue page)
 

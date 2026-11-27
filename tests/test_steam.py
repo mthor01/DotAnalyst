@@ -320,6 +320,12 @@ def test_league_sync_stores_each_game_with_its_teams_and_draft(session, tracked)
     assert (game.raw_json["series_id"], game.raw_json["series_type"]) == (1037904, 1)
 
 
+def test_league_sync_reports_each_stored_game(session, tracked):
+    seen = []
+    steam.sync_leagues(session, FakeLeague().client, KEY, stored=lambda: seen.append(session.query(LeagueMatch).count()))
+    assert seen == [1, 2, 3, 4]  # after each game, once it is committed
+
+
 def test_league_sync_reads_on_past_a_page_that_says_nothing_remains(session, tracked):
     steam.sync_leagues(session, FakeLeague().client, KEY)
     assert session.get(LeagueMatch, LATER_GAME["match_id"]) is not None

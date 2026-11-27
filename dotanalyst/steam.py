@@ -171,8 +171,9 @@ def leagues(session: Session) -> dict[int, str]:
     return dict(session.execute(select(League.league_id, League.name).order_by(League.league_id)).all())
 
 
-def sync_leagues(session: Session, client: httpx.Client, key: str, newest_only: bool = False) -> int:
+def sync_leagues(session: Session, client: httpx.Client, key: str, newest_only: bool = False, stored=None) -> int:
     """Store the games of the tracked tournaments that are not stored yet, and their players' Steam names and pictures. Returns the new games.
+    `stored`, when given, is called after each stored game: a new tournament's replays need not wait for its last game.
 
     Only the newest 500 games of a league can be listed, see the shortcut below. newest_only stops reading a league
     at a page whose games are all stored.
@@ -195,6 +196,8 @@ def sync_leagues(session: Session, client: httpx.Client, key: str, newest_only: 
                 store_league_match(session, {**found, "series_id": entry.get("series_id"), "series_type": entry.get("series_type")})
                 session.commit()  # per match, so an interrupted backfill keeps its progress
                 new += 1
+                if stored:
+                    stored()
             # shortcut: Steam lists only the newest 500 games of a league (season 7 has 561), and about 1 game in 400
             # falls between two pages; both measured against dota2.com's GetLeagueData. An older game can still be
             # listed with account_id of one of its players next to league_id, if the missing ones are ever wanted

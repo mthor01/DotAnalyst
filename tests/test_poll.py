@@ -244,6 +244,22 @@ def test_a_tournament_taken_off_the_list_downloads_no_more_replays(session, tmp_
     assert session.get(Match, GOOD) is None and for_replays(calls) == []
 
 
+def test_a_league_game_becomes_a_match_without_waiting_for_the_backfill(session, tmp_path, monkeypatch):
+    """A new tournament's games are read one Steam request each, up to 500: its replays must not wait for the last."""
+
+    def backfill(session, client, key, newest_only=False, stored=None):
+        game = league_game(session, GOOD, age_days=2)
+        session.add(League(league_id=game["leagueid"], name="Season 1"))
+        session.commit()
+        stored()
+        raise RuntimeError("Steam stopped answering before the rest of the league was read")
+
+    monkeypatch.setattr(poll, "sync_leagues", backfill)
+    with pytest.raises(RuntimeError):
+        poll.leagues_step(session, httpx.Client(), poll.Setup("key", None, tmp_path))
+    assert session.get(Match, GOOD) is not None  # queued for its replay all the same
+
+
 def test_a_requested_replay_of_a_league_game_makes_it_a_match(session, tmp_path):
     game = league_game(session, GOOD, age_days=100)
     calls = []
