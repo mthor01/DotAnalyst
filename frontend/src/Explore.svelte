@@ -143,6 +143,11 @@
   </section>
 {/if}
 
+<p class="muted credit">
+  Upcoming tournaments and matches, brackets, tiers, prize pools, dates, places and winners from
+  <a href="https://liquipedia.net/dota2/" target="_blank" rel="noreferrer">Liquipedia</a>, CC BY-SA 3.0.
+</p>
+
 <style>
   h2 {
     margin: 26px 0 10px;
@@ -178,5 +183,9 @@
   }
   .pad {
     padding: 10px 14px 12px;
+  }
+  .credit {
+    margin-top: 30px;
+    font-size: 13px;
   }
 </style>

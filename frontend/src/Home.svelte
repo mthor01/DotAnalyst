@@ -128,6 +128,11 @@
   <span class="muted" role="status">{added}</span>
 </form>
 
+<p class="muted credit">
+  Upcoming matches, tiers, prize pools, dates and places from
+  <a href="https://liquipedia.net/dota2/" target="_blank" rel="noreferrer">Liquipedia</a>, CC BY-SA 3.0.
+</p>
+
 <style>
   .filters {
     flex-wrap: wrap;
@@ -141,6 +146,10 @@
   }
   .byid {
     margin-top: 26px;
+  }
+  .credit {
+    margin-top: 30px;
+    font-size: 13px;
   }
   h2 {
     margin: 26px 0 10px;
