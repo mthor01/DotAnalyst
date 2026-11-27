@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { TIER_COLOR, tierGroup, type ExploreAnswer, type ExploreLeague } from './leagues'
+  import { TIER_COLOR, liquipedia, tierGroup, type ExploreAnswer, type ExploreLeague } from './leagues'
 
-  // the tournaments of these weeks as bars on one timeline; bars that do not overlap share a row
-  let { entries, league, now }: { entries: ExploreAnswer['calendar']; league: (id: number) => ExploreLeague | undefined; now: number } = $props()
+  // the tournaments of these weeks as bars on one timeline; bars that do not overlap share a row. One only
+  // Liquipedia's list knows (no league id yet) links to Liquipedia
+  let { entries, league, now }: { entries: ExploreAnswer['calendar']; league: (id: number | string) => ExploreLeague | undefined; now: number } =
+    $props()
 
   const DAY = 86400
-  const from = $derived(now - 14 * DAY)
-  const to = $derived(now + 42 * DAY)
+  const from = $derived(now - 14 * DAY) // explore.py's CALENDAR_BACK and CALENDAR_AHEAD
+  const to = $derived(now + 60 * DAY)
   const at = (t: number) => ((Math.min(Math.max(t, from), to) - from) / (to - from)) * 100
   const ROW = 30
 
@@ -47,7 +49,9 @@
         <a
           class="bar"
           class:open={e.open}
-          href="#league/{e.league_id}"
+          href={l.league_id !== null ? `#league/${l.league_id}` : l.lp_page ? liquipedia(l.lp_page) : undefined}
+          target={l.league_id === null ? '_blank' : undefined}
+          rel={l.league_id === null ? 'noopener' : undefined}
           title="{l.name}: {span(e.start, e.end, e.open)}"
           style:left="{at(e.start)}%"
           style:width="max(6px, {at(Math.max(e.end, e.start + 86400)) - at(e.start)}%)"

@@ -1,15 +1,14 @@
 <script lang="ts">
   import { STATUS, TIER_COLOR, dates, money, subscribe, tierGroup, type ExploreLeague } from './leagues'
 
-  // one tournament on Explore: its tier as the colour of the left edge, as on the calendar
-  let { league, winner = undefined }: { league: ExploreLeague; winner?: { name: string; logo: string | null } | null } = $props()
+  // one tournament on Explore's Biggest: its tier as the colour of the left edge, as on the calendar
+  let { league }: { league: ExploreLeague } = $props()
   let failed = $state('')
   const upcoming = $derived(!league.first_game && !!league.start_date && Date.parse(`${league.start_date}T00:00:00Z`) > Date.now())
-  // a card with a winner slot is on Recently finished: Liquipedia's end date passed, whatever the last game says
-  const status = $derived(winner !== undefined ? STATUS.finished : upcoming ? 'Upcoming' : STATUS[league.status])
+  const status = $derived(upcoming ? 'Upcoming' : STATUS[league.status])
   async function toggle() {
     try {
-      await subscribe(league, !league.subscribed)
+      await subscribe(league as ExploreLeague & { league_id: number }, !league.subscribed)
       failed = ''
     } catch (e) {
       failed = (e as Error).message
@@ -28,16 +27,6 @@
     {#if league.games}<span>{league.games} games</span>{/if}
   </p>
   <p class="muted">{dates(league)}{league.location ? `, ${league.location}` : ''}</p>
-  {#if winner !== undefined}
-    <p class="winner">
-      {#if winner}
-        {#if winner.logo}<img src={winner.logo} alt="" width="22" height="22" />{/if}
-        <span>Won by <strong>{winner.name}</strong></span>
-      {:else}
-        <span class="muted">Winner not known</span>
-      {/if}
-    </p>
-  {/if}
   <footer>
     <button class="action" aria-pressed={league.subscribed} onclick={toggle}>{league.subscribed ? 'Subscribed ✓' : 'Subscribe'}</button>
     {#if failed}<span class="error" role="alert">{failed}</span>{/if}
@@ -107,14 +96,6 @@
     gap: 4px 14px;
     color: var(--text-2);
     font-variant-numeric: tabular-nums;
-  }
-  .winner {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .winner img {
-    object-fit: contain;
   }
   footer {
     margin-top: auto;

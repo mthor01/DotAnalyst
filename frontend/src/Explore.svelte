@@ -3,6 +3,7 @@
   import Calendar from './lib/Calendar.svelte'
   import MatchBoard from './lib/MatchBoard.svelte'
   import TournamentCard from './lib/TournamentCard.svelte'
+  import TournamentLine from './lib/TournamentLine.svelte'
   import { TIER_GROUPS, tierGroup, type ExploreAnswer, type TierGroup } from './lib/leagues'
 
   // Explore: the tournament scene at a glance, from what the poller keeps (explore.py); the filters work in the browser
@@ -36,9 +37,9 @@
   const regions = $derived(REGION_ORDER.filter((r) => Object.values(found?.leagues ?? {}).some((l) => l.region === r)))
   const filtering = $derived(!!filters.tiers.length || !!filters.regions.length || filters.place !== 'both')
 
-  const league = (id: number) => found?.leagues[String(id)]
+  const league = (id: number | string) => found?.leagues[String(id)]
   /** Whether a tournament passes the filters; one Explore knows nothing about passes only when nothing is filtered */
-  function shown(id: number) {
+  function shown(id: number | string) {
     const l = league(id)
     if (!l) return !filtering
     if (filters.tiers.length && !filters.tiers.includes(tierGroup(l.lp_tier))) return false
@@ -54,11 +55,31 @@
   const calendar = $derived(found?.calendar.filter((c) => shown(c.league_id)) ?? [])
   const big = $derived(found?.big.filter(shown) ?? [])
   const finished = $derived(found?.finished.filter((f) => shown(f.league_id)) ?? [])
-
 </script>
 
 {#snippet empty(reason: string)}
   <p class="muted">{filtering ? 'Nothing here matches the filters.' : reason}</p>
+{/snippet}
+
+{#snippet side()}
+  <section data-block="tournaments.explore.soon">
+    <h2>Upcoming tournaments</h2>
+    {#if soon.length}
+      <ul class="card lines">{#each soon as id (id)}{@const l = league(id)}{#if l}<TournamentLine league={l} />{/if}{/each}</ul>
+    {:else}
+      {@render empty('No tournament known to Liquipedia starts in the next 60 days.')}
+    {/if}
+  </section>
+  <section data-block="tournaments.explore.finished">
+    <h2>Recently finished</h2>
+    {#if finished.length}
+      <ul class="card lines">
+        {#each finished as f (f.league_id)}{@const l = league(f.league_id)}{#if l}<TournamentLine league={l} winner={f.winner} />{/if}{/each}
+      </ul>
+    {:else}
+      {@render empty('No tier 1 to 3 tournament ended in the last 30 days.')}
+    {/if}
+  </section>
 {/snippet}
 
 {#if error}<p class="error" role="alert">Explore could not load: {error}</p>{/if}
@@ -81,7 +102,7 @@
       <button aria-pressed={filters.place === id} onclick={() => (filters.place = id as Filters['place'])}>{name}</button>
     {/each}
   </div>
-  {#if filtering}<button class="clear" onclick={() => (filters = { tiers: [], regions: [], place: 'both' })}>Clear filters</button>{/if}
+  {#if filtering}<button class="clear" onclick={() => (filters = { tiers: [], regions: [], place: 'both' })}>Show all</button>{/if}
 </div>
 
 {#if !found}
@@ -94,22 +115,14 @@
     {league}
     {filtering}
     block="tournaments.explore"
-    upcomingTitle="Upcoming in the next 24 hours"
+    upcomingTitle="Upcoming matches"
+    aside={side}
     empty={{
       live: 'No league game is live right now. Steam is asked every 5 minutes.',
       upcoming: 'No match on the brackets read so far starts in the next 24 hours. A few tournaments are read from Liquipedia each poll round.',
       results: "No finished series yet: OpenDota's recent pro games are read every 10 minutes.",
     }}
   />
-
-  <section data-block="tournaments.explore.soon">
-    <h2>Starting soon</h2>
-    {#if soon.length}
-      <div class="grid">{#each soon as id (id)}{@const l = league(id)}{#if l}<TournamentCard league={l} />{/if}{/each}</div>
-    {:else}
-      {@render empty('No tournament known to Liquipedia starts in the next 14 days.')}
-    {/if}
-  </section>
 
   <section data-block="tournaments.explore.calendar">
     <h2>Calendar</h2>
@@ -126,17 +139,6 @@
       <div class="grid">{#each big as id (id)}{@const l = league(id)}{#if l}<TournamentCard league={l} />{/if}{/each}</div>
     {:else}
       {@render empty("No league played in the last 30 days, or OpenDota's list was not read yet: it is read once a day.")}
-    {/if}
-  </section>
-
-  <section data-block="tournaments.explore.finished">
-    <h2>Recently finished</h2>
-    {#if finished.length}
-      <div class="grid">
-        {#each finished as f (f.league_id)}{@const l = league(f.league_id)}{#if l}<TournamentCard league={l} winner={f.winner} />{/if}{/each}
-      </div>
-    {:else}
-      {@render empty('No tier 1 to 3 tournament ended in the last 30 days.')}
     {/if}
   </section>
 {/if}
@@ -160,8 +162,14 @@
     font: inherit;
     cursor: pointer;
   }
-  .small {
-    font-size: 13px;
+  .clear:hover {
+    text-decoration: underline;
+  }
+  .lines {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
   }
   .grid {
     display: grid;

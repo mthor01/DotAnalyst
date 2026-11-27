@@ -110,7 +110,7 @@ export const day = (seconds: number | null) =>
   seconds === null ? '' : new Date(seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 const fromDate = (date: string | null) => (date ? Date.parse(`${date}T12:00:00Z`) / 1000 : null)
 /** When it ran: its first and last game, else Liquipedia's dates */
-export function dates(r: CatalogRow) {
+export function dates(r: Pick<CatalogRow, 'first_game' | 'last' | 'start_date' | 'end_date'>) {
   const [from, to] = r.first_game !== null ? [r.first_game, r.last] : [fromDate(r.start_date), fromDate(r.end_date)]
   return from === null ? (to === null ? '' : `until ${day(to)}`) : to === null || day(from) === day(to) ? day(from) : `${day(from)} – ${day(to)}`
 }
@@ -120,7 +120,8 @@ export const moment = (seconds: number) =>
   new Date(seconds * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
 /** GET /api/explore (explore.py): every section, and the leagues they name with region and whether online */
-export type ExploreLeague = CatalogRow & { region: string | null; online: boolean }
+// league_id null: a tournament only Liquipedia's list has, keyed "lp:<page>" in `leagues`
+export type ExploreLeague = Omit<CatalogRow, 'league_id'> & { league_id: number | null; region: string | null; online: boolean }
 export type ExploreTeam = LpOpponent & { logo: string | null }
 export type LiveSeries = {
   league_id: number; match_id: number; radiant: ExploreTeam; dire: ExploreTeam; series: [number, number]; best_of: number
@@ -132,8 +133,8 @@ export type ExploreAnswer = {
   live: LiveSeries[]
   upcoming: ExploreMatch[]
   results: ExploreMatch[]
-  soon: number[]
-  calendar: { league_id: number; start: number; end: number; open: boolean }[]
+  soon: (number | string)[] // a league id, or "lp:<page>"
+  calendar: { league_id: number | string; start: number; end: number; open: boolean }[]
   big: number[]
   finished: { league_id: number; winner: { name: string; logo: string | null } | null }[]
 }

@@ -3,7 +3,7 @@
   import { loadConstants } from './lib/constants.svelte'
   import LeagueList from './lib/LeagueList.svelte'
   import MatchBoard from './lib/MatchBoard.svelte'
-  import TournamentCard from './lib/TournamentCard.svelte'
+  import TournamentLine from './lib/TournamentLine.svelte'
   import type { CatalogRow, HomeAnswer } from './lib/leagues'
 
   // Home: Explore of your tournaments (explore.home), and the search to find and subscribe to more
@@ -11,7 +11,7 @@
   let error = $state('')
   const load = () => get<HomeAnswer>('home').then((a) => (found = a), (e) => (error = e.message))
   load()
-  const league = (id: number) => found?.leagues[String(id)]
+  const league = (id: number | string) => found?.leagues[String(id)]
 
   // ---- Search: asked of the server 300 ms after the last key, a page of 50 at a time; anything typed or picked
   // shows the results in place of the overview
@@ -67,6 +67,13 @@
   }
 </script>
 
+{#snippet side()}
+  <section data-block="tournaments.home.mine">
+    <h2>Your tournaments</h2>
+    <ul class="card lines">{#each found?.mine ?? [] as id (id)}{@const l = league(id)}{#if l}<TournamentLine league={l} />{/if}{/each}</ul>
+  </section>
+{/snippet}
+
 <form class="filters" onsubmit={(e) => e.preventDefault()}>
   <input class="text" bind:value={search.text} type="search" placeholder="Find a tournament" aria-label="Tournament name" />
   <label>Tier
@@ -103,18 +110,13 @@
     {league}
     block="tournaments.home"
     upcomingTitle="Coming up in the next 7 days"
+    aside={side}
     empty={{
       live: 'None of your tournaments is playing right now. Steam is asked every 5 minutes.',
       upcoming: 'No match of your tournaments on Liquipedia in the next 7 days. Only tournaments with a Liquipedia page list theirs.',
       results: 'None of your tournaments played in the last 7 days.',
     }}
   />
-  <section data-block="tournaments.home.mine">
-    <h2>Your tournaments</h2>
-    <div class="grid">
-      {#each found.mine as id (id)}{@const l = league(id)}{#if l}<TournamentCard league={l} />{/if}{/each}
-    </div>
-  </section>
 {/if}
 
 <form class="filters byid" onsubmit={add}>
@@ -144,9 +146,10 @@
     margin: 26px 0 10px;
     font-size: 17px;
   }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 10px;
+  .lines {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
   }
 </style>
